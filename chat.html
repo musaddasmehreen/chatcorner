@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChatCorner – Rooms</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
+</head>
+<body class="chat-page">
+  <header class="topbar">
+    <span class="logo-small">💬 ChatCorner</span>
+    <div class="topbar-center" id="current-room-name">Select a Room</div>
+    <div class="topbar-right">
+      <span id="user-badge" class="user-badge"></span>
+      <button class="btn-sm" onclick="logout()">Logout</button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="sidebar left">
+      <div class="sidebar-title">🏠 Rooms</div>
+      <ul id="room-list" class="room-list"></ul>
+      <hr/>
+      <div class="sidebar-title">🎙️ Voice Rooms</div>
+      <ul id="voice-room-list" class="room-list"></ul>
+    </aside>
+    <main class="chat-main">
+      <div id="messages" class="messages"></div>
+      <div id="audio-bar" class="audio-bar hidden">
+        <span id="audio-status">🎙️ Voice: Off</span>
+        <button id="btn-join-voice" class="btn-audio" onclick="joinVoice()">Join Voice</button>
+        <button id="btn-leave-voice" class="btn-audio red hidden" onclick="leaveVoice()">Leave Voice</button>
+        <button id="btn-mute" class="btn-audio hidden" onclick="toggleMute()">🔇 Mute</button>
+        <div id="peers-list" class="peers-list"></div>
+      </div>
+      <div class="input-row">
+        <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
+               onkeydown="if(event.key==='Enter') sendMessage()"/>
+        <button class="btn-send" onclick="sendMessage()">Send</button>
+      </div>
+    </main>
+    <aside class="sidebar right">
+      <div class="sidebar-title">👥 Online Users</div>
+      <ul id="user-list" class="user-list"></ul>
+    </aside>
+  </div>
+  <div id="audio-elements"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/audio.js"></script>
+</body>
+</html>

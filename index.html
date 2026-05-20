@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChatCorner – Free Chat Rooms</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
+</head>
+<body class="auth-page">
+  <div class="auth-container">
+    <div class="logo-area">
+      <h1 class="logo">💬 ChatCorner</h1>
+      <p class="tagline">Real-time Rooms · Voice Chat · Zero Cost</p>
+    </div>
+    <div class="tab-switcher">
+      <button class="tab-btn active" onclick="showTab('login')">Login</button>
+      <button class="tab-btn" onclick="showTab('register')">Register</button>
+      <button class="tab-btn" onclick="guestLogin()">Guest</button>
+    </div>
+    <div id="login-tab" class="auth-form active">
+      <input type="email" id="login-email" placeholder="Email" autocomplete="email"/>
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password"/>
+      <button class="btn-primary" onclick="loginUser()">Login</button>
+      <div id="login-msg" class="msg"></div>
+    </div>
+    <div id="register-tab" class="auth-form">
+      <input type="text" id="reg-username" placeholder="Username (visible in chat)" maxlength="20"/>
+      <input type="email" id="reg-email" placeholder="Email"/>
+      <input type="password" id="reg-password" placeholder="Password (min 6 chars)"/>
+      <button class="btn-primary" onclick="registerUser()">Create Account</button>
+      <div id="reg-msg" class="msg"></div>
+    </div>
+    <p class="note">🔒 Registered users get <strong>Voice Chat</strong> access</p>
+  </div>
+  <div class="bg-animation">
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>
