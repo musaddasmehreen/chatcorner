@@ -9,4 +9,4 @@ const ICE_SERVERS = {
   ]
 };
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);

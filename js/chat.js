@@ -6,17 +6,17 @@ let presenceChannel= null;
 let onlineUsers    = {};
 
 window.addEventListener('DOMContentLoaded', async () => {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await sbClient.auth.getSession();
   if (!session) { window.location.href = 'index.html'; return; }
 
   currentUser = session.user;
 
-  let { data: prof } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+  let { data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
 
   if (!prof) {
     const username = 'User_' + currentUser.id.substr(0,5);
-    await supabase.from('profiles').insert({ id: currentUser.id, username, avatar_color: randomColor(), is_registered: false });
-    ({ data: prof } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single());
+    await sbClient.from('profiles').insert({ id: currentUser.id, username, avatar_color: randomColor(), is_registered: false });
+    ({ data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single());
   }
 
   currentProfile = prof;
@@ -30,7 +30,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadRooms() {
-  const { data: rooms } = await supabase.from('rooms').select('*').order('name');
+  const { data: rooms } = await sbClient.from('rooms').select('*').order('name');
 
   const textList  = document.getElementById('room-list');
   const voiceList = document.getElementById('voice-room-list');
@@ -51,8 +51,8 @@ async function loadRooms() {
 async function enterRoom(room) {
   if (currentRoom?.id === room.id) return;
 
-  if (messageChannel) supabase.removeChannel(messageChannel);
-  if (presenceChannel) supabase.removeChannel(presenceChannel);
+  if (messageChannel) sbClient.removeChannel(messageChannel);
+  if (presenceChannel) sbClient.removeChannel(presenceChannel);
   if (typeof leaveVoice === 'function') leaveVoice();
 
   currentRoom = room;
@@ -71,7 +71,7 @@ async function enterRoom(room) {
     audioBar.classList.add('hidden');
   }
 
-  const { data: messages } = await supabase
+  const { data: messages } = await sbClient
     .from('messages')
     .select('*')
     .eq('room_id', room.id)
@@ -81,7 +81,7 @@ async function enterRoom(room) {
   messages?.forEach(m => appendMessage(m));
   scrollToBottom();
 
-  messageChannel = supabase
+  messageChannel = sbClient
     .channel('room:' + room.id)
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'messages',
@@ -92,7 +92,7 @@ async function enterRoom(room) {
     })
     .subscribe();
 
-  presenceChannel = supabase.channel('presence:' + room.id, {
+  presenceChannel = sbClient.channel('presence:' + room.id, {
     config: { presence: { key: currentUser.id } }
   });
 
@@ -132,7 +132,7 @@ async function sendMessage() {
 
   input.value = '';
 
-  await supabase.from('messages').insert({
+  await sbClient.from('messages').insert({
     room_id:  currentRoom.id,
     user_id:  currentUser.id,
     username: currentProfile.username,

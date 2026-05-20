@@ -24,7 +24,7 @@ async function joinVoice() {
   document.getElementById('btn-mute').classList.remove('hidden');
   document.getElementById('audio-status').textContent = '🎙️ Voice: Connected';
 
-  audioChannel = supabase.channel('voice:' + currentRoom.id);
+  audioChannel = sbClient.channel('voice:' + currentRoom.id);
 
   audioChannel
     .on('broadcast', { event: 'offer' },   ({ payload }) => handleOffer(payload))
@@ -51,7 +51,7 @@ async function leaveVoice() {
       type: 'broadcast', event: 'leave',
       payload: { from: currentUser.id }
     });
-    supabase.removeChannel(audioChannel);
+    sbClient.removeChannel(audioChannel);
     audioChannel = null;
   }
 
