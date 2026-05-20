@@ -14,7 +14,7 @@ async function loginUser() {
 
   showMsg(msg, 'Logging in…', '');
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await sbClient.auth.signInWithPassword({ email, password });
 
   if (error) {
     if (error.message.includes('Email not confirmed')) {
@@ -42,12 +42,12 @@ async function registerUser() {
 
   showMsg(msg, 'Creating account…', '');
 
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await sbClient.auth.signUp({ email, password });
 
   if (error) { showMsg(msg, error.message, 'error'); return; }
 
   if (data.user) {
-    await supabase.from('profiles').upsert({
+    await sbClient.from('profiles').upsert({
       id: data.user.id,
       username,
       avatar_color: randomColor(),
@@ -66,7 +66,7 @@ async function guestLogin() {
   const btn = document.querySelector('.tab-btn:last-child');
   if (btn) btn.textContent = 'Joining…';
 
-  const { data, error } = await supabase.auth.signInAnonymously();
+  const { data, error } = await sbClient.auth.signInAnonymously();
 
   if (error) {
     alert('Guest login failed: ' + error.message);
@@ -76,7 +76,7 @@ async function guestLogin() {
 
   const guestName = 'Guest_' + Math.random().toString(36).substr(2, 5).toUpperCase();
 
-  await supabase.from('profiles').upsert({
+  await sbClient.from('profiles').upsert({
     id: data.user.id,
     username: guestName,
     avatar_color: randomColor(),
@@ -87,7 +87,7 @@ async function guestLogin() {
 }
 
 async function logout() {
-  await supabase.auth.signOut();
+  await sbClient.auth.signOut();
   window.location.href = 'index.html';
 }
 
@@ -102,7 +102,7 @@ function randomColor() {
 }
 
 if (window.location.pathname.endsWith('index.html') || window.location.pathname === '/') {
-  supabase.auth.getSession().then(({ data }) => {
+  sbClient.auth.getSession().then(({ data }) => {
     if (data.session) window.location.href = 'chat.html';
   });
 }
