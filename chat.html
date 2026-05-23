@@ -8,6 +8,31 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
 <body class="chat-page">
+
+  <!-- ── Permissions Banner ─────────────────────────────────────────── -->
+  <div id="permissions-banner" class="perms-banner" style="display:none">
+    <div class="perms-left">
+      <span class="perms-title">🔐 Allow Permissions</span>
+      <span class="perms-sub">ChatCorner needs access to work properly</span>
+    </div>
+    <div class="perms-indicators">
+      <span class="perm-item" title="Notifications">
+        🔔 Notifications <span id="perm-notif" class="perm-dot perm-prompt"></span>
+      </span>
+      <span class="perm-item" title="Microphone">
+        🎙️ Microphone <span id="perm-mic" class="perm-dot perm-prompt"></span>
+      </span>
+      <span class="perm-item" title="Camera">
+        📷 Camera <span id="perm-cam" class="perm-dot perm-prompt"></span>
+      </span>
+    </div>
+    <div class="perms-actions">
+      <button class="btn-allow btn-primary" onclick="requestAllPermissions()">✅ Allow All</button>
+      <button class="btn-allow-skip" onclick="dismissPermissions()">Skip</button>
+    </div>
+  </div>
+  <!-- ─────────────────────────────────────────────────────────────── -->
+
   <header class="topbar">
     <span class="logo-small">💬 ChatCorner</span>
     <div class="topbar-center" id="current-room-name">Select a Room</div>
@@ -26,14 +51,13 @@
     </aside>
     <main class="chat-main">
       <div id="video-grid" class="video-grid hidden"></div>
-      <video id="local-video" class="local-video hidden" autoplay muted playsinline></video>
       <div id="messages" class="messages"></div>
+      <video id="local-video" class="local-video hidden" autoplay muted playsinline></video>
       <div id="audio-bar" class="audio-bar hidden">
         <span id="audio-status">🎙️ Voice: Off</span>
         <button id="btn-join-voice" class="btn-audio" onclick="joinVoice()">Join Voice</button>
         <button id="btn-leave-voice" class="btn-audio red hidden" onclick="leaveVoice()">Leave Voice</button>
         <button id="btn-mute" class="btn-audio hidden" onclick="toggleMute()">🔇 Mute</button>
-        <button id="btn-toggle-video" class="btn-audio hidden" onclick="toggleVideo()">🎥 Video Off</button>
         <button id="btn-toggle-camera" class="btn-audio hidden" onclick="toggleCamera()">📷 Camera Off</button>
         <div id="peers-list" class="peers-list"></div>
       </div>
@@ -52,6 +76,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/permissions.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/audio.js"></script>
 </body>
