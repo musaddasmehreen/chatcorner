@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChatCorner Admin Dashboard</title>
+  <link rel="stylesheet" href="css/admin.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
+</head>
+<body class="admin-page">
+  <aside class="admin-sidebar" id="admin-sidebar">
+    <div class="sidebar-brand">🛡️ <span>ChatCorner Admin</span></div>
+    <button class="sidebar-toggle" id="sidebar-toggle" title="Collapse sidebar">☰</button>
+    <nav class="sidebar-nav" id="panel-nav">
+      <button data-panel="overview" class="active" title="Platform snapshot">📊 <span>Overview</span></button>
+      <button data-panel="rooms" title="Manage chat rooms">🏠 <span>Room Manager</span></button>
+      <button data-panel="logs" title="Read room message history">📜 <span>Chat Logs</span></button>
+      <button data-panel="users" title="Manage user accounts">👥 <span>User Manager</span></button>
+      <button data-panel="banned" title="See and unban blocked users">🚫 <span>Banned Users</span></button>
+      <button data-panel="broadcast" title="Send system announcements">📣 <span>Broadcast</span></button>
+      <button data-panel="settings" title="App controls">⚙️ <span>Settings</span></button>
+      <button data-panel="analytics" title="Usage insights">📈 <span>Analytics</span></button>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <h1>Admin Dashboard</h1>
+      <div class="admin-topbar-right">
+        <span id="admin-name" class="admin-pill">Admin</span>
+        <button id="admin-logout" class="btn-danger">Logout</button>
+      </div>
+    </header>
+
+    <section id="panel-overview" class="admin-panel active"></section>
+    <section id="panel-rooms" class="admin-panel"></section>
+    <section id="panel-logs" class="admin-panel"></section>
+    <section id="panel-users" class="admin-panel"></section>
+    <section id="panel-banned" class="admin-panel"></section>
+    <section id="panel-broadcast" class="admin-panel"></section>
+    <section id="panel-settings" class="admin-panel"></section>
+    <section id="panel-analytics" class="admin-panel"></section>
+  </main>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <div id="modal-box" class="modal-box"></div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
