@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies (if package.json exists)
+        run: |
+          if [ -f package.json ]; then
+            npm install
+          else
+            echo "No package.json found. Skipping npm install."
+          fi
+
+      - name: Run lint/checks (if available)
+        run: |
+          if [ -f package.json ]; then
+            npm run --if-present lint
+            npm run --if-present test
+          else
+            echo "No package.json found. Skipping lint/checks."
+          fi
