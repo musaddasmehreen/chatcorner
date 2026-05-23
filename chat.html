@@ -25,12 +25,16 @@
       <ul id="voice-room-list" class="room-list"></ul>
     </aside>
     <main class="chat-main">
+      <div id="video-grid" class="video-grid hidden"></div>
+      <video id="local-video" class="local-video hidden" autoplay muted playsinline></video>
       <div id="messages" class="messages"></div>
       <div id="audio-bar" class="audio-bar hidden">
         <span id="audio-status">🎙️ Voice: Off</span>
         <button id="btn-join-voice" class="btn-audio" onclick="joinVoice()">Join Voice</button>
         <button id="btn-leave-voice" class="btn-audio red hidden" onclick="leaveVoice()">Leave Voice</button>
         <button id="btn-mute" class="btn-audio hidden" onclick="toggleMute()">🔇 Mute</button>
+        <button id="btn-toggle-video" class="btn-audio hidden" onclick="toggleVideo()">🎥 Video Off</button>
+        <button id="btn-toggle-camera" class="btn-audio hidden" onclick="toggleCamera()">📷 Camera Off</button>
         <div id="peers-list" class="peers-list"></div>
       </div>
       <div class="input-row">

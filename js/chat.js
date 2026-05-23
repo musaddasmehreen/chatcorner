@@ -22,9 +22,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   currentProfile = prof;
   document.getElementById('user-badge').textContent = prof.username + (prof.is_registered ? ' ✓' : ' 👤');
 
-  if (prof.is_registered) {
-    document.getElementById('audio-bar').classList.remove('hidden');
-  }
+  document.getElementById('audio-bar').classList.remove('hidden');
 
   await loadRooms();
 });
@@ -65,7 +63,7 @@ async function enterRoom(room) {
   });
 
   const audioBar = document.getElementById('audio-bar');
-  if (currentProfile?.is_registered && room.is_audio_enabled) {
+  if (room.is_audio_enabled) {
     audioBar.classList.remove('hidden');
   } else {
     audioBar.classList.add('hidden');
