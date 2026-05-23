@@ -4,6 +4,8 @@ let currentRoom    = null;
 let messageChannel = null;
 let presenceChannel= null;
 let onlineUsers    = {};
+let cameraStates   = {};
+let presenceBaseData = {};
 
 window.addEventListener('DOMContentLoaded', async () => {
   const { data: { session } } = await sbClient.auth.getSession();
@@ -20,6 +22,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   currentProfile = prof;
+  presenceBaseData = {
+    userId: currentUser.id,
+    username: currentProfile.username,
+    color: currentProfile.avatar_color,
+    registered: currentProfile.is_registered,
+    cameraOn: false
+  };
   document.getElementById('user-badge').textContent = prof.username + (prof.is_registered ? ' ✓' : ' 👤');
 
   document.getElementById('audio-bar').classList.remove('hidden');
@@ -57,6 +66,7 @@ async function enterRoom(room) {
   document.getElementById('current-room-name').textContent = '# ' + room.name;
   document.getElementById('messages').innerHTML = '';
   onlineUsers = {};
+  cameraStates = {};
 
   document.querySelectorAll('.room-list li').forEach(li => {
     li.classList.toggle('active', li.textContent.includes(room.name));
@@ -110,25 +120,29 @@ async function enterRoom(room) {
     .on('presence', { event: 'sync' }, () => {
       const state = presenceChannel.presenceState();
       onlineUsers = {};
-      Object.values(state).forEach(arr => arr.forEach(u => { onlineUsers[u.userId] = u; }));
+      Object.values(state).forEach(arr => arr.forEach(u => {
+        onlineUsers[u.userId] = u;
+        cameraStates[u.userId] = !!u.cameraOn;
+      }));
       renderUserList();
     })
     .on('presence', { event: 'join' }, ({ newPresences }) => {
-      newPresences.forEach(u => { onlineUsers[u.userId] = u; });
+      newPresences.forEach(u => {
+        onlineUsers[u.userId] = u;
+        cameraStates[u.userId] = !!u.cameraOn;
+      });
       renderUserList();
     })
     .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-      leftPresences.forEach(u => delete onlineUsers[u.userId]);
+      leftPresences.forEach(u => {
+        delete onlineUsers[u.userId];
+        delete cameraStates[u.userId];
+      });
       renderUserList();
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await presenceChannel.track({
-          userId:     currentUser.id,
-          username:   currentProfile.username,
-          color:      currentProfile.avatar_color,
-          registered: currentProfile.is_registered
-        });
+        await presenceChannel.track(presenceBaseData);
       }
     });
 
@@ -188,7 +202,23 @@ function renderUserList() {
   ul.innerHTML = '';
   Object.values(onlineUsers).forEach(u => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="dot${u.registered ? '' : ' guest'}"></span>${escHtml(u.username)}${u.registered ? ' ✓' : ''}`;
+    li.className = 'user-item';
+    li.dataset.userId = u.userId;
+    li.innerHTML = `
+      <span class="dot${u.registered ? '' : ' guest'}"></span>
+      <button type="button" class="user-name-btn">${escHtml(u.username)}${u.registered ? ' ✓' : ''}</button>
+      <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
+      <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">📷</button>
+    `;
+    const nameBtn = li.querySelector('.user-name-btn');
+    const cameraBtn = li.querySelector('.camera-user-btn');
+    nameBtn?.addEventListener('click', () => {
+      if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
+    });
+    cameraBtn?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (typeof openFloatingCamera === 'function') openFloatingCamera(u.userId, u.username);
+    });
     ul.appendChild(li);
   });
 }
@@ -218,4 +248,25 @@ function stringToColor(str = '') {
 function randomColor() {
   const colors = ['#7c3aed','#06b6d4','#f59e0b','#10b981','#ef4444','#ec4899','#6366f1'];
   return colors[Math.floor(Math.random() * colors.length)];
+}
+
+function setUserCameraState(userId, cameraOn) {
+  if (!userId) return;
+  cameraStates[userId] = !!cameraOn;
+  if (onlineUsers[userId]) onlineUsers[userId].cameraOn = !!cameraOn;
+  renderUserList();
+}
+
+async function setLocalCameraState(cameraOn) {
+  if (!currentUser?.id) return;
+  cameraStates[currentUser.id] = !!cameraOn;
+  presenceBaseData.cameraOn = !!cameraOn;
+  renderUserList();
+  if (presenceChannel) {
+    try { await presenceChannel.track(presenceBaseData); } catch (_) {}
+  }
+}
+
+function getUsernameById(userId) {
+  return onlineUsers[userId]?.username || (userId === currentUser?.id ? currentProfile?.username : 'User');
 }
