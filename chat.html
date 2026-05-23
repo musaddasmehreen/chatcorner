@@ -55,6 +55,7 @@
       <video id="local-video" class="local-video hidden" autoplay muted playsinline></video>
       <div id="audio-bar" class="audio-bar hidden">
         <span id="audio-status">🎙️ Voice: Off</span>
+        <canvas id="voice-visualizer" class="voice-visualizer hidden" width="200" height="24" aria-label="Voice activity visualizer"></canvas>
         <button id="btn-join-voice" class="btn-audio" onclick="joinVoice()">Join Voice</button>
         <button id="btn-leave-voice" class="btn-audio red hidden" onclick="leaveVoice()">Leave Voice</button>
         <button id="btn-mute" class="btn-audio hidden" onclick="toggleMute()">🔇 Mute</button>
@@ -73,11 +74,20 @@
     </aside>
   </div>
   <div id="audio-elements"></div>
+  <div id="pm-root" class="pm-root"></div>
+  <div id="floating-camera-window" class="floating-camera hidden" aria-live="polite">
+    <div id="floating-camera-header" class="floating-camera-header">
+      <span id="floating-camera-title">📷 Camera</span>
+      <button id="floating-camera-close" class="floating-camera-close" type="button">✕</button>
+    </div>
+    <video id="floating-camera-video" autoplay playsinline></video>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/permissions.js"></script>
   <script src="js/chat.js"></script>
+  <script src="js/pm.js"></script>
   <script src="js/audio.js"></script>
 </body>
 </html>
