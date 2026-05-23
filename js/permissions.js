@@ -1,6 +1,6 @@
 /**
  * ChatCorner — Permissions Manager
- * Requests all required browser permissions in priority order via a single button.
+ * Automatically requests all required browser permissions on page load.
  *
  * Priority Order:
  *  1. Notifications  (least friction)
@@ -67,22 +67,25 @@ function setIndicator(id, state) {
 }
 
 async function initPermissionsBanner() {
-  // Don't show if user already dismissed
-  if (localStorage.getItem('cc_perms_dismissed')) return;
-
   try {
     const mic = await navigator.permissions.query({ name: 'microphone' });
     const cam = await navigator.permissions.query({ name: 'camera' });
-    // Hide banner if both mic and cam are already granted
-    if (mic.state === 'granted' && cam.state === 'granted') {
+    // If both already granted, nothing to do — hide the banner and return
+    if (mic.state === 'granted' && cam.state === 'granted' &&
+        ('Notification' in window ? Notification.permission !== 'default' : true)) {
+      dismissPermissions();
       return;
     }
-  } catch (e) { /* permissions API unavailable — show banner anyway */ }
+  } catch (e) { /* permissions API unavailable — proceed to request */ }
 
+  // Show the banner briefly so the user sees what's being requested
   const banner = document.getElementById('permissions-banner');
   if (banner) banner.style.display = 'flex';
 
   await updatePermissionIndicators();
+
+  // Automatically trigger permission requests without waiting for a button click
+  await requestAllPermissions();
 }
 
 window.addEventListener('DOMContentLoaded', initPermissionsBanner);
