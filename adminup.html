@@ -4,31 +4,102 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ChatCorner Admin Login</title>
+  <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/admin.css" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
-<body class="admin-login-page">
-  <div class="admin-login-card">
-    <h1>🛡️ ChatCorner Admin</h1>
-    <p>Sign in with your admin account to manage the platform.</p>
-    <form id="admin-login-form" class="admin-login-form">
-      <label for="admin-email">Email</label>
-      <input type="email" id="admin-email" placeholder="admin@chatcorner.com" autocomplete="email" required />
+<body class="auth-page admin-auth-page">
+  <div class="auth-container admin-auth-container">
+    <div class="logo-area">
+      <h1 class="logo">🛡️ ChatCorner</h1>
+      <p class="tagline">Admin Access Portal</p>
+    </div>
 
-      <label for="admin-password">Password</label>
-      <input type="password" id="admin-password" placeholder="••••••••" autocomplete="current-password" required />
+    <form id="admin-login-form" class="auth-form active" onsubmit="event.preventDefault(); adminLogin();">
+      <label class="field-label" for="admin-email">Admin Email</label>
+      <input type="email" id="admin-email" placeholder="name@example.com" autocomplete="email" required />
 
-      <button type="submit" class="btn-primary" id="admin-login-btn">Login to Dashboard</button>
-      <div id="admin-login-msg" class="status-msg" role="status" aria-live="polite"></div>
+      <label class="field-label" for="admin-password">Password</label>
+      <input type="password" id="admin-password" placeholder="Enter your password" autocomplete="current-password" required />
+
+      <button class="btn-primary" id="admin-login-btn" type="submit">Login as Admin</button>
+      <div id="admin-login-msg" class="msg"></div>
     </form>
 
-    <a class="back-link" href="chat.html">← Back to Chat</a>
+    <p class="admin-note">Only users with <strong>is_admin = true</strong> can access the dashboard.</p>
+    <a class="back-link" href="chat.html" title="Return to the chat app">← Back to Chat</a>
   </div>
 
-  <div id="toast-container" class="toast-container"></div>
+  <div class="bg-animation">
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
-  <script src="js/admin.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    const adminMsgEl = document.getElementById('admin-login-msg');
+
+    function setAdminMsg(text, type) {
+      adminMsgEl.textContent = text;
+      adminMsgEl.className = 'msg ' + (type || '');
+    }
+
+    async function checkAlreadyAdmin() {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session?.user) return;
+      const { data: profile } = await sbClient
+        .from('profiles')
+        .select('id,is_admin')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (profile?.is_admin) {
+        window.location.href = 'admin.html';
+      }
+    }
+
+    async function adminLogin() {
+      const email = document.getElementById('admin-email').value.trim();
+      const password = document.getElementById('admin-password').value;
+      const btn = document.getElementById('admin-login-btn');
+
+      if (!email || !password) {
+        setAdminMsg('Please fill in both email and password.', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      setAdminMsg('Signing in…', '');
+
+      const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
+      if (error || !data?.user) {
+        setAdminMsg(error?.message || 'Login failed. Please try again.', 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      const { data: profile, error: profileErr } = await sbClient
+        .from('profiles')
+        .select('id,is_admin')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (profileErr || !profile?.is_admin) {
+        await sbClient.auth.signOut();
+        setAdminMsg('Access Denied. Admins only.', 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      window.location.href = 'admin.html';
+    }
+
+    if (new URLSearchParams(window.location.search).get('denied') === '1') {
+      setAdminMsg('Access Denied. Admins only.', 'error');
+    }
+
+    checkAlreadyAdmin();
+  </script>
 </body>
 </html>

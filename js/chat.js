@@ -63,10 +63,22 @@ async function enterRoom(room) {
   });
 
   const audioBar = document.getElementById('audio-bar');
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn = document.querySelector('.btn-send');
   if (room.is_audio_enabled) {
     audioBar.classList.remove('hidden');
   } else {
     audioBar.classList.add('hidden');
+  }
+
+  if (room.is_locked) {
+    msgInput.disabled = true;
+    msgInput.placeholder = 'This room is locked by admin.';
+    if (sendBtn) sendBtn.disabled = true;
+  } else {
+    msgInput.disabled = false;
+    msgInput.placeholder = 'Type a message… (Enter to send)';
+    if (sendBtn) sendBtn.disabled = false;
   }
 
   const { data: messages } = await sbClient
@@ -127,6 +139,10 @@ async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   if (!text || !currentRoom) return;
+  if (currentRoom.is_locked) {
+    appendSystemMessage('This room is locked by admin. Messaging is disabled.');
+    return;
+  }
 
   input.value = '';
 
