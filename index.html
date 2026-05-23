@@ -33,9 +33,20 @@
     </div>
     <p class="note">🔒 Registered users get <strong>Voice Chat</strong> access</p>
   </div>
+
+  <div class="theme-switcher auth-theme-switcher" aria-label="Choose theme">
+    <button class="theme-dot" data-theme="nebula"  onclick="setTheme('nebula')"  title="Nebula"  style="background:#7c3aed"></button>
+    <button class="theme-dot" data-theme="ember"   onclick="setTheme('ember')"   title="Ember"   style="background:#f97316"></button>
+    <button class="theme-dot" data-theme="arctic"  onclick="setTheme('arctic')"  title="Arctic"  style="background:#38bdf8"></button>
+    <button class="theme-dot" data-theme="matrix"  onclick="setTheme('matrix')"  title="Matrix"  style="background:#22c55e"></button>
+    <button class="theme-dot" data-theme="rose"    onclick="setTheme('rose')"    title="Rose"    style="background:#f43f5e"></button>
+  </div>
+
   <div class="bg-animation">
     <span></span><span></span><span></span><span></span><span></span>
   </div>
+
+  <script src="js/theme.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>

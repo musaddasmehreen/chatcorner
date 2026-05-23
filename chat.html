@@ -38,9 +38,17 @@
     <div class="topbar-center" id="current-room-name">Select a Room</div>
     <div class="topbar-right">
       <span id="user-badge" class="user-badge"></span>
+      <div class="theme-switcher" aria-label="Choose theme">
+        <button class="theme-dot" data-theme="nebula"  onclick="setTheme('nebula')"  title="Nebula"  style="background:#7c3aed"></button>
+        <button class="theme-dot" data-theme="ember"   onclick="setTheme('ember')"   title="Ember"   style="background:#f97316"></button>
+        <button class="theme-dot" data-theme="arctic"  onclick="setTheme('arctic')"  title="Arctic"  style="background:#38bdf8"></button>
+        <button class="theme-dot" data-theme="matrix"  onclick="setTheme('matrix')"  title="Matrix"  style="background:#22c55e"></button>
+        <button class="theme-dot" data-theme="rose"    onclick="setTheme('rose')"    title="Rose"    style="background:#f43f5e"></button>
+      </div>
       <button class="btn-sm" onclick="logout()">Logout</button>
     </div>
   </header>
+
   <div class="layout">
     <aside class="sidebar left">
       <div class="sidebar-title">🏠 Rooms</div>
@@ -49,10 +57,12 @@
       <div class="sidebar-title">🎙️ Voice Rooms</div>
       <ul id="voice-room-list" class="room-list"></ul>
     </aside>
+
     <main class="chat-main">
       <div id="video-grid" class="video-grid hidden"></div>
       <div id="messages" class="messages"></div>
       <video id="local-video" class="local-video hidden" autoplay muted playsinline></video>
+
       <div id="audio-bar" class="audio-bar hidden">
         <span id="audio-status">🎙️ Voice: Off</span>
         <button id="btn-join-voice" class="btn-audio" onclick="joinVoice()">Join Voice</button>
@@ -61,18 +71,23 @@
         <button id="btn-toggle-camera" class="btn-audio hidden" onclick="toggleCamera()">📷 Camera Off</button>
         <div id="peers-list" class="peers-list"></div>
       </div>
+
       <div class="input-row">
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>
-        <button class="btn-send" onclick="sendMessage()">Send</button>
+        <button class="btn-send" onclick="sendMessage()">➤ Send</button>
       </div>
     </main>
+
     <aside class="sidebar right">
       <div class="sidebar-title">👥 Online Users</div>
       <ul id="user-list" class="user-list"></ul>
     </aside>
   </div>
+
   <div id="audio-elements"></div>
+
+  <script src="js/theme.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
