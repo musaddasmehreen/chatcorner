@@ -3,26 +3,44 @@ let peers          = {};
 let audioChannel   = null;
 let isMuted        = false;
 let inVoice        = false;
+let isVideoEnabled = true;
+let isCameraOn     = true;
 
 async function joinVoice() {
-  if (!currentProfile?.is_registered) {
-    alert('🔒 Voice chat is available for registered users only. Create a free account!');
+  if (!currentUser) {
+    alert('🔒 Please log in to use voice chat.');
     return;
   }
   if (!currentRoom?.is_audio_enabled) return;
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    isVideoEnabled = true;
+    isCameraOn = true;
   } catch (e) {
-    alert('Microphone access denied. Please allow microphone in your browser settings.');
-    return;
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      isVideoEnabled = false;
+      isCameraOn = false;
+      alert('Camera access denied. Joined in audio-only mode.');
+    } catch (audioErr) {
+      alert('Microphone access denied. Please allow microphone in your browser settings.');
+      return;
+    }
   }
 
   inVoice = true;
+  isMuted = false;
   document.getElementById('btn-join-voice').classList.add('hidden');
   document.getElementById('btn-leave-voice').classList.remove('hidden');
   document.getElementById('btn-mute').classList.remove('hidden');
+  document.getElementById('btn-toggle-video').classList.remove('hidden');
+  document.getElementById('btn-toggle-camera').classList.remove('hidden');
   document.getElementById('audio-status').textContent = '🎙️ Voice: Connected';
+  document.getElementById('btn-mute').textContent = '🔇 Mute';
+
+  updateVideoButtons();
+  updateLocalPreview();
 
   audioChannel = sbClient.channel('voice:' + currentRoom.id);
 
@@ -61,12 +79,17 @@ async function leaveVoice() {
   Object.values(peers).forEach(pc => pc.close());
   peers = {};
 
-  document.getElementById('audio-elements').innerHTML = '';
+  document.getElementById('video-grid').innerHTML = '';
+  document.getElementById('video-grid').classList.add('hidden');
+  document.getElementById('local-video').srcObject = null;
+  document.getElementById('local-video').classList.add('hidden');
   document.getElementById('peers-list').innerHTML = '';
 
   document.getElementById('btn-join-voice').classList.remove('hidden');
   document.getElementById('btn-leave-voice').classList.add('hidden');
   document.getElementById('btn-mute').classList.add('hidden');
+  document.getElementById('btn-toggle-video').classList.add('hidden');
+  document.getElementById('btn-toggle-camera').classList.add('hidden');
   document.getElementById('audio-status').textContent = '🎙️ Voice: Off';
 }
 
@@ -75,6 +98,57 @@ function toggleMute() {
   isMuted = !isMuted;
   localStream.getAudioTracks().forEach(t => (t.enabled = !isMuted));
   document.getElementById('btn-mute').textContent = isMuted ? '🎙️ Unmute' : '🔇 Mute';
+}
+
+async function toggleVideo() {
+  if (!inVoice) return;
+
+  isVideoEnabled = !isVideoEnabled;
+
+  if (isVideoEnabled) {
+    if (!localStream?.getVideoTracks().length) {
+      try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoTrack = videoStream.getVideoTracks()[0];
+        localStream.addTrack(videoTrack);
+        Object.values(peers).forEach(pc => pc.addTrack(videoTrack, localStream));
+      } catch (e) {
+        isVideoEnabled = false;
+        alert('Camera access denied. Staying in audio-only mode.');
+      }
+    }
+    if (localStream?.getVideoTracks().length) isCameraOn = true;
+  } else {
+    isCameraOn = false;
+  }
+
+  localStream?.getVideoTracks().forEach(track => (track.enabled = isVideoEnabled && isCameraOn));
+  updateVideoButtons();
+  updateLocalPreview();
+}
+
+async function toggleCamera() {
+  if (!inVoice) return;
+
+  if (!localStream?.getVideoTracks().length) {
+    try {
+      const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const videoTrack = videoStream.getVideoTracks()[0];
+      localStream.addTrack(videoTrack);
+      Object.values(peers).forEach(pc => pc.addTrack(videoTrack, localStream));
+      isVideoEnabled = true;
+      isCameraOn = true;
+    } catch (e) {
+      alert('Camera access denied. Please allow camera in your browser settings.');
+      return;
+    }
+  } else {
+    isCameraOn = !isCameraOn;
+  }
+
+  localStream?.getVideoTracks().forEach(track => (track.enabled = isVideoEnabled && isCameraOn));
+  updateVideoButtons();
+  updateLocalPreview();
 }
 
 async function handlePeerJoin({ from, username }) {
@@ -122,7 +196,7 @@ async function handleIce({ from, to, candidate }) {
 function handlePeerLeave({ from }) {
   if (peers[from]) { peers[from].close(); delete peers[from]; }
   document.getElementById('peer-' + from)?.remove();
-  document.getElementById('audio-' + from)?.remove();
+  document.getElementById('video-tile-' + from)?.remove();
 }
 
 function createPeerConnection(peerId, username) {
@@ -139,11 +213,11 @@ function createPeerConnection(peerId, username) {
   };
 
   pc.ontrack = ({ streams }) => {
-    const audioEl = document.createElement('audio');
-    audioEl.id     = 'audio-' + peerId;
-    audioEl.srcObject = streams[0];
-    audioEl.autoplay  = true;
-    document.getElementById('audio-elements').appendChild(audioEl);
+    const stream = streams[0];
+    const videoEl = ensurePeerTile(peerId, username);
+    if (videoEl.srcObject !== stream) {
+      videoEl.srcObject = stream;
+    }
   };
 
   pc.onconnectionstatechange = () => {
@@ -155,6 +229,31 @@ function createPeerConnection(peerId, username) {
   return pc;
 }
 
+function ensurePeerTile(peerId, username) {
+  let tile = document.getElementById('video-tile-' + peerId);
+  if (!tile) {
+    tile = document.createElement('div');
+    tile.className = 'video-tile';
+    tile.id = 'video-tile-' + peerId;
+
+    const videoEl = document.createElement('video');
+    videoEl.id = 'video-' + peerId;
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+
+    const label = document.createElement('span');
+    label.className = 'video-label';
+    label.textContent = username || 'User';
+
+    tile.appendChild(videoEl);
+    tile.appendChild(label);
+    document.getElementById('video-grid').appendChild(tile);
+  }
+
+  document.getElementById('video-grid').classList.remove('hidden');
+  return tile.querySelector('video');
+}
+
 function addPeerTag(peerId, username) {
   const existing = document.getElementById('peer-' + peerId);
   if (existing) return;
@@ -163,4 +262,23 @@ function addPeerTag(peerId, username) {
   tag.id = 'peer-' + peerId;
   tag.textContent = '🎙 ' + (username || 'User');
   document.getElementById('peers-list').appendChild(tag);
+}
+
+function updateLocalPreview() {
+  const localVideo = document.getElementById('local-video');
+  const hasVideo = !!localStream?.getVideoTracks().length && isVideoEnabled && isCameraOn;
+  if (hasVideo) {
+    localVideo.srcObject = localStream;
+    localVideo.classList.remove('hidden');
+  } else {
+    localVideo.classList.add('hidden');
+  }
+  if (inVoice) {
+    document.getElementById('video-grid').classList.remove('hidden');
+  }
+}
+
+function updateVideoButtons() {
+  document.getElementById('btn-toggle-video').textContent = isVideoEnabled ? '🎥 Video Off' : '🎥 Video On';
+  document.getElementById('btn-toggle-camera').textContent = isCameraOn ? '📷 Camera Off' : '📷 Camera On';
 }
