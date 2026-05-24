@@ -8,26 +8,12 @@
     "directory": ".",
     "not_found_handling": "single-page-application"
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "chatcorner-db",
-      "database_id": ""
-    }
-  ],
   "durable_objects": {
     "bindings": [
       { "name": "CHAT_ROOM", "class_name": "ChatRoom" },
       { "name": "PM_HUB", "class_name": "PmHub" }
     ]
   },
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "",
-      "preview_id": ""
-    }
-  ],
   "migrations": [
     { "tag": "v1", "new_classes": ["ChatRoom", "PmHub"] }
   ]
