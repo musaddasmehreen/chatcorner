@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "chatcorner-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+      "database_id": ""
     }
   ],
   "durable_objects": {
@@ -24,8 +24,8 @@
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID",
-      "preview_id": "REPLACE_WITH_YOUR_KV_PREVIEW_ID"
+      "id": "",
+      "preview_id": ""
     }
   ],
   "migrations": [
