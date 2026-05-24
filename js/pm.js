@@ -3,6 +3,7 @@ const pmMuted = {};
 const pmTextHistory = {};
 const pmVoiceUrls = {};
 const pmRecorders = {};
+const pmRecorderTimers = {};
 const pmCallState = {};
 let pmChannel = null;
 let pmTableAvailable = null;
@@ -137,6 +138,10 @@ function closePrivateChat(userId) {
   if (pmRecorders[userId]?.state === 'recording') {
     pmRecorders[userId].stop();
   }
+  if (pmRecorderTimers[userId]) {
+    clearTimeout(pmRecorderTimers[userId]);
+    delete pmRecorderTimers[userId];
+  }
   delete pmRecorders[userId];
 
   cleanupPmVoiceUrls(userId);
@@ -236,6 +241,11 @@ function appendPmVoiceMessage(userId, msg, isMe) {
     <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
   `;
 
+  const audio = row.querySelector('audio');
+  if (audio) {
+    audio.onended = () => { row.remove(); };
+  }
+
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
 }
@@ -281,6 +291,10 @@ async function togglePmRecording(userId) {
     };
 
     mediaRecorder.onstop = async () => {
+      if (pmRecorderTimers[userId]) {
+        clearTimeout(pmRecorderTimers[userId]);
+        delete pmRecorderTimers[userId];
+      }
       btn.classList.remove('recording');
       btn.textContent = '🎙️';
       stream.getTracks().forEach(t => t.stop());
@@ -297,6 +311,9 @@ async function togglePmRecording(userId) {
     };
 
     mediaRecorder.start();
+    pmRecorderTimers[userId] = setTimeout(() => {
+      if (pmRecorders[userId]?.state === 'recording') pmRecorders[userId].stop();
+    }, 300000);
     btn.classList.add('recording');
     btn.textContent = '⏹️';
   } catch (_) {
