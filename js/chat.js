@@ -288,7 +288,7 @@ async function sendMessage() {
     return;
   }
 
-  const sanitized = rawText.replace(/<[^>]*>/g, '').replace(/javascript:/gi, '').trim();
+  const sanitized = sanitizeMessageText(rawText);
   if (!sanitized) {
     input.value = '';
     return;
@@ -634,4 +634,12 @@ function blobToBase64(blob) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+
+function sanitizeMessageText(text) {
+  return String(text || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[<>]/g, '')
+    .replace(/(?:javascript|data|vbscript)\s*:/gi, '')
+    .trim();
 }
