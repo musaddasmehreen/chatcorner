@@ -12,6 +12,11 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_expires_at timestamp with time
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kicked_until timestamp with time zone;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email text;
 
+-- FIX 5A — Moderation columns
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_mod boolean DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_expires_at timestamp with time zone;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kicked_until timestamp with time zone;
+
 -- Add rooms table if not exists
 CREATE TABLE IF NOT EXISTS rooms (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -593,6 +598,10 @@ async function setUserBan(userId, banned, reason = '', durationHours = null) {
   const warning = banned ? 'This user will be blocked from access. Continue?' : 'Unban this user and restore access?';
   if (!confirm(warning)) return;
   showLoading(true);
+  let ban_expires_at = null;
+  if (banned && durationHours > 0) {
+    ban_expires_at = new Date(Date.now() + durationHours * 3600000).toISOString();
+  }
   const payload = banned
     ? {
       is_banned: true,
@@ -677,6 +686,31 @@ async function kickUser(userId) {
   await loadUsers();
 }
 
+// FIX 5D — Kick a user for 30 minutes
+async function kickUser(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p || !confirm('Kick ' + p.username + ' for 30 minutes?')) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ kicked_until: new Date(Date.now() + 1800000).toISOString() }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('User kicked for 30 minutes.');
+  await loadUsers();
+}
+
+// FIX 5E — Toggle moderator role
+async function toggleMod(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p) return;
+  if (!confirm((p.is_mod ? 'Remove mod from ' : 'Make mod: ') + p.username)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_mod: !p.is_mod }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('Mod status updated.');
+  await loadUsers();
+}
+
 function getSelectedUserIds() {
   return Array.from(document.querySelectorAll('.user-select:checked')).map(cb => cb.value);
 }
@@ -738,6 +772,7 @@ async function loadBannedUsers() {
   }
   body.innerHTML = rows.map(p => {
     const bannedBy = profilesCache.find(x => x.id === p.banned_by)?.username || p.banned_by || '—';
+    const expiresAt = p.ban_expires_at ? formatDate(p.ban_expires_at) : 'Lifetime';
     return `
       <tr>
         <td>${escHtml(p.username || p.id)}</td>
@@ -745,6 +780,7 @@ async function loadBannedUsers() {
         <td>${escHtml(formatBanExpiry(p))}</td>
         <td>${escHtml(bannedBy)}</td>
         <td>${escHtml(p.ban_reason || '—')}</td>
+        <td>${escHtml(expiresAt)}</td>
         <td><button class="btn" onclick="setUserBan('${p.id}', false)">Unban</button></td>
       </tr>
     `;

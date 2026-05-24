@@ -272,9 +272,29 @@ async function enterRoom(room) {
     });
 
   appendSystemMessage(`You joined #${room.name}`);
+
+  // FIX 1 — Apply guest UI restrictions after all room setup
+  if (!currentProfile?.is_registered) applyGuestUI();
+}
+
+// FIX 1 — Disable input controls and show notice bar for guest users
+function applyGuestUI() {
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn  = document.querySelector('.btn-send');
+  const emojiBar = document.getElementById('emoji-bar');
+  const vnBtn    = document.getElementById('btn-voice-note');
+  const guestBar = document.getElementById('guest-notice-bar');
+  if (msgInput) { msgInput.disabled = true; msgInput.placeholder = 'Register to send messages…'; }
+  if (sendBtn)  { sendBtn.disabled  = true; }
+  if (emojiBar) { emojiBar.style.display = 'none'; }
+  if (vnBtn)    { vnBtn.style.display    = 'none'; }
+  if (guestBar) { guestBar.style.display = 'flex'; }
+  document.body.classList.add('guest-mode');
 }
 
 async function sendMessage() {
+  // FIX 1 — Block guests from sending messages
+  if (!currentProfile?.is_registered) { return; }
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   if (!text || !currentRoom) return;
@@ -304,6 +324,26 @@ function buildMessageNode(msg) {
     const div = document.createElement('div');
     div.className = 'msg-system';
     div.textContent = '\u2014 ' + msg.content + ' \u2014';
+    return div;
+  }
+
+  // FIX 2 — Voice note messages: show locked placeholder for guests
+  if (msg.type === 'voice') {
+    const isMe  = msg.user_id === currentUser?.id;
+    const div   = document.createElement('div');
+    div.className = 'msg-row' + (isMe ? ' self' : '');
+    const initial = (msg.username || '?')[0].toUpperCase();
+    const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+    const audioHtml = currentProfile?.is_registered
+      ? `<audio controls src="${escHtml(msg.content)}"></audio>`
+      : '<span class="vn-locked">\uD83D\uDD12 Register to hear voice notes</span>';
+    div.innerHTML = `
+      <div class="avatar" style="background:${color}">${initial}</div>
+      <div class="msg-bubble">
+        <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
+        ${audioHtml}
+        <div class="msg-time">${formatTime(msg.created_at)}</div>
+      </div>`;
     return div;
   }
 
@@ -368,6 +408,8 @@ function renderUserList() {
       ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick for 30 minutes">\u26a1</button>` : ''}
       ${showModeration ? `<button type="button" class="user-mod-btn ban" data-user-id="${u.userId}" title="Ban user">\ud83d\udeab</button>` : ''}
     `;
+
+    // FIX 4 — Guests see "Register to DM" instead of opening private chat
     li.querySelector('.user-name-btn')?.addEventListener('click', () => {
       if (isGuest) {
         appendSystemMessage('\ud83d\udd12 Register to start private chats.');
@@ -375,6 +417,7 @@ function renderUserList() {
       }
       if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
     });
+
     li.querySelector('.camera-user-btn')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (typeof openFloatingCamera === 'function') openFloatingCamera(u.userId, u.username);
@@ -387,6 +430,7 @@ function renderUserList() {
       ev.stopPropagation();
       quickBanUser(u.userId, u.username);
     });
+
     frag.appendChild(li);
   });
 

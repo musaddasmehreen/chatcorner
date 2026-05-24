@@ -170,3 +170,54 @@
 .messages {
   scroll-behavior: auto;
 }
+
+/* ══ FIX 3 — Guest mode layout ═════════════════════════════════ */
+body.guest-mode .input-row { display: none; }
+body.guest-mode .emoji-bar { display: none; }
+
+.guest-notice-bar {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  padding: .55rem 1rem;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: .85rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.guest-notice-bar a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.vn-locked {
+  color: var(--muted);
+  font-size: .8rem;
+  font-style: italic;
+  padding: .3rem .5rem;
+}
+
+/* ══ FIX 5 — Mod action buttons in user list ═══════════════════ */
+.btn-mod-kick {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: .72rem;
+  color: var(--accent2);
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.btn-mod-ban {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: .72rem;
+  color: var(--red);
+  padding: 0 2px;
+  line-height: 1;
+}
