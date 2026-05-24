@@ -120,6 +120,9 @@
     if (new URLSearchParams(window.location.search).get('denied') === '1') {
       setAdminMsg('Access Denied. Admins only.', 'error');
     }
+    if (new URLSearchParams(window.location.search).get('setup') === 'disabled') {
+      setAdminMsg('Admin bootstrap is disabled. Use secure backend/database provisioning.', 'error');
+    }
 
     checkAlreadyAdmin();
   </script>
