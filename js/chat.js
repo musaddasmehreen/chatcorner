@@ -39,6 +39,20 @@ function insertEmoji(emoji) {
   const pos = start + emoji.length;
   input.setSelectionRange(pos, pos);
   input.focus();
+  closeEmojiPicker();
+}
+
+function toggleEmojiPicker(event) {
+  event?.stopPropagation();
+  const picker = document.getElementById('emoji-picker');
+  const input = document.getElementById('msg-input');
+  if (!picker || input?.disabled) return;
+  picker.classList.toggle('hidden');
+}
+
+function closeEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  if (picker) picker.classList.add('hidden');
 }
 
 /* ══ Chat State ═════════════════════════════════════════════════ */
@@ -83,6 +97,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Re-apply saved theme now that DOM is ready (syncs dots)
   applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
 
+  document.addEventListener('click', (event) => {
+    const picker = document.getElementById('emoji-picker');
+    const emojiBtn = document.getElementById('btn-emoji');
+    if (!picker || picker.classList.contains('hidden')) return;
+    if (picker.contains(event.target) || emojiBtn?.contains(event.target)) return;
+    closeEmojiPicker();
+  });
+
   await loadRooms();
 });
 
@@ -125,7 +147,7 @@ async function enterRoom(room) {
   const audioBar = document.getElementById('audio-bar');
   const msgInput = document.getElementById('msg-input');
   const sendBtn  = document.querySelector('.btn-send');
-  const emojiBar = document.getElementById('emoji-bar');
+  const emojiBtn = document.getElementById('btn-emoji');
 
   if (room.is_audio_enabled) {
     audioBar.classList.remove('hidden');
@@ -137,12 +159,13 @@ async function enterRoom(room) {
     msgInput.disabled = true;
     msgInput.placeholder = 'This room is locked by admin.';
     if (sendBtn)  sendBtn.disabled  = true;
-    if (emojiBar) emojiBar.style.opacity = '0.4';
+    if (emojiBtn) emojiBtn.disabled = true;
+    closeEmojiPicker();
   } else {
     msgInput.disabled = false;
     msgInput.placeholder = 'Type a message\u2026 (Enter to send)';
     if (sendBtn)  sendBtn.disabled  = false;
-    if (emojiBar) emojiBar.style.opacity = '';
+    if (emojiBtn) emojiBtn.disabled = false;
   }
 
   const { data: messages } = await sbClient

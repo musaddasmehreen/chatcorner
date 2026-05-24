@@ -16,6 +16,11 @@ let visualizerFrame = null;
 let floatingCameraPeerId = null;
 
 const VISUALIZER_BARS = 28;
+const MAX_VOICE_SPEAKERS = 2;
+let isListenerMode = false;
+let listenerQueue = [];
+let voiceJoinAt = null;
+let isPromotingSpeaker = false;
 
 window.addEventListener('DOMContentLoaded', () => {
   setupFloatingCameraWindow();
@@ -45,6 +50,10 @@ async function joinVoice() {
 
   inVoice = true;
   isMuted = false;
+  isListenerMode = false;
+  listenerQueue = [];
+  isPromotingSpeaker = false;
+  voiceJoinAt = Date.now();
   participantLevels[currentUser.id] = 0;
 
   document.getElementById('btn-join-voice').classList.add('hidden');
@@ -52,7 +61,7 @@ async function joinVoice() {
   document.getElementById('btn-mute').classList.remove('hidden');
   document.getElementById('btn-toggle-camera').classList.remove('hidden');
   document.getElementById('voice-visualizer').classList.remove('hidden');
-  document.getElementById('audio-status').textContent = '🎙️ Voice: Connected';
+  updateVoiceStatus();
   document.getElementById('btn-mute').textContent = '🔇 Mute';
 
   updateVideoButtons();
@@ -64,7 +73,9 @@ async function joinVoice() {
     await setLocalCameraState(isCameraOn);
   }
 
-  audioChannel = sbClient.channel('voice:' + currentRoom.id);
+  audioChannel = sbClient.channel('voice:' + currentRoom.id, {
+    config: { presence: { key: currentUser.id } }
+  });
 
   audioChannel
     .on('broadcast', { event: 'offer' }, ({ payload }) => handleOffer(payload))
@@ -73,8 +84,16 @@ async function joinVoice() {
     .on('broadcast', { event: 'join' }, ({ payload }) => handlePeerJoin(payload))
     .on('broadcast', { event: 'leave' }, ({ payload }) => handlePeerLeave(payload))
     .on('broadcast', { event: 'camera-state' }, ({ payload }) => handleCameraState(payload))
+    .on('broadcast', { event: 'speaker-left' }, () => {
+      maybePromoteFromListenerQueue();
+    })
+    .on('presence', { event: 'sync' }, () => {
+      syncVoiceRoleState();
+    })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
+        syncVoiceRoleState();
+        await trackVoicePresence(isListenerMode ? 'listener' : 'speaker');
         await audioChannel.send({
           type: 'broadcast',
           event: 'join',
@@ -91,9 +110,17 @@ async function joinVoice() {
 
 async function leaveVoice() {
   if (!inVoice) return;
+  const wasListener = isListenerMode;
   inVoice = false;
 
   if (audioChannel) {
+    if (!wasListener) {
+      await audioChannel.send({
+        type: 'broadcast',
+        event: 'speaker-left',
+        payload: { from: currentUser.id }
+      });
+    }
     await audioChannel.send({
       type: 'broadcast',
       event: 'leave',
@@ -128,9 +155,14 @@ async function leaveVoice() {
   document.getElementById('btn-toggle-camera').classList.add('hidden');
   document.getElementById('voice-visualizer').classList.add('hidden');
   document.getElementById('audio-status').textContent = '🎙️ Voice: Off';
+  document.getElementById('audio-status').classList.remove('listener-mode');
 
   isMuted = false;
   isCameraOn = false;
+  isListenerMode = false;
+  listenerQueue = [];
+  voiceJoinAt = null;
+  isPromotingSpeaker = false;
 
   if (typeof setLocalCameraState === 'function') {
     await setLocalCameraState(false);
@@ -139,6 +171,10 @@ async function leaveVoice() {
 
 function toggleMute() {
   if (!localStream) return;
+  if (isListenerMode) {
+    updateVoiceStatus();
+    return;
+  }
   const track = localStream.getAudioTracks()[0];
   if (!track) return;
   isMuted = !isMuted;
@@ -415,6 +451,113 @@ async function broadcastCameraState() {
     event: 'camera-state',
     payload: { from: currentUser.id, cameraOn: isCameraOn }
   });
+}
+
+function getVoicePresenceParticipants() {
+  if (!audioChannel) return [];
+  const state = audioChannel.presenceState();
+  const users = [];
+  Object.values(state).forEach((entries) => {
+    entries.forEach((entry) => {
+    users.push({
+      userId: entry.userId,
+      username: entry.username || 'User',
+      role: entry.role === 'listener' ? 'listener' : 'speaker',
+      joinedAt: Number(entry.joinedAt) || 0
+    });
+    });
+  });
+  return users;
+}
+
+async function trackVoicePresence(role) {
+  if (!audioChannel || !currentUser?.id) return;
+  await audioChannel.track({
+    userId: currentUser.id,
+    username: currentProfile?.username || 'User',
+    role,
+    joinedAt: voiceJoinAt || Date.now()
+  });
+}
+
+function updateVoiceStatus(speakerCount = null) {
+  const statusEl = document.getElementById('audio-status');
+  if (!statusEl) return;
+  const count = speakerCount ?? getVoicePresenceParticipants().filter(p => p.role === 'speaker').length;
+
+  if (!inVoice) {
+    statusEl.textContent = '🎙️ Voice: Off';
+    statusEl.classList.remove('listener-mode');
+    return;
+  }
+
+  if (isListenerMode) {
+    const pos = Math.max(1, listenerQueue.findIndex(item => item.userId === currentUser.id) + 1);
+    statusEl.textContent = `👂 Voice: Listening (position ${pos}) • ⏳ Waiting for a slot… (${Math.min(count, MAX_VOICE_SPEAKERS)}/${MAX_VOICE_SPEAKERS} speakers active)`;
+    statusEl.classList.add('listener-mode');
+    return;
+  }
+
+  statusEl.textContent = '🎙️ Voice: Connected';
+  statusEl.classList.remove('listener-mode');
+}
+
+async function promoteListenerToSpeaker() {
+  if (!inVoice || !isListenerMode || isPromotingSpeaker) return;
+  isPromotingSpeaker = true;
+  try {
+    isListenerMode = false;
+    isMuted = false;
+    const track = localStream?.getAudioTracks()[0];
+    if (track) track.enabled = true;
+    document.getElementById('btn-mute').textContent = '🔇 Mute';
+    await trackVoicePresence('speaker');
+    updateVoiceStatus();
+  } finally {
+    isPromotingSpeaker = false;
+  }
+}
+
+function maybePromoteFromListenerQueue() {
+  if (!inVoice || !isListenerMode || !audioChannel) return;
+  const participants = getVoicePresenceParticipants();
+  const speakers = participants.filter(p => p.role === 'speaker');
+  const listeners = participants
+    .filter(p => p.role === 'listener')
+    .sort((a, b) => (a.joinedAt - b.joinedAt) || a.userId.localeCompare(b.userId));
+  listenerQueue = listeners.map(item => ({ userId: item.userId, username: item.username }));
+  if (speakers.length < MAX_VOICE_SPEAKERS && listeners[0]?.userId === currentUser.id) {
+    promoteListenerToSpeaker();
+  }
+  updateVoiceStatus(speakers.length);
+}
+
+function syncVoiceRoleState() {
+  if (!inVoice || !audioChannel) return;
+  const participants = getVoicePresenceParticipants();
+  const speakers = participants.filter(p => p.role === 'speaker');
+  const listeners = participants
+    .filter(p => p.role === 'listener')
+    .sort((a, b) => (a.joinedAt - b.joinedAt) || a.userId.localeCompare(b.userId));
+  listenerQueue = listeners.map(item => ({ userId: item.userId, username: item.username }));
+
+  const me = participants.find(p => p.userId === currentUser.id);
+  if (!me) {
+    const shouldListen = speakers.length >= MAX_VOICE_SPEAKERS;
+    isListenerMode = shouldListen;
+    const track = localStream?.getAudioTracks()[0];
+    if (track) track.enabled = !shouldListen;
+    isMuted = shouldListen;
+    document.getElementById('btn-mute').textContent = shouldListen ? '🎙️ Unmute' : '🔇 Mute';
+    trackVoicePresence(shouldListen ? 'listener' : 'speaker').catch(() => {});
+  } else {
+    isListenerMode = me.role === 'listener';
+    const track = localStream?.getAudioTracks()[0];
+    if (track && isListenerMode) track.enabled = false;
+  }
+
+  maybePromoteFromListenerQueue();
+  updateVoiceStatus(speakers.length);
 }
 
 function ensureAudioContext() {
