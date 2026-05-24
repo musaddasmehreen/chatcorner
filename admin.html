@@ -17,6 +17,7 @@
         <button class="nav-btn" data-panel="rooms" title="Create, edit, lock and delete chat rooms">💬 Room Manager</button>
         <button class="nav-btn" data-panel="logs" title="Read and moderate room message history">📜 Chat Logs</button>
         <button class="nav-btn" data-panel="users" title="Manage users, ban/unban and admin roles">👥 User Manager</button>
+        <button class="nav-btn" data-panel="abuse" title="Detect high-volume abuse and take action">🛑 Abuse Detection</button>
         <button class="nav-btn" data-panel="banned" title="Review and manage banned users">🚫 Banned Users</button>
         <button class="nav-btn" data-panel="broadcast" title="Send system messages globally or per room">📣 Broadcast</button>
         <button class="nav-btn" data-panel="settings" title="Control app behavior and limits">⚙️ Settings</button>
@@ -131,6 +132,14 @@
             <tbody id="users-body"></tbody>
           </table>
         </div>
+      </section>
+
+      <section id="panel-abuse" class="panel">
+        <div class="panel-head">
+          <h2>🛑 Abuse Detection</h2>
+          <button class="btn" id="refresh-abuse">Refresh</button>
+        </div>
+        <div id="abuse-list" class="table-wrap"></div>
       </section>
 
       <section id="panel-banned" class="panel">

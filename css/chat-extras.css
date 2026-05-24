@@ -75,6 +75,45 @@
 .btn-emoji:hover { transform: scale(1.06); background: rgba(var(--accent-rgb),0.2); }
 .btn-emoji:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
+.btn-voice-note {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--accent-rgb),0.28);
+  background: rgba(var(--accent-rgb),0.1);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.btn-voice-note:hover { transform: scale(1.06); background: rgba(var(--accent-rgb),0.2); }
+.btn-voice-note:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+.btn-voice-note.recording {
+  border-color: rgba(248,113,113,0.55);
+  color: var(--red);
+  animation: recordPulse 0.95s ease-in-out infinite;
+}
+
+@keyframes recordPulse {
+  0% { box-shadow: 0 0 0 0 rgba(248,113,113,0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(248,113,113,0); }
+  100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
+}
+
+.voice-note-timer {
+  color: var(--red);
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 38px;
+  text-align: center;
+}
+
 .emoji-picker {
   position: absolute;
   left: 0.8rem;
@@ -164,6 +203,22 @@
 #audio-status.listener-mode {
   color: #fcd34d;
   font-weight: 600;
+}
+
+.btn-ban-user {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.25rem;
+}
+
+.btn-ban-user:hover {
+  color: var(--red);
+  border-color: rgba(248,113,113,0.35);
+  background: rgba(248,113,113,0.1);
 }
 
 /* ══ PERFORMANCE — disable smooth scroll for instant feel ══════ */

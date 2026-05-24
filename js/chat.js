@@ -64,6 +64,15 @@ let presenceChannel= null;
 let onlineUsers    = {};
 let cameraStates   = {};
 let presenceBaseData = {};
+const rateLimitBuckets = {};
+const voiceRecorder = {
+  mediaRecorder: null,
+  stream: null,
+  chunks: [],
+  cancelled: false,
+  stopTimer: null,
+  ticker: null
+};
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
@@ -83,6 +92,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   currentProfile = prof;
+  if (currentProfile?.is_banned) {
+    window.location.href = 'index.html?banned=1';
+    return;
+  }
   presenceBaseData = {
     userId: currentUser.id,
     username: currentProfile.username,
@@ -91,6 +104,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     cameraOn: false
   };
   document.getElementById('user-badge').textContent = prof.username + (prof.is_registered ? ' \u2713' : ' \ud83d\udc64');
+  const voiceBtn = document.getElementById('btn-voice-note');
+  if (voiceBtn) voiceBtn.classList.toggle('hidden', !currentProfile.is_registered);
 
   document.getElementById('audio-bar').classList.remove('hidden');
 
@@ -133,6 +148,7 @@ async function enterRoom(room) {
   if (messageChannel) sbClient.removeChannel(messageChannel);
   if (presenceChannel) sbClient.removeChannel(presenceChannel);
   if (typeof leaveVoice === 'function') leaveVoice();
+  stopRoomVoiceRecording(true);
 
   currentRoom = room;
   document.getElementById('current-room-name').textContent = '# ' + room.name;
@@ -148,6 +164,7 @@ async function enterRoom(room) {
   const msgInput = document.getElementById('msg-input');
   const sendBtn  = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
+  const voiceBtn = document.getElementById('btn-voice-note');
 
   if (room.is_audio_enabled) {
     audioBar.classList.remove('hidden');
@@ -160,12 +177,14 @@ async function enterRoom(room) {
     msgInput.placeholder = 'This room is locked by admin.';
     if (sendBtn)  sendBtn.disabled  = true;
     if (emojiBtn) emojiBtn.disabled = true;
+    if (voiceBtn) voiceBtn.disabled = true;
     closeEmojiPicker();
   } else {
     msgInput.disabled = false;
     msgInput.placeholder = 'Type a message\u2026 (Enter to send)';
     if (sendBtn)  sendBtn.disabled  = false;
     if (emojiBtn) emojiBtn.disabled = false;
+    if (voiceBtn) voiceBtn.disabled = !currentProfile?.is_registered;
   }
 
   const { data: messages } = await sbClient
@@ -194,6 +213,12 @@ async function enterRoom(room) {
       filter: `room_id=eq.${room.id}`
     }, payload => {
       appendMessage(payload.new);
+      scrollToBottom();
+    })
+    .on('broadcast', { event: 'voice-note' }, ({ payload }) => {
+      if (!payload || payload.roomId !== currentRoom?.id || !currentProfile?.is_registered) return;
+      if (payload.from === currentUser?.id) return;
+      appendVoiceNoteMessage(payload);
       scrollToBottom();
     })
     .subscribe();
@@ -237,10 +262,14 @@ async function enterRoom(room) {
 
 async function sendMessage() {
   const input = document.getElementById('msg-input');
-  const text  = input.value.trim();
+  const text  = sanitizeInput(input.value);
   if (!text || !currentRoom) return;
   if (currentRoom.is_locked) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
+    return;
+  }
+  if (!rateLimit(`msg:${currentUser?.id}`, 10, 10000)) {
+    appendSystemMessage('Slow down — max 10 messages per 10 seconds.');
     return;
   }
 
@@ -306,6 +335,7 @@ function scheduleRenderUserList() {
 function renderUserList() {
   const ul   = document.getElementById('user-list');
   const frag = document.createDocumentFragment();
+  const canBan = !!(currentProfile?.is_admin || currentProfile?.is_mod);
 
   Object.values(onlineUsers).forEach(u => {
     const li = document.createElement('li');
@@ -316,6 +346,7 @@ function renderUserList() {
       <button type="button" class="user-name-btn">${escHtml(u.username)}${u.registered ? ' \u2713' : ''}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
+      ${(canBan && u.userId !== currentUser?.id) ? '<button type="button" class="btn-ban-user" title="Ban user">\ud83d\udeab</button>' : ''}
     `;
     li.querySelector('.user-name-btn')?.addEventListener('click', () => {
       if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
@@ -323,6 +354,10 @@ function renderUserList() {
     li.querySelector('.camera-user-btn')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (typeof openFloatingCamera === 'function') openFloatingCamera(u.userId, u.username);
+    });
+    li.querySelector('.btn-ban-user')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      inChatBanUser(u.userId, u.username);
     });
     frag.appendChild(li);
   });
@@ -338,7 +373,7 @@ function scrollToBottom() {
 }
 
 function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function formatTime(iso) {
@@ -378,4 +413,208 @@ async function setLocalCameraState(cameraOn) {
 
 function getUsernameById(userId) {
   return onlineUsers[userId]?.username || (userId === currentUser?.id ? currentProfile?.username : 'User');
+}
+
+function sanitizeInput(value) {
+  const raw = String(value || '');
+  let out = '';
+  let insideTag = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '<') {
+      insideTag = true;
+      continue;
+    }
+    if (ch === '>') {
+      insideTag = false;
+      continue;
+    }
+    if (!insideTag) out += ch;
+  }
+  return out.trim();
+}
+
+function rateLimit(key, limit, windowMs) {
+  const now = Date.now();
+  const bucket = (rateLimitBuckets[key] || []).filter(ts => now - ts < windowMs);
+  if (bucket.length >= limit) {
+    rateLimitBuckets[key] = bucket;
+    return false;
+  }
+  bucket.push(now);
+  rateLimitBuckets[key] = bucket;
+  return true;
+}
+
+function resetRoomVoiceUi() {
+  const btn = document.getElementById('btn-voice-note');
+  const timer = document.getElementById('voice-note-timer');
+  if (btn) {
+    btn.classList.remove('recording');
+    btn.textContent = '🎙️';
+  }
+  if (timer) {
+    timer.classList.add('hidden');
+    timer.textContent = '05:00';
+  }
+}
+
+function updateRoomVoiceTimer(remainingMs) {
+  const timer = document.getElementById('voice-note-timer');
+  if (!timer) return;
+  const remaining = Math.max(0, Math.ceil(remainingMs / 1000));
+  const mins = String(Math.floor(remaining / 60)).padStart(2, '0');
+  const secs = String(remaining % 60).padStart(2, '0');
+  timer.textContent = `${mins}:${secs}`;
+}
+
+async function toggleRoomVoiceNote() {
+  if (!currentProfile?.is_registered) {
+    appendSystemMessage('Voice notes are available for registered users only.');
+    return;
+  }
+  if (!currentRoom || currentRoom.is_locked || !messageChannel) return;
+
+  const btn = document.getElementById('btn-voice-note');
+  const timer = document.getElementById('voice-note-timer');
+  if (!btn || !timer) return;
+
+  if (voiceRecorder.mediaRecorder?.state === 'recording') {
+    voiceRecorder.mediaRecorder.stop();
+    return;
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    appendSystemMessage('Voice recording is not supported in this browser.');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream);
+    voiceRecorder.mediaRecorder = mediaRecorder;
+    voiceRecorder.stream = stream;
+    voiceRecorder.chunks = [];
+    voiceRecorder.cancelled = false;
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (voiceRecorder.cancelled) return;
+      if (event.data && event.data.size > 0) voiceRecorder.chunks.push(event.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      const wasCancelled = voiceRecorder.cancelled;
+      const chunks = [...voiceRecorder.chunks];
+      cleanupRoomVoiceRecorder();
+      resetRoomVoiceUi();
+      if (wasCancelled) return;
+      if (!chunks.length || !messageChannel) return;
+
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      const audioDataUrl = await roomBlobToDataUrl(blob);
+      const payload = {
+        roomId: currentRoom?.id,
+        from: currentUser?.id,
+        username: currentProfile?.username || 'User',
+        audioDataUrl,
+        createdAt: new Date().toISOString()
+      };
+
+      appendVoiceNoteMessage(payload);
+      scrollToBottom();
+      await messageChannel.send({ type: 'broadcast', event: 'voice-note', payload });
+    };
+
+    mediaRecorder.start();
+    btn.classList.add('recording');
+    btn.textContent = '⏹️';
+    timer.classList.remove('hidden');
+    timer.textContent = '05:00';
+
+    const startedAt = Date.now();
+    voiceRecorder.ticker = setInterval(() => {
+      updateRoomVoiceTimer(300000 - (Date.now() - startedAt));
+    }, 1000);
+    voiceRecorder.stopTimer = setTimeout(() => {
+      if (mediaRecorder.state === 'recording') mediaRecorder.stop();
+    }, 300000);
+  } catch (_) {
+    appendSystemMessage('Microphone permission is required for voice notes.');
+    cleanupRoomVoiceRecorder();
+    resetRoomVoiceUi();
+  }
+}
+
+function stopRoomVoiceRecording(cancelOnly = false) {
+  if (!voiceRecorder.mediaRecorder) return;
+  if (cancelOnly) {
+    voiceRecorder.cancelled = true;
+    voiceRecorder.chunks = [];
+  }
+  if (voiceRecorder.mediaRecorder.state === 'recording') {
+    voiceRecorder.mediaRecorder.stop();
+  } else {
+    cleanupRoomVoiceRecorder();
+    resetRoomVoiceUi();
+  }
+}
+
+function cleanupRoomVoiceRecorder() {
+  if (voiceRecorder.stopTimer) clearTimeout(voiceRecorder.stopTimer);
+  if (voiceRecorder.ticker) clearInterval(voiceRecorder.ticker);
+  voiceRecorder.stopTimer = null;
+  voiceRecorder.ticker = null;
+  voiceRecorder.stream?.getTracks().forEach(track => track.stop());
+  voiceRecorder.stream = null;
+  voiceRecorder.mediaRecorder = null;
+  voiceRecorder.chunks = [];
+  voiceRecorder.cancelled = false;
+}
+
+function appendVoiceNoteMessage(payload) {
+  if (!payload?.audioDataUrl || !currentProfile?.is_registered) return;
+  const isMe = payload.from === currentUser?.id;
+  const div = document.createElement('div');
+  div.className = 'msg-row' + (isMe ? ' self' : '');
+  const initial = (payload.username || '?')[0].toUpperCase();
+  const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(payload.username || '');
+  div.innerHTML = `
+    <div class="avatar" style="background:${color}">${initial}</div>
+    <div class="msg-bubble">
+      <div class="msg-username">${escHtml(payload.username || 'Unknown')}</div>
+      <div class="msg-text"><audio controls src="${payload.audioDataUrl}"></audio></div>
+      <div class="msg-time">${formatTime(payload.createdAt || new Date().toISOString())}</div>
+    </div>`;
+
+  const audio = div.querySelector('audio');
+  if (audio) audio.onended = () => div.remove();
+  document.getElementById('messages').appendChild(div);
+}
+
+function roomBlobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function inChatBanUser(userId, username) {
+  if (!(currentProfile?.is_admin || currentProfile?.is_mod) || !userId || userId === currentUser?.id) return;
+  const reason = prompt(`Ban ${username || 'this user'}? Reason (optional):`, 'Policy violation');
+  if (reason === null) return;
+
+  const { error } = await sbClient.from('profiles').update({
+    is_banned: true,
+    banned_at: new Date().toISOString(),
+    banned_by: currentUser.id,
+    ban_reason: reason || 'Banned by moderator'
+  }).eq('id', userId);
+
+  if (error) {
+    appendSystemMessage('Failed to ban user.');
+    return;
+  }
+  appendSystemMessage(`${username || 'User'} has been banned.`);
 }
