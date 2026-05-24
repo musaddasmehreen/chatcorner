@@ -53,11 +53,14 @@ CREATE POLICY "Admins update profiles" ON profiles FOR UPDATE USING (true);
 
 let adminUser = null;
 let adminProfile = null;
+let authInitialized = false;
 let roomsCache = [];
 let profilesCache = [];
 let messageCache = [];
 let logsPage = 1;
 let loadingCount = 0;
+let statsRefreshTimer = null;
+const AUTH_INIT_TIMEOUT_MS = 10000;
 
 const settingsDefaults = {
   allow_guest_login: 'true',
@@ -69,10 +72,45 @@ const settingsDefaults = {
 
 window.addEventListener('DOMContentLoaded', async () => {
   bindUI();
-  const isAuthorized = await checkAdminAuth();
-  if (!isAuthorized) return;
-  await initDashboard();
+  try {
+    const isAuthorized = await checkAdminAuth();
+    if (!isAuthorized || !isAdminContextReady()) return;
+    await initDashboard();
+  } catch (_error) {
+    showLoading(false);
+    window.location.href = 'adminup.html?denied=1';
+  }
 });
+
+function isAdminContextReady() {
+  return authInitialized && Boolean(adminUser?.id) && Boolean(adminProfile?.is_admin);
+}
+
+function resetAdminContext() {
+  authInitialized = false;
+  adminUser = null;
+  adminProfile = null;
+  if (statsRefreshTimer) {
+    clearInterval(statsRefreshTimer);
+    statsRefreshTimer = null;
+  }
+}
+
+function ensureAdminContext(notify = false) {
+  const ready = isAdminContextReady();
+  if (!ready && notify) toast('Admin verification is still in progress. Please wait.', 'error');
+  return ready;
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  let timeoutId = null;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
 
 function bindUI() {
   document.getElementById('admin-logout').addEventListener('click', adminLogout);
@@ -116,51 +154,78 @@ function bindUI() {
 }
 
 async function checkAdminAuth() {
+  resetAdminContext();
+  showLoading(true);
   try {
-    showLoading(true);
-    const { data: { session } } = await sbClient.auth.getSession();
+    const { data: { session } } = await withTimeout(
+      sbClient.auth.getSession(),
+      AUTH_INIT_TIMEOUT_MS,
+      'Admin session verification'
+    );
     if (!session?.user) {
       window.location.href = 'adminup.html';
       return false;
     }
 
     adminUser = session.user;
-    const { data: profile, error } = await sbClient.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+    const { data: profile, error } = await withTimeout(
+      sbClient.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
+      AUTH_INIT_TIMEOUT_MS,
+      'Admin profile verification'
+    );
 
     if (error || !profile?.is_admin) {
       await sbClient.auth.signOut();
+      resetAdminContext();
       window.location.href = 'adminup.html?denied=1';
       return false;
     }
 
     adminProfile = profile;
+    authInitialized = true;
     document.getElementById('admin-name').textContent = profile.username || adminUser.email || 'Admin';
-    showLoading(false);
     return true;
   } catch (_error) {
-    showLoading(false);
+    resetAdminContext();
     window.location.href = 'adminup.html?denied=1';
     return false;
+  } finally {
+    showLoading(false);
   }
 }
 
 async function initDashboard() {
-  await loadRooms();
+  if (!ensureAdminContext()) return;
+  try {
+    await loadRooms();
+    if (!ensureAdminContext()) return;
 
-  await Promise.all([
-    loadProfiles(),
-    loadStats(),
-    loadMessages(),
-    loadUsers(),
-    loadBannedUsers(),
-    loadBroadcastHistory(),
-    loadSettings(),
-    loadAnalytics()
-  ]);
+    await Promise.all([
+      loadProfiles(),
+      loadStats(),
+      loadMessages(),
+      loadUsers(),
+      loadBannedUsers(),
+      loadBroadcastHistory(),
+      loadSettings(),
+      loadAnalytics()
+    ]);
 
-  ensureRoomSelectsReady();
+    ensureRoomSelectsReady();
 
-  setInterval(loadStats, 20000);
+    if (statsRefreshTimer) clearInterval(statsRefreshTimer);
+    statsRefreshTimer = setInterval(() => {
+      if (!ensureAdminContext()) {
+        clearInterval(statsRefreshTimer);
+        statsRefreshTimer = null;
+        return;
+      }
+      loadStats();
+    }, 20000);
+  } catch (_error) {
+    toast('Dashboard initialization failed. Please try signing in again.', 'error');
+    window.location.href = 'adminup.html?denied=1';
+  }
 }
 
 function switchPanel(panelName) {
@@ -175,6 +240,7 @@ function switchPanel(panelName) {
 }
 
 async function adminLogout() {
+  resetAdminContext();
   await sbClient.auth.signOut();
   window.location.href = 'adminup.html';
 }
@@ -227,6 +293,7 @@ async function safeCount(queryBuilder) {
 }
 
 async function loadStats() {
+  if (!ensureAdminContext()) return;
   const statsGrid = document.getElementById('stats-grid');
   showLoading(true);
   try {
@@ -274,6 +341,7 @@ async function getOnlineUserEstimate() {
 }
 
 async function loadRooms() {
+  if (!ensureAdminContext()) return;
   showLoading(true);
   const { data, error } = await sbClient.from('rooms').select('*').order('created_at', { ascending: false });
   showLoading(false);
@@ -434,11 +502,13 @@ async function createRoom() {
 }
 
 async function loadProfiles() {
+  if (!ensureAdminContext()) return;
   const { data, error } = await sbClient.from('profiles').select('*').order('created_at', { ascending: false });
   profilesCache = error ? [] : (data || []);
 }
 
 async function loadMessages() {
+  if (!ensureAdminContext()) return;
   const roomId = document.getElementById('logs-room-select').value;
   const body = document.getElementById('logs-body');
   if (!roomId) {
@@ -555,6 +625,7 @@ async function exportLogsCsv() {
 }
 
 async function loadUsers() {
+  if (!ensureAdminContext()) return;
   await loadProfiles();
   renderUsersTable();
 }
@@ -621,6 +692,7 @@ function viewProfile(userId) {
 }
 
 async function setUserBan(userId, banned, reason = '', durationHours = null) {
+  if (!ensureAdminContext(true)) return;
   const warning = banned ? 'This user will be blocked from access. Continue?' : 'Unban this user and restore access?';
   if (!confirm(warning)) return;
   showLoading(true);
@@ -751,6 +823,7 @@ function toggleSelectAllUsers(event) {
 }
 
 async function runBulkAction() {
+  if (!ensureAdminContext(true)) return;
   const action = document.getElementById('bulk-action').value;
   const ids = getSelectedUserIds();
   if (!action) return toast('Choose a bulk action first.', 'error');
@@ -785,6 +858,7 @@ async function runBulkAction() {
 }
 
 async function loadBannedUsers() {
+  if (!ensureAdminContext()) return;
   const body = document.getElementById('banned-body');
   const { data, error } = await sbClient.from('profiles').select('*').eq('is_banned', true).order('banned_at', { ascending: false });
   if (error) {
@@ -815,6 +889,7 @@ async function loadBannedUsers() {
 
 async function manualBanSubmit(event) {
   event.preventDefault();
+  if (!ensureAdminContext(true)) return;
   const userLookup = document.getElementById('manual-ban-user').value.trim();
   const reason = document.getElementById('manual-ban-reason').value.trim() || 'Manual admin ban';
   const durationRaw = document.getElementById('manual-ban-duration').value;
@@ -850,6 +925,7 @@ function updateBroadcastPreview() {
 }
 
 async function sendBroadcast() {
+  if (!ensureAdminContext(true)) return;
   const roomId = document.getElementById('broadcast-room').value;
   const message = document.getElementById('broadcast-message').value.trim();
   if (!message) return toast('Type a message before sending.', 'error');
@@ -898,6 +974,7 @@ async function sendBroadcast() {
 }
 
 async function loadBroadcastHistory() {
+  if (!ensureAdminContext()) return;
   const list = document.getElementById('broadcast-history');
   const { data, error } = await sbClient.from('broadcasts').select('*').order('created_at', { ascending: false }).limit(10);
   if (error) {
@@ -917,6 +994,7 @@ async function loadBroadcastHistory() {
 }
 
 async function loadSettings() {
+  if (!ensureAdminContext()) return;
   const keys = Object.keys(settingsDefaults);
   const { data, error } = await sbClient.from('app_settings').select('*').in('key', keys);
   const settingsMap = { ...settingsDefaults };
@@ -946,6 +1024,7 @@ async function saveSettings() {
 }
 
 async function loadAnalytics() {
+  if (!ensureAdminContext()) return;
   await Promise.all([renderMessagesPerDay(), renderUsersPerDay(), renderTopRooms(), renderTopUsers()]);
 }
 
