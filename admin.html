@@ -202,7 +202,10 @@
 
         <div class="card form-grid">
           <label for="broadcast-room">Target Room</label>
-          <select id="broadcast-room"></select>
+          <select id="broadcast-room">
+            <option value="all">All Rooms</option>
+            <option value="" disabled>Loading rooms...</option>
+          </select>
 
           <label for="broadcast-message">Message</label>
           <textarea id="broadcast-message" rows="4" placeholder="Type announcement here..."></textarea>

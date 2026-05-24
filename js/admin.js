@@ -137,8 +137,9 @@ async function checkAdminAuth() {
 }
 
 async function initDashboard() {
+  await loadRooms();
+
   await Promise.all([
-    loadRooms(),
     loadProfiles(),
     loadStats(),
     loadMessages(),
@@ -148,6 +149,8 @@ async function initDashboard() {
     loadSettings(),
     loadAnalytics()
   ]);
+
+  ensureRoomSelectsReady();
 
   setInterval(loadStats, 20000);
 }
@@ -302,6 +305,21 @@ function fillRoomSelects(rooms) {
     o2.textContent = r.name;
     bSelect.appendChild(o2);
   });
+}
+
+function ensureRoomSelectsReady() {
+  const broadcastSelect = document.getElementById('broadcast-room');
+  if (!broadcastSelect) return;
+
+  const hasRoomOptions = Array.from(broadcastSelect.options).some(option => option.value && option.value !== 'all');
+  if (!hasRoomOptions && roomsCache.length) {
+    fillRoomSelects(roomsCache);
+    return;
+  }
+
+  if (!broadcastSelect.options.length) {
+    fillRoomSelects([]);
+  }
 }
 
 async function renderRoomsTable() {
