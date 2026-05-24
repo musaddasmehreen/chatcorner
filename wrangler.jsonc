@@ -8,6 +8,13 @@
     "directory": ".",
     "not_found_handling": "single-page-application"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "chatcorner-db",
+      "database_id": "bd90fbd2-3cfa-4791-8329-ad7f0ba4a0be"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       { "name": "CHAT_ROOM", "class_name": "ChatRoom" },
