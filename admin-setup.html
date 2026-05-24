@@ -288,11 +288,12 @@
           return;
         }
 
-        setStatus('✅ Admin granted! Redirecting to login in 2 seconds…', 'success');
+        setStatus('✅ Admin granted! Redirecting to login…', 'success');
         
+        // Use a more reliable redirect method
         setTimeout(() => {
           window.location.href = 'adminup.html';
-        }, 2000);
+        }, 1500);
 
       } catch (error) {
         setStatus('❌ Error: ' + error.message, 'error');
