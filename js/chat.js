@@ -2,8 +2,8 @@ let currentUser = null;
 let currentProfile = null;
 let currentRoom = null;
 let roomWs = null;
-let onlineUsers = {};
-let cameraStates = {};
+let onlineUsers = Object.create(null);
+let cameraStates = Object.create(null);
 
 window.roomWs = null;
 window.sendToRoom = sendToRoom;
@@ -63,8 +63,8 @@ async function enterRoom(room) {
   currentRoom = room;
   document.getElementById('current-room-name').textContent = '# ' + room.name;
   document.getElementById('messages').innerHTML = '';
-  onlineUsers = {};
-  cameraStates = {};
+  onlineUsers = Object.create(null);
+  cameraStates = Object.create(null);
 
   document.querySelectorAll('.room-list li').forEach((li) => {
     li.classList.toggle('active', li.textContent.includes(room.name));
@@ -106,8 +106,8 @@ async function enterRoom(room) {
     }
 
     if (msg.type === 'presence_sync') {
-      onlineUsers = {};
-      cameraStates = {};
+      onlineUsers = Object.create(null);
+      cameraStates = Object.create(null);
       (msg.users || []).forEach((u) => {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
@@ -185,21 +185,35 @@ function appendMessage(msg) {
   }
 
   const isMe = msg.user_id === currentUser?.id;
-  const div = document.createElement('div');
-  div.className = 'msg-row' + (isMe ? ' self' : '');
+  const row = document.createElement('div');
+  row.className = 'msg-row' + (isMe ? ' self' : '');
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username || '');
 
-  div.innerHTML = `
-    <div class="avatar" style="background:${color}">${initial}</div>
-    <div class="msg-bubble">
-      <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-text">${escHtml(msg.content || '')}</div>
-      <div class="msg-time">${formatTime(msg.created_at)}</div>
-    </div>`;
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.style.background = color;
+  avatar.textContent = initial;
 
-  document.getElementById('messages').appendChild(div);
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+
+  const username = document.createElement('div');
+  username.className = 'msg-username';
+  username.textContent = msg.username || 'Unknown';
+
+  const text = document.createElement('div');
+  text.className = 'msg-text';
+  text.textContent = msg.content || '';
+
+  const time = document.createElement('div');
+  time.className = 'msg-time';
+  time.textContent = formatTime(msg.created_at);
+
+  bubble.append(username, text, time);
+  row.append(avatar, bubble);
+  document.getElementById('messages').appendChild(row);
 }
 
 function appendSystemMessage(text) {

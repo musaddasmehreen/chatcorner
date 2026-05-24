@@ -1,16 +1,16 @@
 let localStream = null;
-let peers = {};
-let peerStreams = {};
-let peerAudioEls = {};
-let peerMuted = {};
+let peers = Object.create(null);
+let peerStreams = Object.create(null);
+let peerAudioEls = Object.create(null);
+let peerMuted = Object.create(null);
 let isMuted = false;
 let inVoice = false;
 let isCameraOn = false;
 
 let audioCtx = null;
-let analyserNodes = {};
-let analyserData = {};
-let participantLevels = {};
+let analyserNodes = Object.create(null);
+let analyserData = Object.create(null);
+let participantLevels = Object.create(null);
 let visualizerFrame = null;
 let floatingCameraPeerId = null;
 
@@ -85,11 +85,11 @@ async function leaveVoice() {
     try { pc.close(); } catch (_) {}
     cleanupPeerMedia(peerId);
   });
-  peers = {};
+  peers = Object.create(null);
 
   closeFloatingCamera();
   clearAllVisualizers();
-  participantLevels = {};
+  participantLevels = Object.create(null);
 
   document.getElementById('video-grid').innerHTML = '';
   document.getElementById('video-grid').classList.add('hidden');
@@ -284,17 +284,37 @@ function addPeerTag(peerId, username) {
   const tag = document.createElement('div');
   tag.className = 'peer-tag';
   tag.id = 'peer-' + peerId;
-  tag.innerHTML = `
-    <span class="peer-name">🎙 ${escHtml(username || 'User')}</span>
-    <canvas class="peer-soundbar mini-soundbar" data-user-id="${peerId}" width="32" height="10" aria-hidden="true"></canvas>
-    <button type="button" class="peer-camera-btn hidden" data-peer-id="${peerId}" title="View camera">��</button>
-    <button type="button" class="peer-mute-btn" data-peer-id="${peerId}" title="Mute/Unmute peer">🔇</button>
-  `;
 
-  tag.querySelector('.peer-mute-btn')?.addEventListener('click', () => togglePeerMute(peerId));
-  tag.querySelector('.peer-camera-btn')?.addEventListener('click', () => {
+  const name = document.createElement('span');
+  name.className = 'peer-name';
+  name.textContent = `🎙 ${username || 'User'}`;
+
+  const meter = document.createElement('canvas');
+  meter.className = 'peer-soundbar mini-soundbar';
+  meter.dataset.userId = peerId;
+  meter.width = 32;
+  meter.height = 10;
+  meter.setAttribute('aria-hidden', 'true');
+
+  const cameraBtn = document.createElement('button');
+  cameraBtn.type = 'button';
+  cameraBtn.className = 'peer-camera-btn hidden';
+  cameraBtn.dataset.peerId = peerId;
+  cameraBtn.title = 'View camera';
+  cameraBtn.textContent = '📷';
+  cameraBtn.addEventListener('click', () => {
     openFloatingCamera(peerId, username || getUsernameById(peerId));
   });
+
+  const muteBtn = document.createElement('button');
+  muteBtn.type = 'button';
+  muteBtn.className = 'peer-mute-btn';
+  muteBtn.dataset.peerId = peerId;
+  muteBtn.title = 'Mute/Unmute peer';
+  muteBtn.textContent = '🔇';
+  muteBtn.addEventListener('click', () => togglePeerMute(peerId));
+
+  tag.append(name, meter, cameraBtn, muteBtn);
 
   document.getElementById('peers-list').appendChild(tag);
 }

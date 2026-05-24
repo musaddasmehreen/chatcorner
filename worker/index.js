@@ -27,6 +27,15 @@ function base64UrlEncode(input) {
   return btoa(input).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
+function randomId(length = 5) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < length; i++) out += chars[bytes[i] % chars.length];
+  return out;
+}
+
 function base64UrlToUint8Array(str) {
   const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
   const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
@@ -214,7 +223,7 @@ export default {
 
       if (url.pathname === '/api/auth/guest' && request.method === 'POST') {
         const userId = crypto.randomUUID();
-        const guestName = `Guest_${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+        const guestName = `Guest_${randomId(5)}`;
 
         await env.DB.prepare('INSERT INTO users (id, is_guest, is_admin, is_banned) VALUES (?, 1, 0, 0)').bind(userId).run();
         await env.DB.prepare(
