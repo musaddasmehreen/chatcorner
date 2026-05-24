@@ -1,99 +1,63 @@
 function showTab(tab) {
-  document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(tab + '-tab').classList.add('active');
-  event.currentTarget.classList.add('active');
+  document.querySelectorAll('.auth-form').forEach((f) => f.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+  document.getElementById(tab + '-tab')?.classList.add('active');
+  event?.currentTarget?.classList.add('active');
 }
 
 async function loginUser() {
-  const email    = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const msg      = document.getElementById('login-msg');
+  const email = document.getElementById('login-email')?.value.trim();
+  const password = document.getElementById('login-password')?.value;
+  const msg = document.getElementById('login-msg');
 
-  if (!email || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
+  if (!email || !password) return showMsg(msg, 'Fill in all fields.', 'error');
 
   showMsg(msg, 'Logging in…', '');
+  const res = await apiFetch('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password })
+  });
 
-  const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    if (error.message.includes('Email not confirmed')) {
-      showMsg(msg, '📧 Please confirm your email first, then try again.', 'error');
-    } else if (error.message.includes('Invalid login credentials')) {
-      showMsg(msg, 'Incorrect email or password.', 'error');
-    } else {
-      showMsg(msg, error.message, 'error');
-    }
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload?.token) {
+    showMsg(msg, payload?.error || 'Incorrect email or password.', 'error');
     return;
   }
 
-  // If profile is missing (e.g. upsert failed at register time), recreate it now
-  const { data: existingProf } = await sbClient
-    .from('profiles').select('id').eq('id', data.user.id).maybeSingle();
-
-  if (!existingProf) {
-    const pendingUsername = localStorage.getItem('cc_pending_username')
-      || 'User_' + data.user.id.substr(0, 5);
-    await sbClient.from('profiles').upsert({
-      id: data.user.id,
-      username: pendingUsername,
-      avatar_color: randomColor(),
-      is_registered: true
-    });
-    localStorage.removeItem('cc_pending_username');
-  }
-
+  setToken(payload.token);
   window.location.href = 'chat.html';
 }
 
 async function registerUser() {
-  const username = document.getElementById('reg-username').value.trim();
-  const email    = document.getElementById('reg-email').value.trim();
-  const password = document.getElementById('reg-password').value;
-  const msg      = document.getElementById('reg-msg');
+  const username = document.getElementById('reg-username')?.value.trim();
+  const email = document.getElementById('reg-email')?.value.trim();
+  const password = document.getElementById('reg-password')?.value;
+  const msg = document.getElementById('reg-msg');
 
-  if (!username || !email || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
-  if (password.length < 6)  { showMsg(msg, 'Password must be at least 6 characters.', 'error'); return; }
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-    showMsg(msg, 'Username: letters, numbers, _ only (3–20 chars).', 'error'); return;
-  }
-
-  // Check username uniqueness before creating the auth account
-  showMsg(msg, 'Checking username…', '');
-  const { data: taken } = await sbClient
-    .from('profiles').select('id').eq('username', username).maybeSingle();
-  if (taken) { showMsg(msg, 'Username already taken — choose another.', 'error'); return; }
+  if (!username || !email || !password) return showMsg(msg, 'Fill in all fields.', 'error');
+  if (password.length < 6) return showMsg(msg, 'Password must be at least 6 characters.', 'error');
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return showMsg(msg, 'Username: letters, numbers, _ only (3–20 chars).', 'error');
 
   showMsg(msg, 'Creating account…', '');
+  const res = await apiFetch('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username, email, password })
+  });
 
-  const { data, error } = await sbClient.auth.signUp({ email, password });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) return showMsg(msg, payload?.error || 'Registration failed.', 'error');
 
-  if (error) { showMsg(msg, error.message, 'error'); return; }
-
-  if (data.user) {
-    const { error: profErr } = await sbClient.from('profiles').upsert({
-      id: data.user.id,
-      username,
-      avatar_color: randomColor(),
-      is_registered: true
-    });
-
-    if (profErr) {
-      // Non-fatal: store username so login can recover the profile
-      console.warn('Profile save error (will retry on login):', profErr.message);
-    }
+  if (payload.email_confirmation) {
+    showMsg(msg, '✅ Account created! Check email for confirmation.', 'success');
+    return;
   }
 
-  localStorage.setItem('cc_pending_username', username);
-
-  // Supabase returns a session immediately when email confirmation is disabled
-  if (data.session) {
+  if (payload.token) {
+    setToken(payload.token);
     showMsg(msg, '✅ Account created! Taking you to chat…', 'success');
-    setTimeout(() => { window.location.href = 'chat.html'; }, 1200);
+    setTimeout(() => { window.location.href = 'chat.html'; }, 900);
   } else {
-    showMsg(msg,
-      '✅ Account created! Check your email → click the confirmation link → then come back and login.',
-      'success');
+    showMsg(msg, '✅ Account created! Please login.', 'success');
   }
 }
 
@@ -101,43 +65,36 @@ async function guestLogin() {
   const btn = document.querySelector('.tab-btn:last-child');
   if (btn) btn.textContent = 'Joining…';
 
-  const { data, error } = await sbClient.auth.signInAnonymously();
+  const res = await apiFetch('/api/auth/guest', { method: 'POST', body: '{}' });
+  const payload = await res.json().catch(() => ({}));
 
-  if (error) {
-    alert('Guest login failed: ' + error.message);
+  if (!res.ok || !payload?.token) {
+    alert(payload?.error || 'Guest login failed.');
     if (btn) btn.textContent = 'Guest';
     return;
   }
 
-  const guestName = 'Guest_' + Math.random().toString(36).substr(2, 5).toUpperCase();
-
-  await sbClient.from('profiles').upsert({
-    id: data.user.id,
-    username: guestName,
-    avatar_color: randomColor(),
-    is_registered: false
-  });
-
+  setToken(payload.token);
   window.location.href = 'chat.html';
 }
 
 async function logout() {
-  await sbClient.auth.signOut();
+  await apiFetch('/api/auth/logout', { method: 'POST', body: '{}' }).catch(() => null);
+  clearToken();
   window.location.href = 'index.html';
 }
 
 function showMsg(el, text, type) {
+  if (!el) return;
   el.textContent = text;
   el.className = 'msg ' + type;
 }
 
-function randomColor() {
-  const colors = ['#7c3aed','#0891b2','#059669','#d97706','#dc2626','#db2777','#2563eb','#0d9488'];
-  return colors[Math.floor(Math.random() * colors.length)];
+async function checkSessionAndRedirect() {
+  const onIndex = window.location.pathname.endsWith('index.html') || window.location.pathname === '/';
+  if (!onIndex) return;
+  const res = await apiFetch('/api/auth/session', { method: 'GET' }).catch(() => null);
+  if (res?.ok) window.location.href = 'chat.html';
 }
 
-if (window.location.pathname.endsWith('index.html') || window.location.pathname === '/') {
-  sbClient.auth.getSession().then(({ data }) => {
-    if (data.session) window.location.href = 'chat.html';
-  });
-}
+checkSessionAndRedirect();
