@@ -3,6 +3,7 @@ const pmMuted = {};
 const pmTextHistory = {};
 const pmVoiceUrls = {};
 const pmRecorders = {};
+const pmRecordingTimeouts = {};
 const pmCallState = {};
 let pmChannel = null;
 let pmTableAvailable = null;
@@ -137,6 +138,10 @@ function closePrivateChat(userId) {
   if (pmRecorders[userId]?.state === 'recording') {
     pmRecorders[userId].stop();
   }
+  if (pmRecordingTimeouts[userId]) {
+    clearTimeout(pmRecordingTimeouts[userId]);
+    delete pmRecordingTimeouts[userId];
+  }
   delete pmRecorders[userId];
 
   cleanupPmVoiceUrls(userId);
@@ -231,10 +236,16 @@ function appendPmVoiceMessage(userId, msg, isMe) {
   row.className = 'pm-msg pm-voice' + (isMe ? ' self' : '');
   row.innerHTML = `
     <div class="pm-msg-bubble">
-      <audio controls src="${msg.audioUrl}"></audio>
+      <audio controls></audio>
     </div>
     <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
   `;
+  const audio = row.querySelector('audio');
+  audio.src = msg.audioUrl;
+  audio.onended = () => {
+    row.remove();
+    try { URL.revokeObjectURL(msg.audioUrl); } catch (_) {}
+  };
 
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
@@ -281,6 +292,10 @@ async function togglePmRecording(userId) {
     };
 
     mediaRecorder.onstop = async () => {
+      if (pmRecordingTimeouts[userId]) {
+        clearTimeout(pmRecordingTimeouts[userId]);
+        delete pmRecordingTimeouts[userId];
+      }
       btn.classList.remove('recording');
       btn.textContent = '🎙️';
       stream.getTracks().forEach(t => t.stop());
@@ -297,6 +312,9 @@ async function togglePmRecording(userId) {
     };
 
     mediaRecorder.start();
+    pmRecordingTimeouts[userId] = setTimeout(() => {
+      if (pmRecorders[userId]?.state === 'recording') pmRecorders[userId].stop();
+    }, 300000);
     btn.classList.add('recording');
     btn.textContent = '⏹️';
   } catch (_) {

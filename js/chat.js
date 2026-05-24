@@ -55,6 +55,16 @@ function closeEmojiPicker() {
   if (picker) picker.classList.add('hidden');
 }
 
+const _rateLimits = {};
+function rateLimit(key, max, ms) {
+  const n = Date.now();
+  if (!_rateLimits[key]) _rateLimits[key] = [];
+  _rateLimits[key] = _rateLimits[key].filter(t => n - t < ms);
+  if (_rateLimits[key].length >= max) return false;
+  _rateLimits[key].push(n);
+  return true;
+}
+
 /* ══ Chat State ═════════════════════════════════════════════════ */
 let currentUser    = null;
 let currentProfile = null;
@@ -64,6 +74,13 @@ let presenceChannel= null;
 let onlineUsers    = {};
 let cameraStates   = {};
 let presenceBaseData = {};
+let roomVoiceRecorder = null;
+let roomVoiceChunks = [];
+let roomVoiceStream = null;
+let roomVoiceTimerInterval = null;
+let roomVoiceStopTimeout = null;
+let roomVoiceStartedAt = 0;
+let roomVoiceDiscard = false;
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
@@ -82,6 +99,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     ({ data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single());
   }
 
+  if (prof?.is_banned) {
+    await sbClient.auth.signOut();
+    window.location.href = 'index.html?banned=1';
+    return;
+  }
+
   currentProfile = prof;
   presenceBaseData = {
     userId: currentUser.id,
@@ -91,6 +114,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     cameraOn: false
   };
   document.getElementById('user-badge').textContent = prof.username + (prof.is_registered ? ' \u2713' : ' \ud83d\udc64');
+  const roomVoiceBtn = document.getElementById('btn-voice-note');
+  if (roomVoiceBtn) roomVoiceBtn.style.display = prof.is_registered ? 'inline-flex' : 'none';
 
   document.getElementById('audio-bar').classList.remove('hidden');
 
@@ -133,6 +158,11 @@ async function enterRoom(room) {
   if (messageChannel) sbClient.removeChannel(messageChannel);
   if (presenceChannel) sbClient.removeChannel(presenceChannel);
   if (typeof leaveVoice === 'function') leaveVoice();
+  roomVoiceDiscard = true;
+  if (roomVoiceRecorder?.state === 'recording') {
+    try { roomVoiceRecorder.stop(); } catch (_) {}
+  }
+  stopRoomVoiceNote(true);
 
   currentRoom = room;
   document.getElementById('current-room-name').textContent = '# ' + room.name;
@@ -148,6 +178,8 @@ async function enterRoom(room) {
   const msgInput = document.getElementById('msg-input');
   const sendBtn  = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
+  const roomVoiceBtn = document.getElementById('btn-voice-note');
+  const roomVoiceTimer = document.getElementById('voice-note-timer');
 
   if (room.is_audio_enabled) {
     audioBar.classList.remove('hidden');
@@ -160,12 +192,15 @@ async function enterRoom(room) {
     msgInput.placeholder = 'This room is locked by admin.';
     if (sendBtn)  sendBtn.disabled  = true;
     if (emojiBtn) emojiBtn.disabled = true;
+    if (roomVoiceBtn) roomVoiceBtn.disabled = true;
+    if (roomVoiceTimer) roomVoiceTimer.style.display = 'none';
     closeEmojiPicker();
   } else {
     msgInput.disabled = false;
     msgInput.placeholder = 'Type a message\u2026 (Enter to send)';
     if (sendBtn)  sendBtn.disabled  = false;
     if (emojiBtn) emojiBtn.disabled = false;
+    if (roomVoiceBtn) roomVoiceBtn.disabled = false;
   }
 
   const { data: messages } = await sbClient
@@ -194,6 +229,18 @@ async function enterRoom(room) {
       filter: `room_id=eq.${room.id}`
     }, payload => {
       appendMessage(payload.new);
+      scrollToBottom();
+    })
+    .on('broadcast', { event: 'voice-note' }, ({ payload }) => {
+      if (!payload || !currentProfile?.is_registered) return;
+      if (payload.roomId !== currentRoom?.id || payload.from === currentUser?.id) return;
+      if (!payload.audioBase64 || !payload.username) return;
+      appendVoiceNoteMessage({
+        user_id: payload.from,
+        username: payload.username,
+        created_at: payload.createdAt || new Date().toISOString(),
+        audioDataUrl: payload.audioBase64
+      });
       scrollToBottom();
     })
     .subscribe();
@@ -237,10 +284,15 @@ async function enterRoom(room) {
 
 async function sendMessage() {
   const input = document.getElementById('msg-input');
-  const text  = input.value.trim();
+  const rawText = input.value.trim();
+  const text = sanitizeText(rawText).trim();
   if (!text || !currentRoom) return;
   if (currentRoom.is_locked) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
+    return;
+  }
+  if (!rateLimit(`msg:${currentUser.id}`, 10, 10000)) {
+    appendSystemMessage('You are sending messages too fast. Please wait a few seconds.');
     return;
   }
 
@@ -253,6 +305,10 @@ async function sendMessage() {
     content:  text,
     type:     'text'
   });
+}
+
+function sanitizeText(text = '') {
+  return String(text).replace(/<[^>]*>/g, '');
 }
 
 /* Builds a message DOM node without appending it (used for batch & single) */
@@ -294,6 +350,147 @@ function appendSystemMessage(text) {
   document.getElementById('messages').appendChild(div);
 }
 
+async function toggleRoomVoiceNote() {
+  if (!currentProfile?.is_registered) {
+    appendSystemMessage('Voice notes are available for registered users only.');
+    return;
+  }
+  if (!currentRoom) return;
+  if (currentRoom.is_locked) {
+    appendSystemMessage('This room is locked by admin. Voice notes are disabled.');
+    return;
+  }
+  if (roomVoiceRecorder?.state === 'recording') {
+    roomVoiceRecorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    appendSystemMessage('Voice note recording is not supported in this browser.');
+    return;
+  }
+
+  const btn = document.getElementById('btn-voice-note');
+  const timer = document.getElementById('voice-note-timer');
+  try {
+    roomVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    roomVoiceChunks = [];
+    roomVoiceDiscard = false;
+    roomVoiceRecorder = new MediaRecorder(roomVoiceStream);
+    roomVoiceStartedAt = Date.now();
+
+    roomVoiceRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) roomVoiceChunks.push(e.data);
+    };
+
+    roomVoiceRecorder.onstop = async () => {
+      const chunks = [...roomVoiceChunks];
+      const mimeType = roomVoiceRecorder?.mimeType || 'audio/webm';
+      stopRoomVoiceNote(true);
+      if (roomVoiceDiscard || !chunks.length || !messageChannel || !currentRoom) {
+        roomVoiceDiscard = false;
+        return;
+      }
+      const blob = new Blob(chunks, { type: mimeType });
+      const audioDataUrl = await chatBlobToDataUrl(blob);
+      appendVoiceNoteMessage({
+        user_id: currentUser.id,
+        username: currentProfile.username,
+        created_at: new Date().toISOString(),
+        audioDataUrl
+      });
+      await messageChannel.send({
+        type: 'broadcast',
+        event: 'voice-note',
+        payload: {
+          from: currentUser.id,
+          username: currentProfile.username,
+          roomId: currentRoom.id,
+          createdAt: new Date().toISOString(),
+          audioBase64: audioDataUrl
+        }
+      });
+      scrollToBottom();
+      roomVoiceDiscard = false;
+    };
+
+    roomVoiceRecorder.start();
+    if (btn) btn.classList.add('recording');
+    if (timer) timer.style.display = 'inline-flex';
+    roomVoiceTimerInterval = setInterval(updateRoomVoiceNoteTimer, 1000);
+    updateRoomVoiceNoteTimer();
+    roomVoiceStopTimeout = setTimeout(() => {
+      if (roomVoiceRecorder?.state === 'recording') roomVoiceRecorder.stop();
+    }, 300000);
+  } catch (_) {
+    appendSystemMessage('Microphone permission is required for voice notes.');
+    stopRoomVoiceNote(true);
+  }
+}
+
+function stopRoomVoiceNote(resetUiOnly = false) {
+  if (roomVoiceTimerInterval) {
+    clearInterval(roomVoiceTimerInterval);
+    roomVoiceTimerInterval = null;
+  }
+  if (roomVoiceStopTimeout) {
+    clearTimeout(roomVoiceStopTimeout);
+    roomVoiceStopTimeout = null;
+  }
+  const btn = document.getElementById('btn-voice-note');
+  const timer = document.getElementById('voice-note-timer');
+  if (btn) btn.classList.remove('recording');
+  if (timer) {
+    timer.style.display = 'none';
+    timer.textContent = '';
+  }
+  if (resetUiOnly && roomVoiceStream) {
+    roomVoiceStream.getTracks().forEach(t => t.stop());
+    roomVoiceStream = null;
+  }
+  roomVoiceRecorder = null;
+  roomVoiceChunks = [];
+  roomVoiceStartedAt = 0;
+}
+
+function updateRoomVoiceNoteTimer() {
+  const timer = document.getElementById('voice-note-timer');
+  if (!timer || !roomVoiceStartedAt) return;
+  const elapsed = Math.min(300, Math.floor((Date.now() - roomVoiceStartedAt) / 1000));
+  const remain = Math.max(0, 300 - elapsed);
+  const mm = String(Math.floor(remain / 60)).padStart(2, '0');
+  const ss = String(remain % 60).padStart(2, '0');
+  timer.textContent = `${mm}:${ss}`;
+}
+
+function appendVoiceNoteMessage(msg) {
+  const isMe = msg.user_id === currentUser?.id;
+  const div = document.createElement('div');
+  div.className = 'msg-row' + (isMe ? ' self' : '');
+  const initial = (msg.username || '?')[0].toUpperCase();
+  const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+  const safeUsername = escHtml(msg.username || 'Unknown');
+  div.innerHTML = `
+    <div class="avatar" style="background:${color}">${initial}</div>
+    <div class="msg-bubble">
+      <div class="msg-username">${safeUsername}</div>
+      <div class="msg-text"><audio controls preload="metadata"></audio></div>
+      <div class="msg-time">${formatTime(msg.created_at)}</div>
+    </div>`;
+  const audio = div.querySelector('audio');
+  audio.src = msg.audioDataUrl;
+  audio.onended = () => div.remove();
+  document.getElementById('messages').appendChild(div);
+}
+
+function chatBlobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 /* Debounced user list render — avoids hammering the DOM on rapid presence events */
 function scheduleRenderUserList() {
   if (_renderTimer) return;
@@ -306,16 +503,19 @@ function scheduleRenderUserList() {
 function renderUserList() {
   const ul   = document.getElementById('user-list');
   const frag = document.createDocumentFragment();
+  const canBan = !!(currentProfile?.is_admin || currentProfile?.is_mod);
 
   Object.values(onlineUsers).forEach(u => {
     const li = document.createElement('li');
     li.className = 'user-item';
     li.dataset.userId = u.userId;
+    const showBan = canBan && u.userId !== currentUser?.id;
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
       <button type="button" class="user-name-btn">${escHtml(u.username)}${u.registered ? ' \u2713' : ''}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
+      ${showBan ? `<button type="button" class="btn-ban-user" data-user-id="${u.userId}" title="Ban user">\ud83d\udeab</button>` : ''}
     `;
     li.querySelector('.user-name-btn')?.addEventListener('click', () => {
       if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
@@ -324,11 +524,33 @@ function renderUserList() {
       ev.stopPropagation();
       if (typeof openFloatingCamera === 'function') openFloatingCamera(u.userId, u.username);
     });
+    li.querySelector('.btn-ban-user')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      inChatBanUser(u.userId, u.username);
+    });
     frag.appendChild(li);
   });
 
   ul.innerHTML = '';
   ul.appendChild(frag);
+}
+
+async function inChatBanUser(userId, username) {
+  if (!(currentProfile?.is_admin || currentProfile?.is_mod) || !userId || userId === currentUser?.id) return;
+  const reason = prompt(`Ban ${username || 'this user'}? Reason (optional):`, 'Violation');
+  if (reason === null) return;
+  const payload = {
+    is_banned: true,
+    banned_at: new Date().toISOString(),
+    banned_by: currentUser.id,
+    ban_reason: reason || 'Banned by moderator'
+  };
+  const { error } = await sbClient.from('profiles').update(payload).eq('id', userId);
+  if (error) {
+    appendSystemMessage(`Could not ban ${username || 'user'}.`);
+    return;
+  }
+  appendSystemMessage(`${username || 'User'} has been banned.`);
 }
 
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */

@@ -75,6 +75,61 @@
 .btn-emoji:hover { transform: scale(1.06); background: rgba(var(--accent-rgb),0.2); }
 .btn-emoji:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
+.btn-voice-note {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--accent-rgb),0.28);
+  background: rgba(var(--accent-rgb),0.1);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.btn-voice-note:hover { transform: scale(1.06); background: rgba(var(--accent-rgb),0.2); }
+.btn-voice-note:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.btn-voice-note.recording {
+  border-color: rgba(248,113,113,0.5);
+  background: rgba(248,113,113,0.22);
+  animation: recordPulse 1s ease-in-out infinite;
+}
+
+@keyframes recordPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(248,113,113,0); }
+}
+
+.voice-note-timer {
+  min-width: 42px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.btn-ban-user {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(248,113,113,0.36);
+  background: rgba(248,113,113,0.12);
+  color: #fecaca;
+  cursor: pointer;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-ban-user:hover {
+  background: rgba(248,113,113,0.22);
+}
+
 .emoji-picker {
   position: absolute;
   left: 0.8rem;

@@ -96,6 +96,7 @@ function bindUI() {
   document.getElementById('users-apply').addEventListener('click', renderUsersTable);
   document.getElementById('users-select-all').addEventListener('change', toggleSelectAllUsers);
   document.getElementById('bulk-run').addEventListener('click', runBulkAction);
+  document.getElementById('refresh-abuse').addEventListener('click', loadAbuseDetection);
 
   document.getElementById('manual-ban-form').addEventListener('submit', manualBanSubmit);
 
@@ -135,6 +136,7 @@ async function initDashboard() {
     loadMessages(),
     loadUsers(),
     loadBannedUsers(),
+    loadAbuseDetection(),
     loadBroadcastHistory(),
     loadSettings(),
     loadAnalytics()
@@ -234,7 +236,7 @@ async function loadStats() {
 }
 
 async function getOnlineUserEstimate() {
-  const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const { data, error } = await sbClient.from('messages').select('user_id').gte('created_at', since).limit(1000);
   if (error || !Array.isArray(data)) return 0;
   return new Set(data.map(r => r.user_id).filter(Boolean)).size;
@@ -529,7 +531,9 @@ function renderUsersTable() {
   }
 
   body.innerHTML = rows.map(p => {
-    const typeBadge = p.is_admin ? '<span class="badge admin">admin</span>' : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
+    let typeBadge = `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
+    if (p.is_mod) typeBadge = '<span class="badge admin">mod</span>';
+    if (p.is_admin) typeBadge = '<span class="badge admin">admin</span>';
     const statusBadge = p.is_banned
       ? '<span class="badge banned"><span class="status-dot red"></span>banned</span>'
       : '<span class="badge registered"><span class="status-dot green"></span>active</span>';
@@ -547,6 +551,7 @@ function renderUsersTable() {
           <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
           <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
           <button class="btn" title="Toggle admin role for this user" onclick="toggleAdmin('${p.id}')">👑 ${p.is_admin ? 'Demote' : 'Promote'}</button>
+          <button class="btn" title="Toggle moderator role for this user" onclick="toggleMod('${p.id}')">🛡️ ${p.is_mod ? 'Demote Mod' : 'Make Mod'}</button>
         </td>
       </tr>
     `;
@@ -559,7 +564,7 @@ function renderUsersTable() {
 function viewProfile(userId) {
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
-  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
+  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nModerator: ${p.is_mod ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
 }
 
 async function setUserBan(userId, banned, reason = '') {
@@ -603,6 +608,19 @@ async function toggleAdmin(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast(`User ${action}d successfully.`);
+  await loadUsers();
+}
+
+async function toggleMod(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p) return;
+  const action = p.is_mod ? 'demote from moderator' : 'promote to moderator';
+  if (!confirm(`Are you sure you want to ${action}?`)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_mod: !p.is_mod }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast(`Moderator role ${p.is_mod ? 'removed' : 'granted'} successfully.`);
   await loadUsers();
 }
 
@@ -676,6 +694,59 @@ async function loadBannedUsers() {
       </tr>
     `;
   }).join('');
+}
+
+async function loadAbuseDetection() {
+  const wrap = document.getElementById('abuse-list');
+  if (!wrap) return;
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { data, error } = await sbClient
+    .from('messages')
+    .select('user_id,username,created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(5000);
+
+  if (error) {
+    wrap.innerHTML = 'Could not load abuse detection right now.';
+    return;
+  }
+
+  const counts = {};
+  const names = {};
+  (data || []).forEach(row => {
+    if (!row.user_id) return;
+    counts[row.user_id] = (counts[row.user_id] || 0) + 1;
+    if (row.username) names[row.user_id] = row.username;
+  });
+
+  const offenders = Object.entries(counts)
+    .filter(([, count]) => count > 20)
+    .sort((a, b) => b[1] - a[1]);
+
+  if (!offenders.length) {
+    wrap.innerHTML = 'No abusive spikes detected in the last hour.';
+    return;
+  }
+
+  wrap.innerHTML = offenders.map(([userId, count]) => {
+    const username = profilesCache.find(p => p.id === userId)?.username || names[userId] || userId;
+    const safeName = escHtml(username);
+    return `
+      <div class="inline-row" style="justify-content:space-between;margin:0.35rem 0;">
+        <span><strong>${safeName}</strong> — ${count} messages in last hour</span>
+        <button class="btn danger" onclick="banAbusiveUser('${userId}')">🚫 Ban</button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function banAbusiveUser(userId) {
+  const username = profilesCache.find(p => p.id === userId)?.username || userId;
+  const reason = prompt(`Ban ${username}? Reason:`, 'Abuse detection: high message rate');
+  if (reason === null) return;
+  await setUserBan(userId, true, reason || 'Abuse detection');
+  await loadAbuseDetection();
 }
 
 async function manualBanSubmit(event) {
