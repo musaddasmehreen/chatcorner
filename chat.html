@@ -87,7 +87,7 @@
         <div id="peers-list" class="peers-list"></div>
       </div>
 
-      <div class="input-row" style="position:relative">
+      <div id="chat-input-row" class="input-row" style="position:relative">
         <div id="emoji-picker" class="emoji-picker hidden">
           <button class="emoji-btn" title="Grinning" onclick="insertEmoji('😀')">😀</button>
           <button class="emoji-btn" title="Big smile" onclick="insertEmoji('😃')">😃</button>
@@ -151,6 +151,11 @@
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>
         <button class="btn-send" onclick="sendMessage()">Send</button>
+      </div>
+      <div id="guest-notice-bar" class="guest-notice-bar hidden" aria-live="polite">
+        👤 You are viewing as a guest.
+        <a href="index.html">Register</a>
+        to participate.
       </div>
     </main>
     <aside class="sidebar right">

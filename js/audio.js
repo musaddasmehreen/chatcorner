@@ -32,6 +32,10 @@ async function joinVoice() {
     alert('🔒 Please log in to use voice chat.');
     return;
   }
+  if (!currentProfile?.is_registered) {
+    alert('🔒 Register to join voice rooms.');
+    return;
+  }
   if (!currentRoom?.is_audio_enabled || inVoice) return;
 
   try {
