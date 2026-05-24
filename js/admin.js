@@ -96,6 +96,7 @@ function bindUI() {
   document.getElementById('users-apply').addEventListener('click', renderUsersTable);
   document.getElementById('users-select-all').addEventListener('change', toggleSelectAllUsers);
   document.getElementById('bulk-run').addEventListener('click', runBulkAction);
+  document.getElementById('refresh-abuse').addEventListener('click', loadAbuseDetection);
 
   document.getElementById('manual-ban-form').addEventListener('submit', manualBanSubmit);
 
@@ -134,6 +135,7 @@ async function initDashboard() {
     loadStats(),
     loadMessages(),
     loadUsers(),
+    loadAbuseDetection(),
     loadBannedUsers(),
     loadBroadcastHistory(),
     loadSettings(),
@@ -234,7 +236,7 @@ async function loadStats() {
 }
 
 async function getOnlineUserEstimate() {
-  const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const { data, error } = await sbClient.from('messages').select('user_id').gte('created_at', since).limit(1000);
   if (error || !Array.isArray(data)) return 0;
   return new Set(data.map(r => r.user_id).filter(Boolean)).size;
@@ -529,7 +531,9 @@ function renderUsersTable() {
   }
 
   body.innerHTML = rows.map(p => {
-    const typeBadge = p.is_admin ? '<span class="badge admin">admin</span>' : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
+    const typeBadge = p.is_admin
+      ? '<span class="badge admin">admin</span>'
+      : (p.is_mod ? '<span class="badge admin">mod</span>' : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`);
     const statusBadge = p.is_banned
       ? '<span class="badge banned"><span class="status-dot red"></span>banned</span>'
       : '<span class="badge registered"><span class="status-dot green"></span>active</span>';
@@ -547,6 +551,7 @@ function renderUsersTable() {
           <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
           <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
           <button class="btn" title="Toggle admin role for this user" onclick="toggleAdmin('${p.id}')">👑 ${p.is_admin ? 'Demote' : 'Promote'}</button>
+          <button class="btn" title="Toggle moderator role for this user" onclick="toggleMod('${p.id}')">🛡️ ${p.is_mod ? 'Unmod' : 'Mod'}</button>
         </td>
       </tr>
     `;
@@ -604,6 +609,76 @@ async function toggleAdmin(userId) {
   if (error) return toast(error.message, 'error');
   toast(`User ${action}d successfully.`);
   await loadUsers();
+}
+
+async function toggleMod(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p) return;
+  const action = p.is_mod ? 'remove moderator from' : 'promote to moderator';
+  if (!confirm(`Are you sure you want to ${action} this user?`)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_mod: !p.is_mod }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast(`Moderator role ${p.is_mod ? 'removed' : 'granted'} successfully.`);
+  await loadUsers();
+}
+
+async function loadAbuseDetection() {
+  const box = document.getElementById('abuse-list');
+  if (!box) return;
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { data, error } = await sbClient
+    .from('messages')
+    .select('user_id,username,created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    box.innerHTML = '<div class="card">Could not load abuse detection data.</div>';
+    return;
+  }
+
+  const counts = {};
+  const names = {};
+  (data || []).forEach(row => {
+    if (!row.user_id) return;
+    counts[row.user_id] = (counts[row.user_id] || 0) + 1;
+    if (row.username) names[row.user_id] = row.username;
+  });
+
+  const flagged = Object.entries(counts)
+    .filter(([, count]) => count > 20)
+    .sort((a, b) => b[1] - a[1]);
+
+  if (!flagged.length) {
+    box.innerHTML = '<div class="card">No users crossed the abuse threshold (>20 messages in the last hour).</div>';
+    return;
+  }
+
+  box.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Messages (1h)</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${flagged.map(([userId, count]) => {
+          const username = profilesCache.find(p => p.id === userId)?.username || names[userId] || userId;
+          return `
+            <tr>
+              <td>${escHtml(username)}</td>
+              <td>${count}</td>
+              <td><button class="btn danger" onclick="setUserBan('${userId}', true, 'Abuse detection: high message volume')">🚫 Ban</button></td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 function getSelectedUserIds() {

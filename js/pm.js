@@ -190,6 +190,7 @@ async function handleIncomingPm(payload) {
   await openPrivateChat(fromUserId, username);
 
   if (payload.type === 'voice' && payload.voiceDataUrl) {
+    if (!currentProfile?.is_registered) return;
     const blob = dataUrlToBlob(payload.voiceDataUrl);
     const url = URL.createObjectURL(blob);
     appendPmVoiceMessage(fromUserId, { from: fromUserId, audioUrl: url }, false);
@@ -238,6 +239,13 @@ function appendPmVoiceMessage(userId, msg, isMe) {
 
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
+
+  const audio = row.querySelector('audio');
+  if (audio) {
+    audio.onended = () => {
+      row.remove();
+    };
+  }
 }
 
 function renderPmTextHistory(userId) {
@@ -274,6 +282,7 @@ async function togglePmRecording(userId) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const chunks = [];
     const mediaRecorder = new MediaRecorder(stream);
+    let autoStopTimer = null;
     pmRecorders[userId] = mediaRecorder;
 
     mediaRecorder.ondataavailable = (e) => {
@@ -281,6 +290,10 @@ async function togglePmRecording(userId) {
     };
 
     mediaRecorder.onstop = async () => {
+      if (autoStopTimer) {
+        clearTimeout(autoStopTimer);
+        autoStopTimer = null;
+      }
       btn.classList.remove('recording');
       btn.textContent = '🎙️';
       stream.getTracks().forEach(t => t.stop());
@@ -297,6 +310,11 @@ async function togglePmRecording(userId) {
     };
 
     mediaRecorder.start();
+    autoStopTimer = setTimeout(() => {
+      if (mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+    }, 300000);
     btn.classList.add('recording');
     btn.textContent = '⏹️';
   } catch (_) {
