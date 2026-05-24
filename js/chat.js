@@ -277,7 +277,10 @@ async function sendMessage() {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
     return;
   }
-  const sanitized = text.replace(/<[^>]*>/g, '').replace(/javascript:/gi, '').trim();
+  const sanitized = text
+    .replace(/[<>]/g, '')
+    .replace(/\b(?:javascript|data|vbscript)\s*:/gi, '')
+    .trim();
   if (!sanitized) return;
 
   input.value = '';
