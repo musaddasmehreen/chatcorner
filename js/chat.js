@@ -73,81 +73,167 @@ const QUICK_BAN_OPTIONS = {
   '7d': 168,
   lifetime: null
 };
+const CHAT_WRITE_RETRY_DELAY_MS = 350;
+
+function getChatErrorMessage(error, fallback = 'Unexpected error.') {
+  return error?.message || error?.error_description || fallback;
+}
+
+function logChatError(context, error, details = {}) {
+  console.error(`[ChatCorner][chat] ${context}`, {
+    message: getChatErrorMessage(error, 'Unknown error'),
+    details,
+    error
+  });
+}
+
+function isTransientChatError(error) {
+  const msg = String(getChatErrorMessage(error, '')).toLowerCase();
+  return msg.includes('network')
+    || msg.includes('fetch')
+    || msg.includes('timeout')
+    || msg.includes('timed out')
+    || msg.includes('connection')
+    || msg.includes('temporar');
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function withChatRetry(operation, context, retries = 1) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= retries || !isTransientChatError(error)) throw error;
+      attempt += 1;
+      console.warn(`[ChatCorner][chat] ${context} retry ${attempt}/${retries}`, error);
+      await wait(CHAT_WRITE_RETRY_DELAY_MS * attempt);
+    }
+  }
+}
+
+async function runChatMutation(operation, context, retries = 1) {
+  return withChatRetry(async () => {
+    const result = await operation();
+    if (result?.error) throw result.error;
+    return result;
+  }, context, retries);
+}
+
+function installChatGlobalErrorHandlers() {
+  if (window.__ccChatErrorHandlersInstalled) return;
+  window.__ccChatErrorHandlersInstalled = true;
+
+  window.addEventListener('error', (event) => {
+    logChatError('uncaught runtime error', event?.error || new Error(event?.message || 'Unknown runtime error'));
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    logChatError('unhandled promise rejection', event?.reason || new Error('Unhandled rejection'));
+  });
+}
+
+installChatGlobalErrorHandlers();
 
 window.addEventListener('DOMContentLoaded', async () => {
-  const { data: { session } } = await sbClient.auth.getSession();
-  if (!session) { window.location.href = 'index.html'; return; }
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) { window.location.href = 'index.html'; return; }
 
-  currentUser = session.user;
+    currentUser = session.user;
 
-  let { data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+    let { data: prof, error: profileError } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+    if (profileError) {
+      logChatError('initial profile lookup failed', profileError, { userId: currentUser.id });
+    }
 
-  if (!prof) {
-    const username = 'User_' + currentUser.id.substr(0,5);
-    await sbClient.from('profiles').insert({ id: currentUser.id, username, avatar_color: randomColor(), is_registered: false });
-    ({ data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single());
-  }
+    if (!prof) {
+      const username = 'User_' + currentUser.id.substr(0, 5);
+      await runChatMutation(() => sbClient.from('profiles').insert({
+        id: currentUser.id,
+        username,
+        avatar_color: randomColor(),
+        is_registered: false
+      }), 'create missing user profile');
+      ({ data: prof, error: profileError } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single());
+      if (profileError || !prof) throw profileError || new Error('Profile could not be loaded after creation.');
+    }
 
-  currentProfile = prof;
-  if (currentProfile?.is_banned) {
-    const expiresAt = currentProfile.ban_expires_at ? new Date(currentProfile.ban_expires_at).getTime() : null;
-    if (expiresAt && expiresAt <= Date.now()) {
-      await sbClient.from('profiles').update({
-        is_banned: false,
-        banned_at: null,
-        banned_by: null,
-        ban_reason: null,
-        ban_expires_at: null
-      }).eq('id', currentUser.id);
-      const { data: refreshedProfile } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
-      currentProfile = refreshedProfile || currentProfile;
-    } else {
-      const banUntilText = currentProfile.ban_expires_at
-        ? ` until ${new Date(currentProfile.ban_expires_at).toLocaleString()}`
-        : ' permanently';
-      alert(`Your account is banned${banUntilText}.`);
+    currentProfile = prof;
+    if (currentProfile?.is_banned) {
+      const expiresAt = currentProfile.ban_expires_at ? new Date(currentProfile.ban_expires_at).getTime() : null;
+      if (expiresAt && expiresAt <= Date.now()) {
+        await runChatMutation(() => sbClient.from('profiles').update({
+          is_banned: false,
+          banned_at: null,
+          banned_by: null,
+          ban_reason: null,
+          ban_expires_at: null
+        }).eq('id', currentUser.id), 'auto-unban expired user');
+        const { data: refreshedProfile } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+        currentProfile = refreshedProfile || currentProfile;
+      } else {
+        const banUntilText = currentProfile.ban_expires_at
+          ? ` until ${new Date(currentProfile.ban_expires_at).toLocaleString()}`
+          : ' permanently';
+        alert(`Your account is banned${banUntilText}.`);
+        await sbClient.auth.signOut();
+        window.location.href = 'index.html';
+        return;
+      }
+    }
+    if (isKickActive(currentProfile)) {
+      const until = new Date(currentProfile.kicked_until).toLocaleString();
+      alert(`You have been kicked. Please wait until ${until}.`);
       await sbClient.auth.signOut();
       window.location.href = 'index.html';
       return;
     }
+    presenceBaseData = {
+      userId: currentUser.id,
+      username: currentProfile.username,
+      color: currentProfile.avatar_color,
+      registered: currentProfile.is_registered,
+      isAdmin: !!currentProfile.is_admin,
+      isMod: !!currentProfile.is_mod,
+      cameraOn: false
+    };
+    document.getElementById('user-badge').textContent = currentProfile.username + (currentProfile.is_registered ? ' ✓' : ' 👤');
+
+    document.getElementById('audio-bar').classList.remove('hidden');
+    applyGuestModeUI();
+
+    // Re-apply saved theme now that DOM is ready (syncs dots)
+    applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
+
+    document.addEventListener('click', (event) => {
+      const picker = document.getElementById('emoji-picker');
+      const emojiBtn = document.getElementById('btn-emoji');
+      if (!picker || picker.classList.contains('hidden')) return;
+      if (picker.contains(event.target) || emojiBtn?.contains(event.target)) return;
+      closeEmojiPicker();
+    });
+
+    await loadRooms();
+  } catch (error) {
+    logChatError('chat startup initialization failed', error);
+    alert('Chat failed to initialize. Please refresh and sign in again.');
+    try { await sbClient.auth.signOut(); } catch (signOutError) { logChatError('failed to sign out after startup error', signOutError); }
+    window.location.href = 'index.html?startup=failed';
   }
-  if (isKickActive(currentProfile)) {
-    const until = new Date(currentProfile.kicked_until).toLocaleString();
-    alert(`You have been kicked. Please wait until ${until}.`);
-    await sbClient.auth.signOut();
-    window.location.href = 'index.html';
-    return;
-  }
-  presenceBaseData = {
-    userId: currentUser.id,
-    username: currentProfile.username,
-    color: currentProfile.avatar_color,
-    registered: currentProfile.is_registered,
-    isAdmin: !!currentProfile.is_admin,
-    isMod: !!currentProfile.is_mod,
-    cameraOn: false
-  };
-  document.getElementById('user-badge').textContent = currentProfile.username + (currentProfile.is_registered ? ' \u2713' : ' \ud83d\udc64');
-
-  document.getElementById('audio-bar').classList.remove('hidden');
-  applyGuestModeUI();
-
-  // Re-apply saved theme now that DOM is ready (syncs dots)
-  applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
-
-  document.addEventListener('click', (event) => {
-    const picker = document.getElementById('emoji-picker');
-    const emojiBtn = document.getElementById('btn-emoji');
-    if (!picker || picker.classList.contains('hidden')) return;
-    if (picker.contains(event.target) || emojiBtn?.contains(event.target)) return;
-    closeEmojiPicker();
-  });
-
-  await loadRooms();
 });
 
+
 async function loadRooms() {
-  const { data: rooms } = await sbClient.from('rooms').select('*').order('name');
+  const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
+  if (error) {
+    logChatError('failed to load rooms', error);
+    appendSystemMessage('Could not load chat rooms. Please refresh and try again.');
+    return;
+  }
 
   const textList  = document.getElementById('room-list');
   const voiceList = document.getElementById('voice-room-list');
@@ -163,6 +249,7 @@ async function loadRooms() {
   });
 
   if (rooms.length) enterRoom(rooms[0]);
+  else appendSystemMessage('No rooms are currently available.');
 }
 
 async function enterRoom(room) {
@@ -207,12 +294,16 @@ async function enterRoom(room) {
   }
   updateComposerState();
 
-  const { data: messages } = await sbClient
+  const { data: messages, error: loadMessagesError } = await sbClient
     .from('messages')
     .select('*')
     .eq('room_id', room.id)
     .order('created_at', { ascending: true })
     .limit(50);
+  if (loadMessagesError) {
+    logChatError('failed to load room messages', loadMessagesError, { roomId: room.id });
+    appendSystemMessage('Could not load recent messages for this room.');
+  }
 
   // Batch-append for performance
   if (messages?.length) {
@@ -235,7 +326,11 @@ async function enterRoom(room) {
       appendMessage(payload.new);
       scrollToBottom();
     })
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        logChatError('room message realtime subscription issue', new Error(`Realtime status: ${status}`), { roomId: room.id });
+      }
+    });
 
   presenceChannel = sbClient.channel('presence:' + room.id, {
     config: { presence: { key: currentUser.id } }
@@ -267,7 +362,14 @@ async function enterRoom(room) {
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await presenceChannel.track(presenceBaseData);
+        try {
+          await presenceChannel.track(presenceBaseData);
+        } catch (error) {
+          logChatError('failed to publish presence state', error, { roomId: room.id, userId: currentUser?.id });
+        }
+      }
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        logChatError('room presence subscription issue', new Error(`Presence status: ${status}`), { roomId: room.id });
       }
     });
 
@@ -309,13 +411,19 @@ async function sendMessage() {
 
   input.value = '';
 
-  await sbClient.from('messages').insert({
-    room_id:  currentRoom.id,
-    user_id:  currentUser.id,
-    username: currentProfile.username,
-    content:  text,
-    type:     'text'
-  });
+  try {
+    await runChatMutation(() => sbClient.from('messages').insert({
+      room_id: currentRoom.id,
+      user_id: currentUser.id,
+      username: currentProfile.username,
+      content: text,
+      type: 'text'
+    }), 'send chat message');
+  } catch (error) {
+    input.value = text;
+    logChatError('failed to send chat message', error, { roomId: currentRoom.id, userId: currentUser.id });
+    appendSystemMessage('Message could not be sent. Please try again.');
+  }
 }
 
 /* Builds a message DOM node without appending it (used for batch & single) */

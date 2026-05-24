@@ -7,6 +7,57 @@ const pmCallState = {};
 let pmChannel = null;
 let pmTableAvailable = null;
 let pmAudioCtx = null;
+const PM_RETRY_DELAY_MS = 350;
+
+function getPmErrorMessage(error, fallback = 'Unexpected error.') {
+  return error?.message || error?.error_description || fallback;
+}
+
+function logPmError(context, error, details = {}) {
+  console.error(`[ChatCorner][pm] ${context}`, {
+    message: getPmErrorMessage(error, 'Unknown error'),
+    details,
+    error
+  });
+}
+
+function isTransientPmError(error) {
+  const msg = String(getPmErrorMessage(error, '')).toLowerCase();
+  return msg.includes('network')
+    || msg.includes('fetch')
+    || msg.includes('timeout')
+    || msg.includes('timed out')
+    || msg.includes('connection')
+    || msg.includes('temporar');
+}
+
+function appendPmSystemMessage(userId, text) {
+  const box = getPmMessagesBox(userId);
+  if (!box) return;
+  const row = document.createElement('div');
+  row.className = 'pm-msg';
+  row.innerHTML = `<div class="pm-msg-bubble">${escHtml(text)}</div>`;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function waitPm(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function withPmRetry(operation, context, retries = 1) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= retries || !isTransientPmError(error)) throw error;
+      attempt += 1;
+      console.warn(`[ChatCorner][pm] ${context} retry ${attempt}/${retries}`, error);
+      await waitPm(PM_RETRY_DELAY_MS * attempt);
+    }
+  }
+}
 
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => { ensurePmRealtime(); }, 600);
@@ -33,7 +84,11 @@ async function ensurePmRealtime() {
     .on('broadcast', { event: 'pm-voice-hangup' }, ({ payload }) => {
       handlePmVoiceHangup(payload);
     })
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        logPmError('private message realtime subscription issue', new Error(`PM realtime status: ${status}`), { userId: currentUser?.id });
+      }
+    });
 }
 
 async function openPrivateChat(userId, username) {
@@ -186,8 +241,14 @@ async function sendPrivateText(userId) {
   if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
   pmTextHistory[userId].push({ from: currentUser.id, text, createdAt: new Date().toISOString() });
 
-  await persistPmToDb(userId, text);
-  await sendPmBroadcast({ to: userId, type: 'text', text });
+  try {
+    await persistPmToDb(userId, text);
+    await sendPmBroadcast({ to: userId, type: 'text', text });
+  } catch (error) {
+    logPmError('failed to send private text message', error, { to: userId, from: currentUser?.id });
+    appendPmSystemMessage(userId, 'Message could not be delivered right now.');
+    if (!input.value) input.value = text;
+  }
 }
 
 async function handleIncomingPm(payload) {
@@ -621,17 +682,23 @@ function cleanupPmVoiceUrls(userId) {
 }
 
 async function sendPmBroadcast(payload) {
-  if (!pmChannel || !currentUser?.id) return;
-  await pmChannel.send({
-    type: 'broadcast',
-    event: 'private-message',
-    payload: {
-      ...payload,
-      from: currentUser.id,
-      username: currentProfile?.username,
-      createdAt: new Date().toISOString()
+  if (!currentUser?.id) throw new Error('Missing current user context for PM broadcast.');
+  if (!pmChannel) throw new Error('Private message channel is not connected.');
+  await withPmRetry(async () => {
+    const sendStatus = await pmChannel.send({
+      type: 'broadcast',
+      event: 'private-message',
+      payload: {
+        ...payload,
+        from: currentUser.id,
+        username: currentProfile?.username,
+        createdAt: new Date().toISOString()
+      }
+    });
+    if (sendStatus && sendStatus !== 'ok') {
+      throw new Error(`PM broadcast send failed: ${sendStatus}`);
     }
-  });
+  }, 'send PM broadcast');
 }
 
 async function ensurePrivateTableSupport() {
@@ -657,8 +724,12 @@ async function persistPmToDb(userId, text) {
     type: 'text'
   };
 
-  const { error } = await sbClient.from('private_messages').insert(payload);
-  if (error) pmTableAvailable = false;
+  const { error } = await withPmRetry(() => sbClient.from('private_messages').insert(payload), 'persist PM to database');
+  if (error) {
+    logPmError('failed to persist PM to database', error, { to: userId, from: currentUser?.id });
+    if (!isTransientPmError(error)) pmTableAvailable = false;
+    throw error;
+  }
 }
 
 async function loadPmHistoryFromDb(userId) {

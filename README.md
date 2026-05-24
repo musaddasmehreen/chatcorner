@@ -16,6 +16,7 @@ ChatCorner is a realtime chat application built with JavaScript, HTML, and CSS.
 - Room-based text chat
 - Online users list
 - Voice and video room support (guests and registered users)
+- Startup and message-send failures are surfaced with user-friendly alerts/toasts and contextual console logs
 
 ## How to Run
 
