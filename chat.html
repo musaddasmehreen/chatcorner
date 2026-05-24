@@ -65,6 +65,7 @@
       <div class="input-row">
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>
+        <button id="btn-voice-record" class="btn-voice-record" onclick="toggleVoiceRecording()" title="Record voice message">🎤</button>
         <button class="btn-send" onclick="sendMessage()">Send</button>
       </div>
     </main>

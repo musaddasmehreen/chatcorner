@@ -44,15 +44,58 @@ export class ChatRoom {
     this.state = state;
     this.env = env;
     this.sessions = new Map();
+    this.voiceMessages = new Map(); // id -> { id, room_id, user_id, username, audio_data, created_at, expires_at }
+  }
+
+  cleanupVoiceMessages() {
+    const now = Date.now();
+    for (const [id, msg] of this.voiceMessages.entries()) {
+      if (msg.expires_at <= now) this.voiceMessages.delete(id);
+    }
   }
 
   async fetch(request) {
     const url = new URL(request.url);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+
     if (request.method === 'POST' && url.pathname.endsWith('/broadcast')) {
       const body = await request.json().catch(() => null);
       if (!body?.message) return new Response('Invalid payload', { status: 400 });
       this.broadcast(body.message);
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // POST /room/:roomId/voice — store voice message in memory and broadcast
+    if (request.method === 'POST' && pathParts[pathParts.length - 1] === 'voice') {
+      this.cleanupVoiceMessages();
+      const body = await request.json().catch(() => null);
+      if (!body?.audio_data) return new Response(JSON.stringify({ error: 'audio_data required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+
+      const now = Date.now();
+      const voiceMsg = {
+        id: body.id || crypto.randomUUID(),
+        room_id: body.room_id || '',
+        user_id: body.user_id || '',
+        username: body.username || 'Unknown',
+        audio_data: body.audio_data,
+        created_at: new Date(now).toISOString(),
+        expires_at: now + 15 * 60 * 1000
+      };
+      this.voiceMessages.set(voiceMsg.id, voiceMsg);
+      this.broadcast({ type: 'voice_message', id: voiceMsg.id, room_id: voiceMsg.room_id, user_id: voiceMsg.user_id, username: voiceMsg.username, audio_data: voiceMsg.audio_data, created_at: voiceMsg.created_at, expires_at: voiceMsg.expires_at });
+      return new Response(JSON.stringify({ ok: true, id: voiceMsg.id }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // GET /room/:roomId/voice/:voiceId — retrieve a voice message (404 if expired)
+    if (request.method === 'GET' && pathParts[pathParts.length - 2] === 'voice') {
+      this.cleanupVoiceMessages();
+      const voiceId = pathParts[pathParts.length - 1];
+      const msg = this.voiceMessages.get(voiceId);
+      if (!msg || msg.expires_at <= Date.now()) {
+        if (msg) this.voiceMessages.delete(voiceId);
+        return new Response(JSON.stringify({ error: 'Voice message not found or expired' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify(msg), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected WebSocket', { status: 400 });
