@@ -871,6 +871,24 @@ body {
 .btn-send:active { transform: scale(0.95); }
 .btn-send:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
+/* ── Guest Notice Bar ── */
+.guest-notice {
+  background: rgba(var(--accent-rgb), 0.07);
+  border-top: 1px solid var(--border);
+  padding: 0.35rem 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.guest-notice a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.guest-notice.hidden { display: none; }
+
 /* ══ PERMISSIONS BANNER ══════════════════════════════════════ */
 
 #permissions-banner,

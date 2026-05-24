@@ -229,12 +229,22 @@ function appendPmVoiceMessage(userId, msg, isMe) {
 
   const row = document.createElement('div');
   row.className = 'pm-msg pm-voice' + (isMe ? ' self' : '');
-  row.innerHTML = `
+
+  if (!currentProfile?.is_registered) {
+    row.innerHTML = `
+    <div class="pm-msg-bubble pm-voice-locked">
+      \ud83d\udd12 Register to listen to voice messages.
+    </div>
+    <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
+  `;
+  } else {
+    row.innerHTML = `
     <div class="pm-msg-bubble">
       <audio controls src="${msg.audioUrl}"></audio>
     </div>
     <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
   `;
+  }
 
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;

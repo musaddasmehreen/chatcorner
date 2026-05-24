@@ -170,3 +170,10 @@
 .messages {
   scroll-behavior: auto;
 }
+
+/* ── PM Voice Locked Notice (guest users) ── */
+.pm-voice-locked {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.82rem;
+}

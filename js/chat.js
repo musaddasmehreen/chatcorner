@@ -144,10 +144,11 @@ async function enterRoom(room) {
     li.classList.toggle('active', li.textContent.includes(room.name));
   });
 
-  const audioBar = document.getElementById('audio-bar');
-  const msgInput = document.getElementById('msg-input');
-  const sendBtn  = document.querySelector('.btn-send');
-  const emojiBtn = document.getElementById('btn-emoji');
+  const audioBar    = document.getElementById('audio-bar');
+  const msgInput    = document.getElementById('msg-input');
+  const sendBtn     = document.querySelector('.btn-send');
+  const emojiBtn    = document.getElementById('btn-emoji');
+  const guestNotice = document.getElementById('guest-notice');
 
   if (room.is_audio_enabled) {
     audioBar.classList.remove('hidden');
@@ -161,11 +162,20 @@ async function enterRoom(room) {
     if (sendBtn)  sendBtn.disabled  = true;
     if (emojiBtn) emojiBtn.disabled = true;
     closeEmojiPicker();
+    if (guestNotice) guestNotice.classList.add('hidden');
+  } else if (!currentProfile?.is_registered) {
+    msgInput.disabled = true;
+    msgInput.placeholder = 'Register to send messages\u2026';
+    if (sendBtn)  sendBtn.disabled  = true;
+    if (emojiBtn) emojiBtn.disabled = true;
+    closeEmojiPicker();
+    if (guestNotice) guestNotice.classList.remove('hidden');
   } else {
     msgInput.disabled = false;
     msgInput.placeholder = 'Type a message\u2026 (Enter to send)';
     if (sendBtn)  sendBtn.disabled  = false;
     if (emojiBtn) emojiBtn.disabled = false;
+    if (guestNotice) guestNotice.classList.add('hidden');
   }
 
   const { data: messages } = await sbClient
@@ -239,6 +249,10 @@ async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   if (!text || !currentRoom) return;
+  if (!currentProfile?.is_registered) {
+    appendSystemMessage('Please register to send messages.');
+    return;
+  }
   if (currentRoom.is_locked) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
     return;
