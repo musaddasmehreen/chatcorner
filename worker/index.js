@@ -526,14 +526,14 @@ export default {
               await env.DB.prepare(
                 'INSERT INTO messages (id, room_id, user_id, username, content, type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
               ).bind(id, room.id, admin.user.id, username, content, 'system', createdAt).run();
-              await forwardRoomBroadcast(env, room.id, { type: 'chat_message', id, room_id: room.id, user_id: admin.user.id, username, content, type: 'system', created_at: createdAt });
+              await forwardRoomBroadcast(env, room.id, { type: 'chat_message', id, room_id: room.id, user_id: admin.user.id, username, content, msg_type: 'system', created_at: createdAt });
             }
           } else {
             const id = crypto.randomUUID();
             await env.DB.prepare(
               'INSERT INTO messages (id, room_id, user_id, username, content, type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
             ).bind(id, roomId, admin.user.id, username, content, 'system', createdAt).run();
-            await forwardRoomBroadcast(env, roomId, { type: 'chat_message', id, room_id: roomId, user_id: admin.user.id, username, content, type: 'system', created_at: createdAt });
+            await forwardRoomBroadcast(env, roomId, { type: 'chat_message', id, room_id: roomId, user_id: admin.user.id, username, content, msg_type: 'system', created_at: createdAt });
           }
 
           return json({ ok: true });
