@@ -150,6 +150,8 @@
         <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>
+        <button class="btn-voice-note" id="btn-voice-note" style="display:none" onclick="toggleRoomVoiceNote()" title="Send voice note">🎙️</button>
+        <span class="voice-note-timer" id="voice-note-timer"></span>
         <button class="btn-send" onclick="sendMessage()">Send</button>
       </div>
     </main>

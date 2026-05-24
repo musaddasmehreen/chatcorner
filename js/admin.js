@@ -3,6 +3,7 @@ SQL Setup Guide (run in Supabase SQL editor before using all admin features):
 
 -- Add admin flag to profiles
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_admin boolean DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_mod boolean DEFAULT false;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_banned boolean DEFAULT false;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS banned_at timestamp with time zone;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS banned_by uuid;
@@ -68,6 +69,7 @@ function bindUI() {
   document.getElementById('admin-logout').addEventListener('click', adminLogout);
   document.getElementById('refresh-stats').addEventListener('click', loadStats);
   document.getElementById('refresh-analytics').addEventListener('click', loadAnalytics);
+  document.getElementById('refresh-abuse').addEventListener('click', loadAbuseDetection);
 
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => switchPanel(btn.dataset.panel));
@@ -134,6 +136,7 @@ async function initDashboard() {
     loadStats(),
     loadMessages(),
     loadUsers(),
+    loadAbuseDetection(),
     loadBannedUsers(),
     loadBroadcastHistory(),
     loadSettings(),
@@ -234,7 +237,7 @@ async function loadStats() {
 }
 
 async function getOnlineUserEstimate() {
-  const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const { data, error } = await sbClient.from('messages').select('user_id').gte('created_at', since).limit(1000);
   if (error || !Array.isArray(data)) return 0;
   return new Set(data.map(r => r.user_id).filter(Boolean)).size;
@@ -529,7 +532,11 @@ function renderUsersTable() {
   }
 
   body.innerHTML = rows.map(p => {
-    const typeBadge = p.is_admin ? '<span class="badge admin">admin</span>' : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
+    const typeBadge = p.is_admin
+      ? '<span class="badge admin">admin</span>'
+      : p.is_mod
+        ? '<span class="badge admin">mod</span>'
+        : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
     const statusBadge = p.is_banned
       ? '<span class="badge banned"><span class="status-dot red"></span>banned</span>'
       : '<span class="badge registered"><span class="status-dot green"></span>active</span>';
@@ -546,6 +553,7 @@ function renderUsersTable() {
           <button class="btn" title="View full profile details" onclick="viewProfile('${p.id}')">👁️ View</button>
           <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
           <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
+          <button class="btn" title="Toggle moderator role for this user" onclick="toggleMod('${p.id}')">🛡️ ${p.is_mod ? 'Demote Mod' : 'Promote Mod'}</button>
           <button class="btn" title="Toggle admin role for this user" onclick="toggleAdmin('${p.id}')">👑 ${p.is_admin ? 'Demote' : 'Promote'}</button>
         </td>
       </tr>
@@ -559,7 +567,7 @@ function renderUsersTable() {
 function viewProfile(userId) {
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
-  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
+  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nModerator: ${p.is_mod ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
 }
 
 async function setUserBan(userId, banned, reason = '') {
@@ -603,6 +611,20 @@ async function toggleAdmin(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast(`User ${action}d successfully.`);
+  await loadUsers();
+}
+
+async function toggleMod(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p) return;
+  const nextValue = !p.is_mod;
+  const action = nextValue ? 'promote to moderator' : 'remove moderator access from';
+  if (!confirm(`Are you sure you want to ${action} this user?`)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_mod: nextValue }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast(`Moderator access ${nextValue ? 'granted' : 'removed'} successfully.`);
   await loadUsers();
 }
 
@@ -703,6 +725,64 @@ async function manualBanSubmit(event) {
   document.getElementById('manual-ban-reason').value = '';
   toast('User banned successfully.');
   await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
+}
+
+async function loadAbuseDetection() {
+  const target = document.getElementById('abuse-list');
+  if (!target) return;
+
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { data, error } = await sbClient
+    .from('messages')
+    .select('user_id,username,created_at')
+    .gte('created_at', since)
+    .limit(5000);
+
+  if (error) {
+    target.innerHTML = '<div class="card">Could not load abuse detection data.</div>';
+    return;
+  }
+
+  const counts = new Map();
+  (data || []).forEach((msg) => {
+    const key = msg.user_id || msg.username;
+    if (!key) return;
+    const entry = counts.get(key) || { userId: msg.user_id, username: msg.username || 'Unknown', count: 0 };
+    entry.count += 1;
+    if (!entry.username || entry.username === 'Unknown') {
+      entry.username = profilesCache.find(p => p.id === msg.user_id)?.username || entry.username;
+    }
+    counts.set(key, entry);
+  });
+
+  const offenders = Array.from(counts.values())
+    .filter(entry => entry.userId && entry.count > 20)
+    .sort((a, b) => b.count - a.count);
+
+  if (!offenders.length) {
+    target.innerHTML = '<div class="card">No abusive message spikes detected in the last hour.</div>';
+    return;
+  }
+
+  target.innerHTML = `
+    <div class="card">
+      <ul class="history-list">
+        ${offenders.map(entry => `
+          <li>
+            <div class="inline-row" style="justify-content:space-between; width:100%;">
+              <span><strong>${escHtml(entry.username || entry.userId)}</strong> — ${entry.count} messages in the last hour</span>
+              <button class="btn danger abuse-ban-btn" data-user-id="${entry.userId}">Ban</button>
+            </div>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+  `;
+
+  target.querySelectorAll('.abuse-ban-btn').forEach((btn, index) => {
+    const offender = offenders[index];
+    btn.addEventListener('click', () => banFromMessage(btn.dataset.userId, offender?.username || 'User'));
+  });
 }
 
 function updateBroadcastPreview() {
