@@ -8,6 +8,29 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
 <body class="admin-page">
+  <!-- Auth guard: redirect non-admins immediately before any content renders -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script>
+    (async function guardAdmin() {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session?.user) {
+        window.location.replace('adminup.html');
+        document.documentElement.style.display = 'none';
+        return;
+      }
+      const { data: profile } = await sbClient
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!profile?.is_admin) {
+        await sbClient.auth.signOut();
+        window.location.replace('adminup.html?denied=1');
+        document.documentElement.style.display = 'none';
+      }
+    })();
+  </script>
   <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar">
       <div class="brand">🛡️ ChatCorner Admin</div>

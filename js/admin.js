@@ -10,6 +10,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_reason text;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_mod boolean DEFAULT false;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_expires_at timestamp with time zone;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kicked_until timestamp with time zone;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email text;
 
 -- Add rooms table if not exists
 CREATE TABLE IF NOT EXISTS rooms (

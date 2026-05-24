@@ -29,7 +29,7 @@ async function loginUser() {
 
   // If profile is missing (e.g. upsert failed at register time), recreate it now
   const { data: existingProf } = await sbClient
-    .from('profiles').select('id').eq('id', data.user.id).maybeSingle();
+    .from('profiles').select('id,email').eq('id', data.user.id).maybeSingle();
 
   if (!existingProf) {
     const pendingUsername = localStorage.getItem('cc_pending_username')
@@ -37,10 +37,13 @@ async function loginUser() {
     await sbClient.from('profiles').upsert({
       id: data.user.id,
       username: pendingUsername,
+      email: data.user.email,
       avatar_color: randomColor(),
       is_registered: true
     });
     localStorage.removeItem('cc_pending_username');
+  } else if (!existingProf.email && data.user.email) {
+    await sbClient.from('profiles').update({ email: data.user.email }).eq('id', data.user.id);
   }
 
   window.location.href = 'chat.html';
@@ -74,6 +77,7 @@ async function registerUser() {
     const { error: profErr } = await sbClient.from('profiles').upsert({
       id: data.user.id,
       username,
+      email,
       avatar_color: randomColor(),
       is_registered: true
     });
