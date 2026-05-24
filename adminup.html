@@ -16,8 +16,8 @@
     </div>
 
     <form id="admin-login-form" class="auth-form active" onsubmit="event.preventDefault(); adminLogin();">
-      <label class="field-label" for="admin-email">Admin Email</label>
-      <input type="email" id="admin-email" placeholder="name@example.com" autocomplete="email" required />
+      <label class="field-label" for="admin-username">Username</label>
+      <input type="text" id="admin-username" placeholder="Enter your username" autocomplete="username" required />
 
       <label class="field-label" for="admin-password">Password</label>
       <input type="password" id="admin-password" placeholder="Enter your password" autocomplete="current-password" required />
@@ -60,32 +60,54 @@
     }
 
     async function adminLogin() {
-      const email = document.getElementById('admin-email').value.trim();
+      const username = document.getElementById('admin-username').value.trim();
       const password = document.getElementById('admin-password').value;
       const btn = document.getElementById('admin-login-btn');
 
-      if (!email || !password) {
-        setAdminMsg('Please fill in both email and password.', 'error');
+      if (!username || !password) {
+        setAdminMsg('Please fill in both username and password.', 'error');
         return;
       }
 
       btn.disabled = true;
+      setAdminMsg('Looking up account…', '');
+
+      // Look up email from profiles by username
+      const { data: profile, error: lookupErr } = await sbClient
+        .from('profiles')
+        .select('id,email,is_admin')
+        .eq('username', username)
+        .maybeSingle();
+
+      if (lookupErr || !profile) {
+        setAdminMsg('Username not found. Please check and try again.', 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      if (!profile.email) {
+        setAdminMsg('No email on file for this account. Please contact support.', 'error');
+        btn.disabled = false;
+        return;
+      }
+
       setAdminMsg('Signing in…', '');
 
-      const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
+      const { data, error } = await sbClient.auth.signInWithPassword({ email: profile.email, password });
       if (error || !data?.user) {
         setAdminMsg(error?.message || 'Login failed. Please try again.', 'error');
         btn.disabled = false;
         return;
       }
 
-      const { data: profile, error: profileErr } = await sbClient
+      // Re-fetch the fresh profile to confirm admin status
+      const { data: freshProfile, error: profileErr } = await sbClient
         .from('profiles')
         .select('id,is_admin')
         .eq('id', data.user.id)
         .maybeSingle();
 
-      if (profileErr || !profile?.is_admin) {
+      if (profileErr || !freshProfile?.is_admin) {
         await sbClient.auth.signOut();
         setAdminMsg('Access Denied. Admins only.', 'error');
         btn.disabled = false;

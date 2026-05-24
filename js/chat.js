@@ -67,6 +67,12 @@ let presenceBaseData = {};
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
+const QUICK_BAN_OPTIONS = {
+  '1h': 1,
+  '24h': 24,
+  '7d': 168,
+  lifetime: null
+};
 
 window.addEventListener('DOMContentLoaded', async () => {
   const { data: { session } } = await sbClient.auth.getSession();
@@ -83,30 +89,48 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   currentProfile = prof;
-
-  // FIX 5I — Kick check: disable input if user is currently kicked
-  if (currentProfile.kicked_until && new Date(currentProfile.kicked_until) > new Date()) {
-    const kickMsg = document.createElement('div');
-    kickMsg.className = 'msg-system';
-    kickMsg.textContent = 'You have been kicked. Access restored at ' + new Date(currentProfile.kicked_until).toLocaleTimeString();
-    const msgEl = document.getElementById('messages');
-    if (msgEl) msgEl.prepend(kickMsg);
-    const inp = document.getElementById('msg-input');
-    if (inp) { inp.disabled = true; inp.placeholder = 'Kicked — access restricted.'; }
-    const sb = document.querySelector('.btn-send');
-    if (sb) sb.disabled = true;
+  if (currentProfile?.is_banned) {
+    const expiresAt = currentProfile.ban_expires_at ? new Date(currentProfile.ban_expires_at).getTime() : null;
+    if (expiresAt && expiresAt <= Date.now()) {
+      await sbClient.from('profiles').update({
+        is_banned: false,
+        banned_at: null,
+        banned_by: null,
+        ban_reason: null,
+        ban_expires_at: null
+      }).eq('id', currentUser.id);
+      const { data: refreshedProfile } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+      currentProfile = refreshedProfile || currentProfile;
+    } else {
+      const banUntilText = currentProfile.ban_expires_at
+        ? ` until ${new Date(currentProfile.ban_expires_at).toLocaleString()}`
+        : ' permanently';
+      alert(`Your account is banned${banUntilText}.`);
+      await sbClient.auth.signOut();
+      window.location.href = 'index.html';
+      return;
+    }
   }
-
+  if (isKickActive(currentProfile)) {
+    const until = new Date(currentProfile.kicked_until).toLocaleString();
+    alert(`You have been kicked. Please wait until ${until}.`);
+    await sbClient.auth.signOut();
+    window.location.href = 'index.html';
+    return;
+  }
   presenceBaseData = {
     userId: currentUser.id,
     username: currentProfile.username,
     color: currentProfile.avatar_color,
     registered: currentProfile.is_registered,
+    isAdmin: !!currentProfile.is_admin,
+    isMod: !!currentProfile.is_mod,
     cameraOn: false
   };
-  document.getElementById('user-badge').textContent = prof.username + (prof.is_registered ? ' \u2713' : ' \ud83d\udc64');
+  document.getElementById('user-badge').textContent = currentProfile.username + (currentProfile.is_registered ? ' \u2713' : ' \ud83d\udc64');
 
   document.getElementById('audio-bar').classList.remove('hidden');
+  applyGuestModeUI();
 
   // Re-apply saved theme now that DOM is ready (syncs dots)
   applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
@@ -181,6 +205,7 @@ async function enterRoom(room) {
     if (sendBtn)  sendBtn.disabled  = false;
     if (emojiBtn) emojiBtn.disabled = false;
   }
+  updateComposerState();
 
   const { data: messages } = await sbClient
     .from('messages')
@@ -273,6 +298,10 @@ async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   if (!text || !currentRoom) return;
+  if (!isRegisteredUser()) {
+    appendSystemMessage('Please register to send messages.');
+    return;
+  }
   if (currentRoom.is_locked) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
     return;
@@ -319,6 +348,9 @@ function buildMessageNode(msg) {
   }
 
   const isMe  = msg.user_id === currentUser?.id;
+  if (msg.type === 'voice') {
+    return appendVoiceNoteMessage(msg, isMe);
+  }
   const div   = document.createElement('div');
   div.className = 'msg-row' + (isMe ? ' self' : '');
 
@@ -360,22 +392,27 @@ function scheduleRenderUserList() {
 function renderUserList() {
   const ul   = document.getElementById('user-list');
   const frag = document.createDocumentFragment();
+  const canModerate = canRunQuickModeration();
+  const isGuest = !isRegisteredUser();
 
   Object.values(onlineUsers).forEach(u => {
     const li = document.createElement('li');
     li.className = 'user-item';
     li.dataset.userId = u.userId;
+    const showModeration = canModerate && u.userId !== currentUser?.id;
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
-      <button type="button" class="user-name-btn">${escHtml(u.username)}${u.registered ? ' \u2713' : ''}</button>
+      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : ''}>${escHtml(u.username)}${u.registered ? ' \u2713' : ''}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
+      ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick for 30 minutes">\u26a1</button>` : ''}
+      ${showModeration ? `<button type="button" class="user-mod-btn ban" data-user-id="${u.userId}" title="Ban user">\ud83d\udeab</button>` : ''}
     `;
 
     // FIX 4 — Guests see "Register to DM" instead of opening private chat
     li.querySelector('.user-name-btn')?.addEventListener('click', () => {
-      if (!currentProfile?.is_registered) {
-        alert('Register to send private messages.');
+      if (isGuest) {
+        appendSystemMessage('\ud83d\udd12 Register to start private chats.');
         return;
       }
       if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
@@ -385,41 +422,14 @@ function renderUserList() {
       ev.stopPropagation();
       if (typeof openFloatingCamera === 'function') openFloatingCamera(u.userId, u.username);
     });
-
-    // FIX 5H — Kick/ban buttons for admins and mods (not on self)
-    if ((currentProfile?.is_admin || currentProfile?.is_mod) && u.userId !== currentUser?.id) {
-      const kickBtn = document.createElement('button');
-      kickBtn.type = 'button';
-      kickBtn.className = 'btn-mod-kick';
-      kickBtn.title = 'Kick (30 min)';
-      kickBtn.textContent = '\u26A1';
-      kickBtn.addEventListener('click', async (ev) => {
-        ev.stopPropagation();
-        if (!confirm('Kick ' + u.username + ' for 30 minutes?')) return;
-        await sbClient.from('profiles').update({ kicked_until: new Date(Date.now() + 1800000).toISOString() }).eq('id', u.userId);
-      });
-
-      const banBtn = document.createElement('button');
-      banBtn.type = 'button';
-      banBtn.className = 'btn-mod-ban';
-      banBtn.title = 'Ban user';
-      banBtn.textContent = '\uD83D\uDEAB';
-      banBtn.addEventListener('click', async (ev) => {
-        ev.stopPropagation();
-        const hStr = prompt('Ban ' + u.username + '?\nDuration in hours (0 = lifetime):', '0');
-        if (hStr === null) return;
-        const h = parseInt(hStr);
-        await sbClient.from('profiles').update({
-          is_banned: true,
-          banned_at: new Date().toISOString(),
-          ban_reason: 'Banned in chat',
-          ban_expires_at: h > 0 ? new Date(Date.now() + h * 3600000).toISOString() : null
-        }).eq('id', u.userId);
-      });
-
-      li.appendChild(kickBtn);
-      li.appendChild(banBtn);
-    }
+    li.querySelector('.user-mod-btn.kick')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      quickKickUser(u.userId, u.username);
+    });
+    li.querySelector('.user-mod-btn.ban')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      quickBanUser(u.userId, u.username);
+    });
 
     frag.appendChild(li);
   });
@@ -475,4 +485,158 @@ async function setLocalCameraState(cameraOn) {
 
 function getUsernameById(userId) {
   return onlineUsers[userId]?.username || (userId === currentUser?.id ? currentProfile?.username : 'User');
+}
+
+function isRegisteredUser() {
+  return currentProfile?.is_registered === true;
+}
+
+function canRunQuickModeration() {
+  return currentProfile?.is_admin === true || currentProfile?.is_mod === true;
+}
+
+function isKickActive(profile) {
+  if (!profile?.kicked_until) return false;
+  return new Date(profile.kicked_until).getTime() > Date.now();
+}
+
+function applyGuestModeUI() {
+  updateComposerState();
+}
+
+function updateComposerState() {
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn = document.querySelector('.btn-send');
+  const emojiBtn = document.getElementById('btn-emoji');
+  const voiceBtn = document.getElementById('btn-voice-note');
+  const guestNoticeBar = document.getElementById('guest-notice-bar');
+  const joinVoiceBtn = document.getElementById('btn-join-voice');
+  const isGuest = !isRegisteredUser();
+  const isLocked = !!currentRoom?.is_locked;
+
+  document.body.classList.toggle('guest-mode', isGuest);
+  if (guestNoticeBar) guestNoticeBar.classList.toggle('hidden', !isGuest);
+
+  if (isGuest) {
+    closeEmojiPicker();
+    if (msgInput) {
+      msgInput.disabled = true;
+      msgInput.placeholder = 'Please register to send messages.';
+      msgInput.title = '🔒 Register to send messages';
+    }
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.title = '🔒 Register to send messages';
+      sendBtn.classList.add('locked-action');
+    }
+    if (emojiBtn) {
+      emojiBtn.classList.add('hidden');
+      emojiBtn.disabled = true;
+      emojiBtn.title = '🔒 Register to use emoji';
+    }
+    if (voiceBtn) {
+      voiceBtn.classList.add('hidden');
+      voiceBtn.disabled = true;
+      voiceBtn.title = '🔒 Voice notes are for registered users only';
+    }
+    if (joinVoiceBtn) {
+      joinVoiceBtn.title = '🔒 Register to join voice';
+    }
+    return;
+  }
+
+  if (msgInput) {
+    msgInput.disabled = isLocked;
+    msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send)';
+    msgInput.title = '';
+  }
+  if (sendBtn) {
+    sendBtn.disabled = isLocked;
+    sendBtn.title = '';
+    sendBtn.classList.remove('locked-action');
+  }
+  if (emojiBtn) {
+    emojiBtn.classList.remove('hidden');
+    emojiBtn.disabled = isLocked;
+    emojiBtn.title = '';
+  }
+  if (voiceBtn) {
+    voiceBtn.classList.remove('hidden');
+    voiceBtn.disabled = isLocked;
+    voiceBtn.title = '';
+  }
+}
+
+function sanitizeAudioSource(msg) {
+  const source = msg?.audio_url || msg?.voice_url || msg?.content || '';
+  if (!source) return '';
+  if (source.startsWith('data:audio/') || source.startsWith('blob:') || source.startsWith('https://') || source.startsWith('http://')) {
+    return source;
+  }
+  return '';
+}
+
+function appendVoiceNoteMessage(msg, isMe) {
+  const div = document.createElement('div');
+  div.className = 'msg-row' + (isMe ? ' self' : '');
+
+  const initial = (msg.username || '?')[0].toUpperCase();
+  const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+  const voiceSrc = sanitizeAudioSource(msg);
+
+  const voiceMarkup = isRegisteredUser()
+    ? (voiceSrc ? `<audio controls preload="none" src="${escHtml(voiceSrc)}"></audio>` : '<div class="msg-text">Voice note unavailable.</div>')
+    : '<div class="msg-text">🔒 Voice notes are for registered users only.</div>';
+
+  div.innerHTML = `
+    <div class="avatar" style="background:${color}">${initial}</div>
+    <div class="msg-bubble">
+      <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
+      <div class="msg-voice">${voiceMarkup}</div>
+      <div class="msg-time">${formatTime(msg.created_at)}</div>
+    </div>`;
+
+  return div;
+}
+
+async function quickKickUser(userId, username) {
+  if (!canRunQuickModeration() || !userId) return;
+  const kickedUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const { error } = await sbClient.from('profiles').update({ kicked_until: kickedUntil }).eq('id', userId);
+  if (error) {
+    appendSystemMessage(`Kick failed for ${username || 'user'}: ${error.message}`);
+    return;
+  }
+  appendSystemMessage(`⚡ ${username || 'User'} has been kicked for 30 minutes.`);
+}
+
+async function quickBanUser(userId, username) {
+  if (!canRunQuickModeration() || !userId) return;
+
+  const choice = prompt('Ban for: 1h, 24h, 7d, or Lifetime', '1h');
+  if (choice === null) return;
+  const normalized = String(choice).trim().toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(QUICK_BAN_OPTIONS, normalized)) {
+    appendSystemMessage('Ban cancelled. Use: 1h, 24h, 7d, or Lifetime.');
+    return;
+  }
+
+  const durationHours = QUICK_BAN_OPTIONS[normalized];
+  const banExpiresAt = durationHours === null
+    ? null
+    : new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
+
+  const { error } = await sbClient.from('profiles').update({
+    is_banned: true,
+    banned_at: new Date().toISOString(),
+    banned_by: currentUser.id,
+    ban_reason: 'In-chat moderation',
+    ban_expires_at: banExpiresAt
+  }).eq('id', userId);
+
+  if (error) {
+    appendSystemMessage(`Ban failed for ${username || 'user'}: ${error.message}`);
+    return;
+  }
+  appendSystemMessage(`🚫 ${username || 'User'} has been banned (${durationHours === null ? 'Lifetime' : normalized}).`);
 }

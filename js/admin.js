@@ -7,6 +7,10 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_banned boolean DEFAULT false;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS banned_at timestamp with time zone;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS banned_by uuid;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_reason text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_mod boolean DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_expires_at timestamp with time zone;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kicked_until timestamp with time zone;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email text;
 
 -- FIX 5A — Moderation columns
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_mod boolean DEFAULT false;
@@ -182,6 +186,19 @@ function toast(msg, type = 'success') {
 function formatDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString();
+}
+
+function formatBanExpiry(profile) {
+  if (!profile?.is_banned) return '—';
+  if (!profile?.ban_expires_at) return 'Lifetime';
+  return formatDate(profile.ban_expires_at);
+}
+
+function getBanExpiresAt(durationHours) {
+  if (durationHours === null || durationHours === undefined || durationHours === '' || durationHours === 'lifetime') return null;
+  const hours = Number(durationHours);
+  if (!Number.isFinite(hours) || hours <= 0) return null;
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
 
 function escHtml(str = '') {
@@ -527,6 +544,7 @@ function renderUsersTable() {
   if (filter === 'guest') rows = rows.filter(p => !p.is_registered);
   if (filter === 'banned') rows = rows.filter(p => p.is_banned);
   if (filter === 'admins') rows = rows.filter(p => p.is_admin);
+  if (filter === 'mods') rows = rows.filter(p => p.is_mod && !p.is_admin);
 
   if (!rows.length) {
     body.innerHTML = '<tr><td colspan="8">No users match your current filter.</td></tr>';
@@ -536,12 +554,16 @@ function renderUsersTable() {
   body.innerHTML = rows.map(p => {
     const typeBadge = p.is_admin
       ? '<span class="badge admin">admin</span>'
-      : p.is_mod
-        ? '<span class="badge mod">mod</span>'
-        : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
+      : (p.is_mod
+        ? '<span class="badge registered">mod</span>'
+        : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`);
     const statusBadge = p.is_banned
-      ? '<span class="badge banned"><span class="status-dot red"></span>banned</span>'
+      ? `<span class="badge banned"><span class="status-dot red"></span>banned (${escHtml(formatBanExpiry(p))})</span>`
       : '<span class="badge registered"><span class="status-dot green"></span>active</span>';
+    const roleActions = p.is_admin || p.is_mod
+      ? `<button class="btn" title="Remove admin/mod privileges" onclick="demoteUser('${p.id}')">⬇️ Demote</button>`
+      : `<button class="btn" title="Promote to admin" onclick="promoteToAdmin('${p.id}')">👑 Promote to Admin</button>
+         <button class="btn" title="Grant moderator role" onclick="makeMod('${p.id}')">🛡️ Make Mod</button>`;
     return `
       <tr>
         <td><input type="checkbox" class="user-select" value="${p.id}" /></td>
@@ -554,10 +576,9 @@ function renderUsersTable() {
         <td class="inline-row">
           <button class="btn" title="View full profile details" onclick="viewProfile('${p.id}')">👁️ View</button>
           <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
-          <button class="btn" title="Kick user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>
-          <button class="btn" title="Toggle moderator role" onclick="toggleMod('${p.id}')">${p.is_mod ? '🛡️ Demod' : '🛡️ Mod'}</button>
+          <button class="btn" title="Kick this user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>
           <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
-          <button class="btn" title="Toggle admin role for this user" onclick="toggleAdmin('${p.id}')">👑 ${p.is_admin ? 'Demote' : 'Promote'}</button>
+          ${roleActions}
         </td>
       </tr>
     `;
@@ -570,10 +591,10 @@ function renderUsersTable() {
 function viewProfile(userId) {
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
-  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
+  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nMod: ${p.is_mod ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nBan Expires: ${formatBanExpiry(p)}\nKicked Until: ${formatDate(p.kicked_until)}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
 }
 
-async function setUserBan(userId, banned, reason = '', durationHours) {
+async function setUserBan(userId, banned, reason = '', durationHours = null) {
   const warning = banned ? 'This user will be blocked from access. Continue?' : 'Unban this user and restore access?';
   if (!confirm(warning)) return;
   showLoading(true);
@@ -582,7 +603,13 @@ async function setUserBan(userId, banned, reason = '', durationHours) {
     ban_expires_at = new Date(Date.now() + durationHours * 3600000).toISOString();
   }
   const payload = banned
-    ? { is_banned: true, banned_at: new Date().toISOString(), banned_by: adminUser.id, ban_reason: reason || 'Banned by admin', ban_expires_at }
+    ? {
+      is_banned: true,
+      banned_at: new Date().toISOString(),
+      banned_by: adminUser.id,
+      ban_reason: reason || 'Banned by admin',
+      ban_expires_at: getBanExpiresAt(durationHours)
+    }
     : { is_banned: false, banned_at: null, banned_by: null, ban_reason: null, ban_expires_at: null };
   const { error } = await sbClient.from('profiles').update(payload).eq('id', userId);
   showLoading(false);
@@ -594,15 +621,17 @@ async function setUserBan(userId, banned, reason = '', durationHours) {
 async function toggleBan(userId) {
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
-  if (p.is_banned) {
-    await setUserBan(userId, false, '');
-    return;
+  const reason = p.is_banned ? '' : (prompt('Reason for ban (optional):', 'Policy violation') || '');
+  let duration = null;
+  if (!p.is_banned) {
+    const selected = prompt('Ban duration: lifetime, 1h, 6h, 24h, 7d, 30d', 'lifetime');
+    if (selected === null) return;
+    const map = { lifetime: null, '1h': 1, '6h': 6, '24h': 24, '7d': 168, '30d': 720 };
+    const key = String(selected).trim().toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(map, key)) return toast('Invalid duration. Use lifetime, 1h, 6h, 24h, 7d, or 30d.', 'error');
+    duration = map[key];
   }
-  const reason = prompt('Reason for ban (optional):', 'Policy violation') || '';
-  const durStr = prompt('Ban duration in hours (0 = lifetime, 1, 6, 24, 168, 720):', '0');
-  if (durStr === null) return;
-  const durationHours = parseInt(durStr) > 0 ? parseInt(durStr) : null;
-  await setUserBan(userId, true, reason, durationHours);
+  await setUserBan(userId, !p.is_banned, reason, duration);
 }
 
 async function deleteUser(userId) {
@@ -615,16 +644,45 @@ async function deleteUser(userId) {
   await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
 }
 
-async function toggleAdmin(userId) {
-  const p = profilesCache.find(x => x.id === userId);
-  if (!p) return;
-  const action = p.is_admin ? 'demote' : 'promote';
-  if (!confirm(`Are you sure you want to ${action} this user ${action === 'promote' ? 'to admin' : 'from admin'}?`)) return;
+async function promoteToAdmin(userId) {
+  if (!confirm('Promote this user to admin?')) return;
   showLoading(true);
-  const { error } = await sbClient.from('profiles').update({ is_admin: !p.is_admin }).eq('id', userId);
+  const { error } = await sbClient.from('profiles').update({ is_admin: true, is_mod: false }).eq('id', userId);
   showLoading(false);
   if (error) return toast(error.message, 'error');
-  toast(`User ${action}d successfully.`);
+  toast('User promoted to admin.');
+  await Promise.all([loadUsers(), loadStats()]);
+}
+
+async function makeMod(userId) {
+  if (!confirm('Grant moderator role to this user?')) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_mod: true, is_admin: false }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('User is now a moderator.');
+  await Promise.all([loadUsers(), loadStats()]);
+}
+
+async function demoteUser(userId) {
+  if (!confirm('Remove elevated role from this user?')) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_admin: false, is_mod: false }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('User role removed.');
+  await Promise.all([loadUsers(), loadStats()]);
+}
+
+async function kickUser(userId) {
+  if (!confirm('Kick this user for 30 minutes?')) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({
+    kicked_until: new Date(Date.now() + (30 * 60 * 1000)).toISOString()
+  }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('User kicked for 30 minutes.');
   await loadUsers();
 }
 
@@ -679,7 +737,8 @@ async function runBulkAction() {
       is_banned: true,
       banned_at: new Date().toISOString(),
       banned_by: adminUser.id,
-      ban_reason: 'Bulk ban by admin'
+      ban_reason: 'Bulk ban by admin',
+      ban_expires_at: null
     }).in('id', ids);
     showLoading(false);
     if (error) return toast(error.message, 'error');
@@ -718,6 +777,7 @@ async function loadBannedUsers() {
       <tr>
         <td>${escHtml(p.username || p.id)}</td>
         <td>${formatDate(p.banned_at)}</td>
+        <td>${escHtml(formatBanExpiry(p))}</td>
         <td>${escHtml(bannedBy)}</td>
         <td>${escHtml(p.ban_reason || '—')}</td>
         <td>${escHtml(expiresAt)}</td>
@@ -731,6 +791,8 @@ async function manualBanSubmit(event) {
   event.preventDefault();
   const userLookup = document.getElementById('manual-ban-user').value.trim();
   const reason = document.getElementById('manual-ban-reason').value.trim() || 'Manual admin ban';
+  const durationRaw = document.getElementById('manual-ban-duration').value;
+  const durationHours = durationRaw === 'lifetime' ? null : Number(durationRaw);
   if (!userLookup) return toast('Enter a username or user ID.', 'error');
 
   showLoading(true);
@@ -744,12 +806,14 @@ async function manualBanSubmit(event) {
     is_banned: true,
     banned_at: new Date().toISOString(),
     banned_by: adminUser.id,
-    ban_reason: reason
+    ban_reason: reason,
+    ban_expires_at: getBanExpiresAt(durationHours)
   }).eq('id', userId);
   showLoading(false);
   if (banErr) return toast(banErr.message, 'error');
   document.getElementById('manual-ban-user').value = '';
   document.getElementById('manual-ban-reason').value = '';
+  document.getElementById('manual-ban-duration').value = 'lifetime';
   toast('User banned successfully.');
   await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
 }

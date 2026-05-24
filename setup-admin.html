@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChatCorner — Admin Bootstrap</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/admin.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
+</head>
+<body class="auth-page admin-auth-page">
+  <div class="auth-container admin-auth-container">
+    <div class="logo-area">
+      <h1 class="logo">🔑 ChatCorner</h1>
+      <p class="tagline">Admin Bootstrap Setup</p>
+    </div>
+
+    <div class="msg" style="background:#7c3aed22;border:1px solid #7c3aed;color:#e9d5ff;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:0.85rem;">
+      ⚠️ <strong>One-time setup page.</strong> Delete or disable this page after granting admin access to your account.
+    </div>
+
+    <form id="setup-form" class="auth-form active" onsubmit="event.preventDefault(); grantAdmin();">
+      <label class="field-label" for="setup-key">Setup Key</label>
+      <input type="password" id="setup-key" placeholder="Enter the one-time setup key" required />
+
+      <label class="field-label" for="setup-username">Username to Grant Admin</label>
+      <input type="text" id="setup-username" placeholder="e.g. S@lman12" required />
+
+      <button class="btn-primary" id="setup-btn" type="submit">Grant Admin Access</button>
+      <div id="setup-msg" class="msg"></div>
+    </form>
+
+    <a class="back-link" href="adminup.html" title="Go to admin login">← Back to Admin Login</a>
+  </div>
+
+  <div class="bg-animation">
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script>
+    const SETUP_KEY = 'CC_SETUP_2026';
+    const msgEl = document.getElementById('setup-msg');
+
+    function setMsg(text, type) {
+      msgEl.textContent = text;
+      msgEl.className = 'msg ' + (type || '');
+    }
+
+    async function grantAdmin() {
+      const key      = document.getElementById('setup-key').value.trim();
+      const username = document.getElementById('setup-username').value.trim();
+      const btn      = document.getElementById('setup-btn');
+
+      if (key !== SETUP_KEY) {
+        setMsg('Invalid setup key.', 'error');
+        return;
+      }
+
+      if (!username) {
+        setMsg('Please enter a username.', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      setMsg('Looking up user…', '');
+
+      const { data: profile, error: lookupErr } = await sbClient
+        .from('profiles')
+        .select('id,username')
+        .eq('username', username)
+        .maybeSingle();
+
+      if (lookupErr || !profile) {
+        setMsg('Username not found in profiles. Make sure the user has logged in at least once.', 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      setMsg('Granting admin…', '');
+
+      const { error: updateErr } = await sbClient
+        .from('profiles')
+        .update({ is_admin: true })
+        .eq('id', profile.id);
+
+      if (updateErr) {
+        setMsg('Failed to grant admin: ' + updateErr.message, 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      setMsg('✅ Admin granted to "' + username + '"! Redirecting to admin login…', 'success');
+      setTimeout(() => { window.location.href = 'adminup.html'; }, 2000);
+    }
+  </script>
+</body>
+</html>

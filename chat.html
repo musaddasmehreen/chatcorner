@@ -87,7 +87,7 @@
         <div id="peers-list" class="peers-list"></div>
       </div>
 
-      <div class="input-row" style="position:relative">
+      <div id="chat-input-row" class="input-row" style="position:relative">
         <div id="emoji-picker" class="emoji-picker hidden">
           <button class="emoji-btn" title="Grinning" onclick="insertEmoji('😀')">😀</button>
           <button class="emoji-btn" title="Big smile" onclick="insertEmoji('😃')">😃</button>
@@ -152,9 +152,10 @@
                onkeydown="if(event.key==='Enter') sendMessage()"/>
         <button class="btn-send" onclick="sendMessage()">Send</button>
       </div>
-      <!-- FIX 3 — Guest notice bar (hidden by default, shown via applyGuestUI()) -->
-      <div id="guest-notice-bar" class="guest-notice-bar">
-        👤 You are viewing as a Guest. <a href="index.html">Register</a> or <a href="index.html">Login</a> to chat.
+      <div id="guest-notice-bar" class="guest-notice-bar hidden" aria-live="polite">
+        👤 You are viewing as a guest.
+        <a href="index.html">Register</a>
+        to participate.
       </div>
     </main>
     <aside class="sidebar right">

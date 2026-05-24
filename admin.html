@@ -8,6 +8,29 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
 <body class="admin-page">
+  <!-- Auth guard: redirect non-admins immediately before any content renders -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script>
+    (async function guardAdmin() {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session?.user) {
+        window.location.replace('adminup.html');
+        document.documentElement.style.display = 'none';
+        return;
+      }
+      const { data: profile } = await sbClient
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!profile?.is_admin) {
+        await sbClient.auth.signOut();
+        window.location.replace('adminup.html?denied=1');
+        document.documentElement.style.display = 'none';
+      }
+    })();
+  </script>
   <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar">
       <div class="brand">🛡️ ChatCorner Admin</div>
@@ -101,6 +124,7 @@
               <option value="guest">Guest</option>
               <option value="banned">Banned</option>
               <option value="admins">Admins</option>
+              <option value="mods">Mods</option>
             </select>
             <button class="btn" id="users-apply">Apply</button>
           </div>
@@ -142,6 +166,14 @@
           <h3>Manual Ban</h3>
           <input id="manual-ban-user" type="text" placeholder="User ID or username" required />
           <input id="manual-ban-reason" type="text" placeholder="Reason (optional)" />
+          <select id="manual-ban-duration" required>
+            <option value="lifetime">Lifetime</option>
+            <option value="1">1h</option>
+            <option value="6">6h</option>
+            <option value="24">24h</option>
+            <option value="168">7d</option>
+            <option value="720">30d</option>
+          </select>
           <button class="btn danger" type="submit">Ban User</button>
         </form>
 
@@ -151,6 +183,7 @@
               <tr>
                 <th>Username</th>
                 <th>Banned At</th>
+                <th>Ban Expires</th>
                 <th>Banned By</th>
                 <th>Reason</th>
                 <th>Expires At</th>
