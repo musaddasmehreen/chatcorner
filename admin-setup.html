@@ -208,7 +208,7 @@
         <div class="status-message" id="statusMsg"></div>
       </form>
 
-      <a href="adminup.html" class="back-button">← Back to Admin Login</a>
+      <a href="index.html" class="back-button">← Back to Chat</a>
     </div>
   </div>
 
@@ -288,11 +288,15 @@
           return;
         }
 
-        setStatus('✅ Admin granted! Redirecting to login…', 'success');
+        setStatus('✅ Admin granted! Redirecting…', 'success');
         
-        // Use a more reliable redirect method
+        // Store success flag in sessionStorage and redirect to index for login flow
+        sessionStorage.setItem('adminGranted', 'true');
+        sessionStorage.setItem('adminUsername', username);
+        
+        // Redirect to index which will show login page
         setTimeout(() => {
-          window.location.href = 'adminup.html';
+          window.location.href = 'index.html?admin=login';
         }, 1500);
 
       } catch (error) {
