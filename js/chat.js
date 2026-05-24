@@ -308,7 +308,9 @@ async function sendMessage() {
 }
 
 function sanitizeText(text = '') {
-  return String(text).replace(/<[^>]*>/g, '');
+  return String(text)
+    .replace(/<\/?[^>]+(>|$)/g, '')
+    .replace(/[<>]/g, '');
 }
 
 /* Builds a message DOM node without appending it (used for batch & single) */
