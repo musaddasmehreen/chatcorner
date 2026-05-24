@@ -68,6 +68,7 @@ const ANALYTICS_QUERY_LIMIT = 1000;
 const LOG_MESSAGES_QUERY_LIMIT = 1000;
 let statsCacheUntil = 0;
 let analyticsCacheUntil = 0;
+const ADMIN_WRITE_RETRY_DELAY_MS = 400;
 
 const settingsDefaults = {
   allow_guest_login: 'true',
@@ -77,14 +78,79 @@ const settingsDefaults = {
   welcome_message: 'Welcome to ChatCorner!'
 };
 
+function getAdminErrorMessage(error, fallback = 'Unexpected error.') {
+  return error?.message || error?.error_description || fallback;
+}
+
+function logAdminError(context, error, details = {}) {
+  console.error(`[ChatCorner][admin] ${context}`, {
+    message: getAdminErrorMessage(error, 'Unknown error'),
+    details,
+    error
+  });
+}
+
+function isTransientAdminError(error) {
+  const msg = String(getAdminErrorMessage(error, '')).toLowerCase();
+  return msg.includes('network')
+    || msg.includes('fetch')
+    || msg.includes('timeout')
+    || msg.includes('timed out')
+    || msg.includes('connection')
+    || msg.includes('temporar');
+}
+
+function waitAdmin(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function withAdminRetry(operation, context, retries = 1) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= retries || !isTransientAdminError(error)) throw error;
+      attempt += 1;
+      console.warn(`[ChatCorner][admin] ${context} retry ${attempt}/${retries}`, error);
+      await waitAdmin(ADMIN_WRITE_RETRY_DELAY_MS * attempt);
+    }
+  }
+}
+
+async function runAdminMutation(operation, context, retries = 1) {
+  return withAdminRetry(async () => {
+    const result = await operation();
+    if (result?.error) throw result.error;
+    return result;
+  }, context, retries);
+}
+
+function installAdminGlobalErrorHandlers() {
+  if (window.__ccAdminErrorHandlersInstalled) return;
+  window.__ccAdminErrorHandlersInstalled = true;
+
+  window.addEventListener('error', (event) => {
+    logAdminError('uncaught runtime error', event?.error || new Error(event?.message || 'Unknown runtime error'));
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    logAdminError('unhandled promise rejection', event?.reason || new Error('Unhandled rejection'));
+  });
+}
+
+installAdminGlobalErrorHandlers();
+
 window.addEventListener('DOMContentLoaded', async () => {
   bindUI();
   try {
     const isAuthorized = await checkAdminAuth();
     if (!isAuthorized || !isAdminContextReady()) return;
     await initDashboard();
-  } catch (_error) {
+  } catch (error) {
+    logAdminError('admin dashboard startup failed', error);
     showLoading(false);
+    toast('Admin dashboard failed to initialize. Please sign in again.', 'error');
     window.location.href = 'adminup.html?denied=1';
   }
 });
@@ -195,6 +261,7 @@ async function checkAdminAuth() {
     document.getElementById('admin-name').textContent = profile.username || adminUser.email || 'Admin';
     return true;
   } catch (_error) {
+    logAdminError('admin authentication bootstrap failed', _error);
     resetAdminContext();
     window.location.href = 'adminup.html?denied=1';
     return false;
@@ -229,9 +296,10 @@ async function initDashboard() {
         statsRefreshTimer = null;
         return;
       }
-      loadStats();
+      loadStats().catch(error => logAdminError('periodic stats refresh failed', error));
     }, 20000);
   } catch (_error) {
+    logAdminError('dashboard initialization failed', _error, { adminUserId: adminUser?.id });
     toast('Dashboard initialization failed. Please try signing in again.', 'error');
     window.location.href = 'adminup.html?denied=1';
   }
@@ -948,45 +1016,39 @@ async function sendBroadcast() {
   if (!confirm('Send this system broadcast now?')) return;
 
   showLoading(true);
-  let error = null;
-  if (roomId === 'all') {
-    if (!roomsCache.length) {
-      showLoading(false);
-      return toast('No rooms available for broadcast.', 'error');
+  try {
+    if (roomId === 'all') {
+      if (!roomsCache.length) return toast('No rooms available for broadcast.', 'error');
+      const messageRows = roomsCache.map(r => ({
+        room_id: r.id,
+        user_id: adminUser.id,
+        username: adminProfile.username || 'Admin',
+        content: `[Broadcast] ${message}`,
+        type: 'system'
+      }));
+      await runAdminMutation(() => sbClient.from('messages').insert(messageRows), 'insert broadcast messages for all rooms');
+      await runAdminMutation(() => sbClient.from('broadcasts').insert({ message, sent_by: adminUser.id, room_id: null }), 'insert broadcast history entry');
+    } else {
+      await runAdminMutation(() => sbClient.from('messages').insert({
+        room_id: roomId,
+        user_id: adminUser.id,
+        username: adminProfile.username || 'Admin',
+        content: `[Broadcast] ${message}`,
+        type: 'system'
+      }), 'insert broadcast message for single room');
+      await runAdminMutation(() => sbClient.from('broadcasts').insert({ message, sent_by: adminUser.id, room_id: roomId }), 'insert broadcast history entry');
     }
-    const messageRows = roomsCache.map(r => ({
-      room_id: r.id,
-      user_id: adminUser.id,
-      username: adminProfile.username || 'Admin',
-      content: `[Broadcast] ${message}`,
-      type: 'system'
-    }));
-    const insertMsg = await sbClient.from('messages').insert(messageRows);
-    error = insertMsg.error;
-    if (!error) {
-      const bRes = await sbClient.from('broadcasts').insert({ message, sent_by: adminUser.id, room_id: null });
-      error = bRes.error;
-    }
-  } else {
-    const insertMsg = await sbClient.from('messages').insert({
-      room_id: roomId,
-      user_id: adminUser.id,
-      username: adminProfile.username || 'Admin',
-      content: `[Broadcast] ${message}`,
-      type: 'system'
-    });
-    error = insertMsg.error;
-    if (!error) {
-      const bRes = await sbClient.from('broadcasts').insert({ message, sent_by: adminUser.id, room_id: roomId });
-      error = bRes.error;
-    }
+
+    document.getElementById('broadcast-message').value = '';
+    updateBroadcastPreview();
+    toast('Broadcast sent successfully.');
+    await Promise.all([loadBroadcastHistory(), loadStats(true)]);
+  } catch (error) {
+    logAdminError('broadcast message write failed', error, { roomId, adminUserId: adminUser?.id });
+    toast(`Broadcast failed: ${getAdminErrorMessage(error, 'Please try again.')}`, 'error');
+  } finally {
+    showLoading(false);
   }
-  showLoading(false);
-  if (error) return toast(error.message, 'error');
-  document.getElementById('broadcast-message').value = '';
-  updateBroadcastPreview();
-  toast('Broadcast sent successfully.');
-  await Promise.all([loadBroadcastHistory(), loadStats(true)]);
 }
 
 async function loadBroadcastHistory() {

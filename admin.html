@@ -13,19 +13,27 @@
   <script src="js/config.js"></script>
   <script>
     (async function guardAdmin() {
-      const { data: { session } } = await sbClient.auth.getSession();
-      if (!session?.user) {
-        window.location.replace('adminup.html');
-        document.documentElement.style.display = 'none';
-        return;
-      }
-      const { data: profile } = await sbClient
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', session.user.id)
-        .maybeSingle();
-      if (!profile?.is_admin) {
-        await sbClient.auth.signOut();
+      try {
+        const { data: { session } } = await sbClient.auth.getSession();
+        if (!session?.user) {
+          window.location.replace('adminup.html');
+          document.documentElement.style.display = 'none';
+          return;
+        }
+        const { data: profile, error: profileError } = await sbClient
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (profileError) throw profileError;
+        if (!profile?.is_admin) {
+          await sbClient.auth.signOut();
+          window.location.replace('adminup.html?denied=1');
+          document.documentElement.style.display = 'none';
+        }
+      } catch (error) {
+        console.error('[ChatCorner][admin] admin guard initialization failed', error);
+        try { await sbClient.auth.signOut(); } catch (signOutError) { console.error('[ChatCorner][admin] admin guard signOut failed', signOutError); }
         window.location.replace('adminup.html?denied=1');
         document.documentElement.style.display = 'none';
       }

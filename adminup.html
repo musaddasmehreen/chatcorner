@@ -45,17 +45,26 @@
       adminMsgEl.className = 'msg ' + (type || '');
     }
 
-    async function checkAlreadyAdmin() {
-      const { data: { session } } = await sbClient.auth.getSession();
-      if (!session?.user) return;
-      const { data: profile } = await sbClient
-        .from('profiles')
-        .select('id,is_admin')
-        .eq('id', session.user.id)
-        .maybeSingle();
+    function logAdminAuthError(context, error) {
+      console.error(`[ChatCorner][admin-auth] ${context}`, error);
+    }
 
-      if (profile?.is_admin) {
-        window.location.href = 'admin.html';
+    async function checkAlreadyAdmin() {
+      try {
+        const { data: { session } } = await sbClient.auth.getSession();
+        if (!session?.user) return;
+        const { data: profile, error } = await sbClient
+          .from('profiles')
+          .select('id,is_admin')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (error) throw error;
+
+        if (profile?.is_admin) {
+          window.location.href = 'admin.html';
+        }
+      } catch (error) {
+        logAdminAuthError('admin session bootstrap failed', error);
       }
     }
 
@@ -72,49 +81,52 @@
       btn.disabled = true;
       setAdminMsg('Looking up account…', '');
 
-      // Look up email from profiles by username
-      const { data: profile, error: lookupErr } = await sbClient
-        .from('profiles')
-        .select('id,email,is_admin')
-        .eq('username', username)
-        .maybeSingle();
+      try {
+        // Look up email from profiles by username
+        const { data: profile, error: lookupErr } = await sbClient
+          .from('profiles')
+          .select('id,email,is_admin')
+          .eq('username', username)
+          .maybeSingle();
 
-      if (lookupErr || !profile) {
-        setAdminMsg('Username not found. Please check and try again.', 'error');
+        if (lookupErr || !profile) {
+          setAdminMsg('Username not found. Please check and try again.', 'error');
+          return;
+        }
+
+        if (!profile.email) {
+          setAdminMsg('No email on file for this account. Please contact support.', 'error');
+          return;
+        }
+
+        setAdminMsg('Signing in…', '');
+
+        const { data, error } = await sbClient.auth.signInWithPassword({ email: profile.email, password });
+        if (error || !data?.user) {
+          setAdminMsg(error?.message || 'Login failed. Please try again.', 'error');
+          return;
+        }
+
+        // Re-fetch the fresh profile to confirm admin status
+        const { data: freshProfile, error: profileErr } = await sbClient
+          .from('profiles')
+          .select('id,is_admin')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (profileErr || !freshProfile?.is_admin) {
+          await sbClient.auth.signOut();
+          setAdminMsg('Access Denied. Admins only.', 'error');
+          return;
+        }
+
+        window.location.href = 'admin.html';
+      } catch (error) {
+        logAdminAuthError('admin login failed unexpectedly', error);
+        setAdminMsg('Login failed due to a temporary error. Please retry.', 'error');
+      } finally {
         btn.disabled = false;
-        return;
       }
-
-      if (!profile.email) {
-        setAdminMsg('No email on file for this account. Please contact support.', 'error');
-        btn.disabled = false;
-        return;
-      }
-
-      setAdminMsg('Signing in…', '');
-
-      const { data, error } = await sbClient.auth.signInWithPassword({ email: profile.email, password });
-      if (error || !data?.user) {
-        setAdminMsg(error?.message || 'Login failed. Please try again.', 'error');
-        btn.disabled = false;
-        return;
-      }
-
-      // Re-fetch the fresh profile to confirm admin status
-      const { data: freshProfile, error: profileErr } = await sbClient
-        .from('profiles')
-        .select('id,is_admin')
-        .eq('id', data.user.id)
-        .maybeSingle();
-
-      if (profileErr || !freshProfile?.is_admin) {
-        await sbClient.auth.signOut();
-        setAdminMsg('Access Denied. Admins only.', 'error');
-        btn.disabled = false;
-        return;
-      }
-
-      window.location.href = 'admin.html';
     }
 
     if (new URLSearchParams(window.location.search).get('denied') === '1') {
