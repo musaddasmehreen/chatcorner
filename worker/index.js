@@ -156,6 +156,24 @@ async function forwardRoomBroadcast(env, roomId, message) {
   await stub.fetch(req).catch(() => null);
 }
 
+async function forwardVoiceToRoom(env, roomId, voicePayload) {
+  const id = env.CHAT_ROOM.idFromName(roomId);
+  const stub = env.CHAT_ROOM.get(id);
+  const req = new Request(`https://do.internal/room/${roomId}/voice`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(voicePayload)
+  });
+  return stub.fetch(req).catch(() => null);
+}
+
+async function getVoiceFromRoom(env, roomId, voiceId) {
+  const id = env.CHAT_ROOM.idFromName(roomId);
+  const stub = env.CHAT_ROOM.get(id);
+  const req = new Request(`https://do.internal/room/${roomId}/voice/${voiceId}`, { method: 'GET' });
+  return stub.fetch(req).catch(() => null);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -317,6 +335,41 @@ export default {
            LIMIT 50
         `).bind(session.user.id, otherUserId, otherUserId, session.user.id).all();
         return json({ data: (rows.results || []).reverse() });
+      }
+
+      // Voice messages (ephemeral, stored in Durable Object memory only)
+      if (parts[1] === 'rooms' && parts[3] === 'voice' && !parts[4] && request.method === 'POST') {
+        const session = await requireSession(request, env);
+        if (!session) return error('Unauthorized', 401);
+        const roomId = parts[2];
+        const body = await parseJson(request);
+        const audioData = body?.audio_data ? String(body.audio_data) : null;
+        if (!audioData) return error('audio_data is required', 400);
+        // Limit audio size to prevent abuse (~2MB base64)
+        if (audioData.length > 2 * 1024 * 1024) return error('Audio data too large (max 2MB)', 413);
+
+        const voiceId = crypto.randomUUID();
+        const doRes = await forwardVoiceToRoom(env, roomId, {
+          id: voiceId,
+          room_id: roomId,
+          user_id: session.user.id,
+          username: session.profile.username,
+          audio_data: audioData
+        });
+        if (!doRes || !doRes.ok) return error('Failed to store voice message', 500);
+        return json({ ok: true, id: voiceId });
+      }
+
+      if (parts[1] === 'rooms' && parts[3] === 'voice' && parts[4] && request.method === 'GET') {
+        const session = await requireSession(request, env);
+        if (!session) return error('Unauthorized', 401);
+        const roomId = parts[2];
+        const voiceId = parts[4];
+        const doRes = await getVoiceFromRoom(env, roomId, voiceId);
+        if (!doRes) return error('Voice message not found', 404);
+        const body = await doRes.json().catch(() => null);
+        if (!doRes.ok) return json(body || { error: 'Not found' }, doRes.status);
+        return json(body);
       }
 
       // WebSockets -> Durable Objects

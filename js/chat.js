@@ -5,6 +5,11 @@ let roomWs = null;
 let onlineUsers = Object.create(null);
 let cameraStates = Object.create(null);
 
+// Voice recording state
+let mediaRecorder = null;
+let audioChunks = [];
+let isVoiceRecording = false;
+
 window.roomWs = null;
 window.sendToRoom = sendToRoom;
 
@@ -59,6 +64,7 @@ async function enterRoom(room) {
   }
 
   if (typeof leaveVoice === 'function') await leaveVoice();
+  stopVoiceRecording();
 
   currentRoom = room;
   document.getElementById('current-room-name').textContent = '# ' + room.name;
@@ -101,6 +107,12 @@ async function enterRoom(room) {
 
     if (msg.type === 'chat_message') {
       appendMessage(msg);
+      scrollToBottom();
+      return;
+    }
+
+    if (msg.type === 'voice_message') {
+      appendVoiceMessage(msg);
       scrollToBottom();
       return;
     }
@@ -288,4 +300,147 @@ async function setLocalCameraState(cameraOn) {
 
 function getUsernameById(userId) {
   return onlineUsers[userId]?.username || (userId === currentUser?.id ? currentProfile?.username : 'User');
+}
+
+// ── Voice Recording ──────────────────────────────────────────────────────────
+
+async function toggleVoiceRecording() {
+  if (isVoiceRecording) {
+    stopVoiceRecording();
+  } else {
+    await startVoiceRecording();
+  }
+}
+
+async function startVoiceRecording() {
+  if (!currentRoom) { appendSystemMessage('Join a room first.'); return; }
+  if (isVoiceRecording) return;
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (_) {
+    appendSystemMessage('Microphone access denied or unavailable.');
+    return;
+  }
+
+  audioChunks = [];
+  const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported(t)) || '';
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+
+  mediaRecorder.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+    audioChunks = [];
+    const reader = new FileReader();
+    reader.onloadend = async () => { await sendVoiceMessage(reader.result); };
+    reader.readAsDataURL(blob);
+  };
+
+  mediaRecorder.start();
+  isVoiceRecording = true;
+  const btn = document.getElementById('btn-voice-record');
+  if (btn) { btn.textContent = '⏹️'; btn.classList.add('recording'); btn.title = 'Stop & send recording'; }
+}
+
+function stopVoiceRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  mediaRecorder.stop();
+  isVoiceRecording = false;
+  const btn = document.getElementById('btn-voice-record');
+  if (btn) { btn.textContent = '🎤'; btn.classList.remove('recording'); btn.title = 'Record voice message'; }
+}
+
+async function sendVoiceMessage(audioDataUrl) {
+  if (!currentRoom || !audioDataUrl) return;
+  const res = await apiFetch(`/api/rooms/${currentRoom.id}/voice`, {
+    method: 'POST',
+    body: JSON.stringify({ audio_data: audioDataUrl })
+  }).catch(() => null);
+  if (!res || !res.ok) appendSystemMessage('Failed to send voice message.');
+}
+
+function audioDataUrlToObjectUrl(dataUrl) {
+  try {
+    const match = /^data:(audio\/[a-z0-9+\-]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
+    if (!match) return null;
+    const mime = match[1];
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: mime }));
+  } catch (_) { return null; }
+}
+
+function appendVoiceMessage(msg) {
+  const expiresAt = typeof msg.expires_at === 'number' ? msg.expires_at : (new Date(msg.created_at).getTime() + 15 * 60 * 1000);
+  if (expiresAt <= Date.now()) return; // already expired
+
+  // Convert base64 data URL to a blob: URL so the audio src is never a raw user-controlled URL
+  const objectUrl = audioDataUrlToObjectUrl(msg.audio_data);
+  if (!objectUrl) return; // invalid or missing audio data — skip
+
+  const isMe = msg.user_id === currentUser?.id;
+  const row = document.createElement('div');
+  row.className = 'msg-row' + (isMe ? ' self' : '');
+  row.dataset.voiceId = msg.id;
+
+  const initial = (msg.username || '?')[0].toUpperCase();
+  const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username || '');
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.style.background = color;
+  avatar.textContent = initial;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble voice-bubble';
+
+  const uname = document.createElement('div');
+  uname.className = 'msg-username';
+  uname.textContent = msg.username || 'Unknown';
+
+  const micLabel = document.createElement('div');
+  micLabel.className = 'voice-label';
+  micLabel.textContent = '🎤 Voice message';
+
+  const audioEl = document.createElement('audio');
+  audioEl.controls = true;
+  audioEl.src = objectUrl; // blob: URL — safe, not a user-controlled URL
+  audioEl.className = 'voice-audio-player';
+
+  const footer = document.createElement('div');
+  footer.className = 'voice-footer';
+
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'msg-time';
+  timeSpan.textContent = formatTime(msg.created_at);
+
+  const countdown = document.createElement('span');
+  countdown.className = 'voice-countdown';
+
+  footer.append(timeSpan, countdown);
+  bubble.append(uname, micLabel, audioEl, footer);
+  row.append(avatar, bubble);
+  document.getElementById('messages').appendChild(row);
+
+  updateVoiceCountdown(countdown, row, expiresAt, objectUrl);
+}
+
+function updateVoiceCountdown(countdownEl, rowEl, expiresAt, objectUrl) {
+  const tick = () => {
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      rowEl.remove();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      return;
+    }
+    const m = Math.floor(remaining / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    countdownEl.textContent = ` · Expires in ${m}:${s.toString().padStart(2, '0')}`;
+    setTimeout(tick, 1000);
+  };
+  tick();
 }
