@@ -103,6 +103,7 @@ function bindUI() {
   document.getElementById('send-broadcast').addEventListener('click', sendBroadcast);
 
   document.getElementById('save-settings').addEventListener('click', saveSettings);
+  document.getElementById('refresh-abuse')?.addEventListener('click', loadAbuseDetection);
 }
 
 async function checkAdminAuth() {
@@ -135,6 +136,7 @@ async function initDashboard() {
     loadMessages(),
     loadUsers(),
     loadBannedUsers(),
+    loadAbuseDetection(),
     loadBroadcastHistory(),
     loadSettings(),
     loadAnalytics()
@@ -234,7 +236,7 @@ async function loadStats() {
 }
 
 async function getOnlineUserEstimate() {
-  const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const { data, error } = await sbClient.from('messages').select('user_id').gte('created_at', since).limit(1000);
   if (error || !Array.isArray(data)) return 0;
   return new Set(data.map(r => r.user_id).filter(Boolean)).size;
@@ -547,6 +549,7 @@ function renderUsersTable() {
           <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
           <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
           <button class="btn" title="Toggle admin role for this user" onclick="toggleAdmin('${p.id}')">👑 ${p.is_admin ? 'Demote' : 'Promote'}</button>
+          <button class="btn" onclick="toggleMod('${p.id}')">🛡️ ${p.is_mod ? 'Remove Mod' : 'Make Mod'}</button>
         </td>
       </tr>
     `;
@@ -603,6 +606,19 @@ async function toggleAdmin(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast(`User ${action}d successfully.`);
+  await loadUsers();
+}
+
+async function toggleMod(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p) return;
+  const action = p.is_mod ? 'remove moderator role from' : 'make moderator';
+  if (!confirm(`Are you sure you want to ${action} this user?`)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_mod: !p.is_mod }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast(`Moderator role ${p.is_mod ? 'removed' : 'granted'} successfully.`);
   await loadUsers();
 }
 
@@ -703,6 +719,28 @@ async function manualBanSubmit(event) {
   document.getElementById('manual-ban-reason').value = '';
   toast('User banned successfully.');
   await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
+}
+
+async function loadAbuseDetection() {
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const target = document.getElementById('abuse-list');
+  if (!target) return;
+  const { data, error } = await sbClient.from('messages').select('user_id, username').gte('created_at', oneHourAgo);
+  if (error || !data) { target.innerHTML = '<p>Could not load data.</p>'; return; }
+  const counts = {};
+  const names = {};
+  data.forEach(m => {
+    if (!m.user_id) return;
+    counts[m.user_id] = (counts[m.user_id] || 0) + 1;
+    if (m.username) names[m.user_id] = m.username;
+  });
+  const suspects = Object.entries(counts).filter(([, c]) => c > 20).sort((a, b) => b[1] - a[1]);
+  if (!suspects.length) { target.innerHTML = '<p>No suspicious activity detected.</p>'; return; }
+  target.innerHTML = '<table><thead><tr><th>User</th><th>Messages (1hr)</th><th>Action</th></tr></thead><tbody>' +
+    suspects.map(([uid, count]) => {
+      const name = profilesCache.find(p => p.id === uid)?.username || names[uid] || uid;
+      return `<tr><td>${escHtml(name)}</td><td>${count}</td><td><button class="btn danger" onclick="banFromMessage('${uid}','${escHtml(name)}')">🚫 Ban</button></td></tr>`;
+    }).join('') + '</tbody></table>';
 }
 
 function updateBroadcastPreview() {
