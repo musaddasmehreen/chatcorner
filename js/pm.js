@@ -3,6 +3,7 @@ const pmMuted = {};
 const pmTextHistory = {};
 const pmVoiceUrls = {};
 const pmRecorders = {};
+const pmCallState = {};
 let pmChannel = null;
 let pmTableAvailable = null;
 let pmAudioCtx = null;
@@ -19,6 +20,18 @@ async function ensurePmRealtime() {
     .on('broadcast', { event: 'private-message' }, ({ payload }) => {
       if (!payload || payload.to !== currentUser.id) return;
       handleIncomingPm(payload);
+    })
+    .on('broadcast', { event: 'pm-voice-offer' }, ({ payload }) => {
+      handlePmVoiceOffer(payload);
+    })
+    .on('broadcast', { event: 'pm-voice-answer' }, ({ payload }) => {
+      handlePmVoiceAnswer(payload);
+    })
+    .on('broadcast', { event: 'pm-voice-ice' }, ({ payload }) => {
+      handlePmVoiceIce(payload);
+    })
+    .on('broadcast', { event: 'pm-voice-hangup' }, ({ payload }) => {
+      handlePmVoiceHangup(payload);
     })
     .subscribe();
 }
@@ -42,9 +55,19 @@ async function openPrivateChat(userId, username) {
     <div class="pm-header">
       <span class="pm-title">💬 ${escHtml(username || getUsernameById(userId))}</span>
       <div class="pm-header-actions">
+        <button type="button" class="pm-call-btn" title="Start voice call">📞</button>
         <button type="button" class="pm-mute-btn" title="Toggle PM notification sound">${pmMuted[userId] ? '🔇' : '🔊'}</button>
         <button type="button" class="pm-close-btn" title="Close PM">✕</button>
       </div>
+    </div>
+    <div class="pm-call-banner hidden">
+      <span>📞 Incoming call</span>
+      <button type="button" class="pm-call-accept">Accept</button>
+      <button type="button" class="pm-call-decline">Decline</button>
+    </div>
+    <div class="pm-call-active hidden">
+      <span class="pm-call-active-text">📞 In call</span>
+      <button type="button" class="pm-call-end">End Call</button>
     </div>
     <div class="pm-messages"></div>
     <div class="pm-input-row">
@@ -62,6 +85,10 @@ async function openPrivateChat(userId, username) {
   const closeBtn = wrap.querySelector('.pm-close-btn');
   const muteBtn = wrap.querySelector('.pm-mute-btn');
   const recordBtn = wrap.querySelector('.pm-record-btn');
+  const callBtn = wrap.querySelector('.pm-call-btn');
+  const acceptBtn = wrap.querySelector('.pm-call-accept');
+  const declineBtn = wrap.querySelector('.pm-call-decline');
+  const endCallBtn = wrap.querySelector('.pm-call-end');
 
   sendBtn.onclick = () => sendPrivateText(userId);
   input.onkeydown = (e) => {
@@ -75,8 +102,18 @@ async function openPrivateChat(userId, username) {
   };
 
   recordBtn.onclick = () => togglePmRecording(userId);
+  callBtn.onclick = () => startPmVoiceCall(userId);
+  acceptBtn.onclick = () => acceptPmVoiceCall(userId);
+  declineBtn.onclick = () => declinePmVoiceCall(userId);
+  endCallBtn.onclick = () => endPmVoiceCall(userId);
+
+  if (!currentProfile?.is_registered) {
+    recordBtn.style.display = 'none';
+    callBtn.style.display = 'none';
+  }
 
   renderPmTextHistory(userId);
+  updatePmCallUi(userId);
   positionPmWindows();
 
   if (pmTableAvailable !== false) {
@@ -95,6 +132,8 @@ function closePrivateChat(userId) {
   const win = pmWindows[userId];
   if (!win) return;
 
+  endPmVoiceCall(userId, false);
+
   if (pmRecorders[userId]?.state === 'recording') {
     pmRecorders[userId].stop();
   }
@@ -103,6 +142,7 @@ function closePrivateChat(userId) {
   cleanupPmVoiceUrls(userId);
   win.el.remove();
   delete pmWindows[userId];
+  delete pmCallState[userId];
   positionPmWindows();
 }
 
@@ -211,6 +251,11 @@ function renderPmTextHistory(userId) {
 }
 
 async function togglePmRecording(userId) {
+  if (!currentProfile?.is_registered) {
+    alert('Voice notes are available for registered users only.');
+    return;
+  }
+
   const btn = pmWindows[userId]?.el.querySelector('.pm-record-btn');
   if (!btn) return;
 
@@ -257,6 +302,297 @@ async function togglePmRecording(userId) {
   } catch (_) {
     alert('Microphone permission is required to record voice messages.');
   }
+}
+
+function getPmVoiceChannelKey(userId) {
+  const ids = [currentUser?.id || '', userId || ''].sort();
+  return `pm-voice:${ids[0]}:${ids[1]}`;
+}
+
+function ensurePmCallState(userId) {
+  if (!pmCallState[userId]) {
+    pmCallState[userId] = {
+      pc: null,
+      stream: null,
+      state: 'idle',
+      incomingOffer: null,
+      pendingIce: [],
+      remoteAudioEl: null
+    };
+  }
+  return pmCallState[userId];
+}
+
+function updatePmCallUi(userId) {
+  const win = pmWindows[userId]?.el;
+  if (!win) return;
+
+  const state = ensurePmCallState(userId);
+  const incoming = win.querySelector('.pm-call-banner');
+  const active = win.querySelector('.pm-call-active');
+  const activeText = win.querySelector('.pm-call-active-text');
+  const callBtn = win.querySelector('.pm-call-btn');
+
+  incoming?.classList.toggle('hidden', state.state !== 'incoming');
+  active?.classList.toggle('hidden', !(state.state === 'calling' || state.state === 'active'));
+  if (activeText) {
+    activeText.textContent = state.state === 'calling' ? '📞 Calling…' : '📞 In call';
+  }
+  if (callBtn) callBtn.disabled = state.state !== 'idle';
+}
+
+async function updatePmVoicePresence(userId, stateName) {
+  const state = ensurePmCallState(userId);
+  state.state = stateName;
+  updatePmCallUi(userId);
+}
+
+function cleanupPmVoiceCallState(userId) {
+  const state = pmCallState[userId];
+  if (!state) return;
+
+  state.stream?.getTracks().forEach(track => track.stop());
+  state.stream = null;
+
+  if (state.pc) {
+    try { state.pc.close(); } catch (_) {}
+    state.pc = null;
+  }
+
+  if (state.remoteAudioEl) {
+    state.remoteAudioEl.srcObject = null;
+    state.remoteAudioEl.remove();
+    state.remoteAudioEl = null;
+  }
+
+  state.pendingIce = [];
+  state.incomingOffer = null;
+  state.state = 'idle';
+  updatePmCallUi(userId);
+}
+
+function ensurePmRemoteAudio(userId) {
+  const state = ensurePmCallState(userId);
+  if (state.remoteAudioEl) return state.remoteAudioEl;
+  const audio = document.createElement('audio');
+  audio.autoplay = true;
+  audio.playsInline = true;
+  audio.className = 'hidden';
+  document.body.appendChild(audio);
+  state.remoteAudioEl = audio;
+  return audio;
+}
+
+async function createPmPeerConnection(userId) {
+  const state = ensurePmCallState(userId);
+  if (state.pc) return state.pc;
+
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  state.pc = pc;
+
+  pc.onicecandidate = async ({ candidate }) => {
+    if (!candidate || !pmChannel) return;
+    await pmChannel.send({
+      type: 'broadcast',
+      event: 'pm-voice-ice',
+      payload: {
+        from: currentUser.id,
+        to: userId,
+        candidate,
+        callKey: getPmVoiceChannelKey(userId)
+      }
+    });
+  };
+
+  pc.ontrack = ({ streams }) => {
+    const audio = ensurePmRemoteAudio(userId);
+    audio.srcObject = streams[0];
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+      cleanupPmVoiceCallState(userId);
+    }
+  };
+
+  return pc;
+}
+
+async function ensurePmCallLocalStream(userId) {
+  const state = ensurePmCallState(userId);
+  if (state.stream) return state.stream;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  state.stream = stream;
+  return stream;
+}
+
+function applyPendingPmIceCandidates(userId) {
+  const state = ensurePmCallState(userId);
+  if (!state.pc || !state.pc.remoteDescription) return;
+  const queued = [...state.pendingIce];
+  state.pendingIce = [];
+  queued.forEach(async (candidate) => {
+    try { await state.pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
+  });
+}
+
+async function startPmVoiceCall(userId) {
+  if (!currentProfile?.is_registered) {
+    alert('Voice calls are available for registered users only.');
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === 'undefined') {
+    alert('Real-time voice calls are not supported in this browser.');
+    return;
+  }
+  await ensurePmRealtime();
+
+  const state = ensurePmCallState(userId);
+  if (state.state !== 'idle') return;
+
+  try {
+    const stream = await ensurePmCallLocalStream(userId);
+    const pc = await createPmPeerConnection(userId);
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await updatePmVoicePresence(userId, 'calling');
+
+    await pmChannel.send({
+      type: 'broadcast',
+      event: 'pm-voice-offer',
+      payload: {
+        from: currentUser.id,
+        to: userId,
+        sdp: offer,
+        username: currentProfile?.username,
+        callKey: getPmVoiceChannelKey(userId)
+      }
+    });
+  } catch (_) {
+    cleanupPmVoiceCallState(userId);
+    alert('Microphone permission is required to start a voice call.');
+  }
+}
+
+async function acceptPmVoiceCall(userId) {
+  if (!currentProfile?.is_registered) {
+    alert('Voice calls are available for registered users only.');
+    return;
+  }
+  const state = ensurePmCallState(userId);
+  if (!state.incomingOffer) return;
+
+  try {
+    const stream = await ensurePmCallLocalStream(userId);
+    const pc = await createPmPeerConnection(userId);
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    await pc.setRemoteDescription(new RTCSessionDescription(state.incomingOffer));
+    state.incomingOffer = null;
+    applyPendingPmIceCandidates(userId);
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await updatePmVoicePresence(userId, 'active');
+
+    await pmChannel.send({
+      type: 'broadcast',
+      event: 'pm-voice-answer',
+      payload: {
+        from: currentUser.id,
+        to: userId,
+        sdp: answer,
+        callKey: getPmVoiceChannelKey(userId)
+      }
+    });
+  } catch (_) {
+    cleanupPmVoiceCallState(userId);
+    alert('Could not accept voice call.');
+  }
+}
+
+async function declinePmVoiceCall(userId) {
+  const state = ensurePmCallState(userId);
+  state.incomingOffer = null;
+  cleanupPmVoiceCallState(userId);
+  if (!pmChannel) return;
+
+  await pmChannel.send({
+    type: 'broadcast',
+    event: 'pm-voice-hangup',
+    payload: {
+      from: currentUser.id,
+      to: userId,
+      declined: true,
+      callKey: getPmVoiceChannelKey(userId)
+    }
+  });
+}
+
+async function endPmVoiceCall(userId, notifyPeer = true) {
+  const state = ensurePmCallState(userId);
+  const wasInCall = state.state !== 'idle' || !!state.incomingOffer;
+  cleanupPmVoiceCallState(userId);
+  if (!notifyPeer || !pmChannel || !wasInCall) return;
+
+  await pmChannel.send({
+    type: 'broadcast',
+    event: 'pm-voice-hangup',
+    payload: {
+      from: currentUser.id,
+      to: userId,
+      callKey: getPmVoiceChannelKey(userId)
+    }
+  });
+}
+
+async function handlePmVoiceOffer(payload) {
+  if (!payload || payload.to !== currentUser?.id || !currentProfile?.is_registered) return;
+  const fromUserId = payload.from;
+  if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+
+  await openPrivateChat(fromUserId, payload.username || getUsernameById(fromUserId));
+  const state = ensurePmCallState(fromUserId);
+  if (state.state === 'active' || state.state === 'calling') {
+    await declinePmVoiceCall(fromUserId);
+    return;
+  }
+
+  state.incomingOffer = payload.sdp;
+  await updatePmVoicePresence(fromUserId, 'incoming');
+}
+
+async function handlePmVoiceAnswer(payload) {
+  if (!payload || payload.to !== currentUser?.id) return;
+  const fromUserId = payload.from;
+  if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+  const state = ensurePmCallState(fromUserId);
+  if (!state.pc) return;
+
+  await state.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+  applyPendingPmIceCandidates(fromUserId);
+  await updatePmVoicePresence(fromUserId, 'active');
+}
+
+function handlePmVoiceIce(payload) {
+  if (!payload || payload.to !== currentUser?.id || !payload.candidate) return;
+  const fromUserId = payload.from;
+  if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+  const state = ensurePmCallState(fromUserId);
+  if (!state.pc || !state.pc.remoteDescription) {
+    state.pendingIce.push(payload.candidate);
+    return;
+  }
+  state.pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+}
+
+function handlePmVoiceHangup(payload) {
+  if (!payload || payload.to !== currentUser?.id) return;
+  const fromUserId = payload.from;
+  if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+  cleanupPmVoiceCallState(fromUserId);
 }
 
 function trackPmVoiceUrl(userId, url) {
