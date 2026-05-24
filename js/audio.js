@@ -1,17 +1,16 @@
 let localStream = null;
-let peers = {};
-let peerStreams = {};
-let peerAudioEls = {};
-let peerMuted = {};
-let audioChannel = null;
+let peers = Object.create(null);
+let peerStreams = Object.create(null);
+let peerAudioEls = Object.create(null);
+let peerMuted = Object.create(null);
 let isMuted = false;
 let inVoice = false;
 let isCameraOn = false;
 
 let audioCtx = null;
-let analyserNodes = {};
-let analyserData = {};
-let participantLevels = {};
+let analyserNodes = Object.create(null);
+let analyserData = Object.create(null);
+let participantLevels = Object.create(null);
 let visualizerFrame = null;
 let floatingCameraPeerId = null;
 
@@ -37,7 +36,7 @@ async function joinVoice() {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       isCameraOn = false;
       alert('Camera access denied. Joined in audio-only mode.');
-    } catch (audioErr) {
+    } catch (_) {
       alert('Microphone access denied. Please allow microphone in your browser settings.');
       return;
     }
@@ -64,57 +63,33 @@ async function joinVoice() {
     await setLocalCameraState(isCameraOn);
   }
 
-  audioChannel = sbClient.channel('voice:' + currentRoom.id);
-
-  audioChannel
-    .on('broadcast', { event: 'offer' }, ({ payload }) => handleOffer(payload))
-    .on('broadcast', { event: 'answer' }, ({ payload }) => handleAnswer(payload))
-    .on('broadcast', { event: 'ice' }, ({ payload }) => handleIce(payload))
-    .on('broadcast', { event: 'join' }, ({ payload }) => handlePeerJoin(payload))
-    .on('broadcast', { event: 'leave' }, ({ payload }) => handlePeerLeave(payload))
-    .on('broadcast', { event: 'camera-state' }, ({ payload }) => handleCameraState(payload))
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await audioChannel.send({
-          type: 'broadcast',
-          event: 'join',
-          payload: {
-            from: currentUser.id,
-            username: currentProfile.username,
-            cameraOn: isCameraOn
-          }
-        });
-        await broadcastCameraState();
-      }
-    });
+  sendToRoom({
+    type: 'join_voice',
+    from: currentUser.id,
+    username: currentProfile?.username,
+    cameraOn: isCameraOn
+  });
+  await broadcastCameraState();
 }
 
 async function leaveVoice() {
   if (!inVoice) return;
   inVoice = false;
 
-  if (audioChannel) {
-    await audioChannel.send({
-      type: 'broadcast',
-      event: 'leave',
-      payload: { from: currentUser.id }
-    });
-    sbClient.removeChannel(audioChannel);
-    audioChannel = null;
-  }
+  sendToRoom({ type: 'leave_voice', from: currentUser.id });
 
-  localStream?.getTracks().forEach(t => t.stop());
+  localStream?.getTracks().forEach((t) => t.stop());
   localStream = null;
 
   Object.entries(peers).forEach(([peerId, pc]) => {
     try { pc.close(); } catch (_) {}
     cleanupPeerMedia(peerId);
   });
-  peers = {};
+  peers = Object.create(null);
 
   closeFloatingCamera();
   clearAllVisualizers();
-  participantLevels = {};
+  participantLevels = Object.create(null);
 
   document.getElementById('video-grid').innerHTML = '';
   document.getElementById('video-grid').classList.add('hidden');
@@ -132,9 +107,7 @@ async function leaveVoice() {
   isMuted = false;
   isCameraOn = false;
 
-  if (typeof setLocalCameraState === 'function') {
-    await setLocalCameraState(false);
-  }
+  if (typeof setLocalCameraState === 'function') await setLocalCameraState(false);
 }
 
 function toggleMute() {
@@ -157,27 +130,23 @@ async function toggleCamera() {
       localStream.addTrack(videoTrack);
       attachVideoTrackToPeers(videoTrack);
       isCameraOn = true;
-    } catch (e) {
+    } catch (_) {
       alert('Camera access denied. Please allow camera in your browser settings.');
       return;
     }
   } else {
     isCameraOn = !isCameraOn;
-    localStream.getVideoTracks().forEach(track => {
-      track.enabled = isCameraOn;
-    });
+    localStream.getVideoTracks().forEach((track) => { track.enabled = isCameraOn; });
   }
 
   updateVideoButtons();
   updateLocalPreview();
-  if (typeof setLocalCameraState === 'function') {
-    await setLocalCameraState(isCameraOn);
-  }
+  if (typeof setLocalCameraState === 'function') await setLocalCameraState(isCameraOn);
   await broadcastCameraState();
 }
 
 async function handlePeerJoin({ from, username, cameraOn }) {
-  if (from === currentUser.id || peers[from]) return;
+  if (!inVoice || from === currentUser.id || peers[from]) return;
   addPeerTag(from, username);
   updatePeerCameraIcon(from, !!cameraOn);
   if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
@@ -188,15 +157,18 @@ async function handlePeerJoin({ from, username, cameraOn }) {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  await audioChannel.send({
-    type: 'broadcast',
-    event: 'offer',
-    payload: { from: currentUser.id, to: from, sdp: offer, username: currentProfile.username, cameraOn: isCameraOn }
+  sendToRoom({
+    type: 'offer',
+    from: currentUser.id,
+    to: from,
+    sdp: offer,
+    username: currentProfile?.username,
+    cameraOn: isCameraOn
   });
 }
 
 async function handleOffer({ from, to, sdp, username, cameraOn }) {
-  if (to !== currentUser.id) return;
+  if (!inVoice || to !== currentUser.id) return;
   addPeerTag(from, username);
   updatePeerCameraIcon(from, !!cameraOn);
   if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
@@ -208,20 +180,16 @@ async function handleOffer({ from, to, sdp, username, cameraOn }) {
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
 
-  await audioChannel.send({
-    type: 'broadcast',
-    event: 'answer',
-    payload: { from: currentUser.id, to: from, sdp: answer }
-  });
+  sendToRoom({ type: 'answer', from: currentUser.id, to: from, sdp: answer });
 }
 
 async function handleAnswer({ from, to, sdp }) {
-  if (to !== currentUser.id || !peers[from]) return;
+  if (!inVoice || to !== currentUser.id || !peers[from]) return;
   await peers[from].setRemoteDescription(new RTCSessionDescription(sdp));
 }
 
 async function handleIce({ from, to, candidate }) {
-  if (to !== currentUser.id || !peers[from]) return;
+  if (!inVoice || to !== currentUser.id || !peers[from]) return;
   try { await peers[from].addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
 }
 
@@ -253,26 +221,18 @@ function handlePeerLeave({ from }) {
 function createPeerConnection(peerId, username) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
 
-  localStream?.getTracks().forEach(track => {
-    pc.addTrack(track, localStream);
-  });
+  localStream?.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
-  pc.onicecandidate = async ({ candidate }) => {
-    if (!candidate || !audioChannel) return;
-    await audioChannel.send({
-      type: 'broadcast',
-      event: 'ice',
-      payload: { from: currentUser.id, to: peerId, candidate }
-    });
+  pc.onicecandidate = ({ candidate }) => {
+    if (!candidate) return;
+    sendToRoom({ type: 'ice', from: currentUser.id, to: peerId, candidate });
   };
 
   pc.ontrack = ({ streams }) => {
     const stream = streams[0];
     peerStreams[peerId] = stream;
     const videoEl = ensurePeerTile(peerId, username);
-    if (videoEl.srcObject !== stream) {
-      videoEl.srcObject = stream;
-    }
+    if (videoEl.srcObject !== stream) videoEl.srcObject = stream;
     ensurePeerAudioElement(peerId, stream);
     attachAnalyserForStream(peerId, stream);
   };
@@ -324,17 +284,37 @@ function addPeerTag(peerId, username) {
   const tag = document.createElement('div');
   tag.className = 'peer-tag';
   tag.id = 'peer-' + peerId;
-  tag.innerHTML = `
-    <span class="peer-name">🎙 ${escHtml(username || 'User')}</span>
-    <canvas class="peer-soundbar mini-soundbar" data-user-id="${peerId}" width="32" height="10" aria-hidden="true"></canvas>
-    <button type="button" class="peer-camera-btn hidden" data-peer-id="${peerId}" title="View camera">📷</button>
-    <button type="button" class="peer-mute-btn" data-peer-id="${peerId}" title="Mute/Unmute peer">🔇</button>
-  `;
 
-  tag.querySelector('.peer-mute-btn')?.addEventListener('click', () => togglePeerMute(peerId));
-  tag.querySelector('.peer-camera-btn')?.addEventListener('click', () => {
+  const name = document.createElement('span');
+  name.className = 'peer-name';
+  name.textContent = `🎙 ${username || 'User'}`;
+
+  const meter = document.createElement('canvas');
+  meter.className = 'peer-soundbar mini-soundbar';
+  meter.dataset.userId = peerId;
+  meter.width = 32;
+  meter.height = 10;
+  meter.setAttribute('aria-hidden', 'true');
+
+  const cameraBtn = document.createElement('button');
+  cameraBtn.type = 'button';
+  cameraBtn.className = 'peer-camera-btn hidden';
+  cameraBtn.dataset.peerId = peerId;
+  cameraBtn.title = 'View camera';
+  cameraBtn.textContent = '📷';
+  cameraBtn.addEventListener('click', () => {
     openFloatingCamera(peerId, username || getUsernameById(peerId));
   });
+
+  const muteBtn = document.createElement('button');
+  muteBtn.type = 'button';
+  muteBtn.className = 'peer-mute-btn';
+  muteBtn.dataset.peerId = peerId;
+  muteBtn.title = 'Mute/Unmute peer';
+  muteBtn.textContent = '🔇';
+  muteBtn.addEventListener('click', () => togglePeerMute(peerId));
+
+  tag.append(name, meter, cameraBtn, muteBtn);
 
   document.getElementById('peers-list').appendChild(tag);
 }
@@ -391,9 +371,7 @@ function updateLocalPreview() {
     localVideo.classList.add('hidden');
   }
 
-  if (inVoice) {
-    document.getElementById('video-grid').classList.remove('hidden');
-  }
+  if (inVoice) document.getElementById('video-grid').classList.remove('hidden');
 }
 
 function updateVideoButtons() {
@@ -402,19 +380,15 @@ function updateVideoButtons() {
 
 function attachVideoTrackToPeers(videoTrack) {
   Object.values(peers).forEach((pc) => {
-    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+    const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
     if (sender) sender.replaceTrack(videoTrack);
     else pc.addTrack(videoTrack, localStream);
   });
 }
 
 async function broadcastCameraState() {
-  if (!audioChannel || !inVoice) return;
-  await audioChannel.send({
-    type: 'broadcast',
-    event: 'camera-state',
-    payload: { from: currentUser.id, cameraOn: isCameraOn }
-  });
+  if (!inVoice) return;
+  sendToRoom({ type: 'camera_state', from: currentUser.id, cameraOn: isCameraOn });
 }
 
 function ensureAudioContext() {
@@ -422,9 +396,7 @@ function ensureAudioContext() {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     audioCtx = AudioCtx ? new AudioCtx() : null;
   }
-  if (audioCtx?.state === 'suspended') {
-    audioCtx.resume().catch(() => {});
-  }
+  if (audioCtx?.state === 'suspended') audioCtx.resume().catch(() => {});
   return audioCtx;
 }
 
@@ -490,8 +462,7 @@ function drawMainVisualizer() {
 }
 
 function drawMiniSoundbars() {
-  const bars = document.querySelectorAll('.mini-soundbar');
-  bars.forEach((canvas) => {
+  document.querySelectorAll('.mini-soundbar').forEach((canvas) => {
     const userId = canvas.dataset.userId;
     const level = participantLevels[userId] || 0;
     const ctx = canvas.getContext('2d');

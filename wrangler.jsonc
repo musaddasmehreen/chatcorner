@@ -1,12 +1,27 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chatcorner",
+  "main": "worker/index.js",
   "compatibility_date": "2026-05-23",
-  "observability": {
-    "enabled": true
-  },
+  "observability": { "enabled": true },
   "assets": {
     "directory": ".",
     "not_found_handling": "single-page-application"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "chatcorner-db",
+      "database_id": "bd90fbd2-3cfa-4791-8329-ad7f0ba4a0be"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "CHAT_ROOM", "class_name": "ChatRoom" },
+      { "name": "PM_HUB", "class_name": "PmHub" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ChatRoom", "PmHub"] }
+  ]
 }

@@ -1,5 +1,5 @@
-const SUPABASE_URL  = 'https://zefcqrnhaeounzdmjscc.supabase.co';
-const SUPABASE_ANON = 'sb_publishable_eK7zh_aQUiFstC0xwqg3JQ_wWSt4S8M';
+// Cloudflare backend config
+const API_BASE = '';
 
 const ICE_SERVERS = {
   iceServers: [
@@ -24,5 +24,13 @@ const ICE_SERVERS = {
   ]
 };
 
-window.sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-const sbClient = window.sbClient;
+function getToken() { return localStorage.getItem('cc_token'); }
+function setToken(t) { localStorage.setItem('cc_token', t); }
+function clearToken() { localStorage.removeItem('cc_token'); }
+
+async function apiFetch(path, options = {}) {
+  const token = getToken();
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  return fetch(API_BASE + path, { ...options, headers });
+}

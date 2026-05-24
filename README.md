@@ -1,32 +1,46 @@
-# ChatCorner
+# ChatCorner (Cloudflare-only)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+ChatCorner runs entirely on Cloudflare Workers (Assets + API + Durable Objects + D1 + KV).
 
-ChatCorner is a realtime chat application built with JavaScript, HTML, and CSS.
+## Quick setup (automated)
 
-## Tech Stack
+Run the setup script from the repository root:
 
-- JavaScript
-- HTML
-- CSS
+```bash
+./setup-cloudflare.sh
+```
 
-## Features
+The script logs into Wrangler, creates D1/KV resources, patches `wrangler.jsonc` with real IDs, sets `JWT_SECRET`, applies `schema.sql`, and deploys.
 
-- User login/register and guest access
-- Room-based text chat
-- Online users list
-- Voice and video room support (guests and registered users)
+## Setup (manual)
 
-## How to Run
-
-1. Clone this repository.
-2. Open `index.html` in your browser (or serve the project with any static file server).
-3. Start chatting in ChatCorner.
-
-## Topics
-
-Recommended repository topics: `chat`, `javascript`, `html`, `css`, `realtime`.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
+1. Install Wrangler:
+   ```bash
+   npm install -g wrangler
+   ```
+2. Login:
+   ```bash
+   wrangler login
+   ```
+3. Create D1:
+   ```bash
+   wrangler d1 create chatcorner-db
+   ```
+   Copy the returned `database_id` into `/home/runner/work/chatcorner/chatcorner/wrangler.jsonc`.
+4. Create KV:
+   ```bash
+   wrangler kv:namespace create KV
+   ```
+   Copy the returned namespace IDs into `/home/runner/work/chatcorner/chatcorner/wrangler.jsonc`.
+5. Run migrations/schema:
+   ```bash
+   wrangler d1 execute chatcorner-db --file=schema.sql
+   ```
+6. Set JWT secret:
+   ```bash
+   wrangler secret put JWT_SECRET
+   ```
+7. Deploy:
+   ```bash
+   wrangler deploy
+   ```
