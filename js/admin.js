@@ -61,6 +61,13 @@ let logsPage = 1;
 let loadingCount = 0;
 let statsRefreshTimer = null;
 const AUTH_INIT_TIMEOUT_MS = 10000;
+const LOG_PAGE_SIZE = 50;
+const STATS_CACHE_TTL_MS = 5000;
+const ANALYTICS_CACHE_TTL_MS = 10000;
+const ANALYTICS_QUERY_LIMIT = 1000;
+const LOG_MESSAGES_QUERY_LIMIT = 1000;
+let statsCacheUntil = 0;
+let analyticsCacheUntil = 0;
 
 const settingsDefaults = {
   allow_guest_login: 'true',
@@ -90,6 +97,8 @@ function resetAdminContext() {
   authInitialized = false;
   adminUser = null;
   adminProfile = null;
+  statsCacheUntil = 0;
+  analyticsCacheUntil = 0;
   if (statsRefreshTimer) {
     clearInterval(statsRefreshTimer);
     statsRefreshTimer = null;
@@ -114,8 +123,8 @@ function withTimeout(promise, timeoutMs, label) {
 
 function bindUI() {
   document.getElementById('admin-logout').addEventListener('click', adminLogout);
-  document.getElementById('refresh-stats').addEventListener('click', loadStats);
-  document.getElementById('refresh-analytics').addEventListener('click', loadAnalytics);
+  document.getElementById('refresh-stats').addEventListener('click', () => loadStats(true));
+  document.getElementById('refresh-analytics').addEventListener('click', () => loadAnalytics(true));
 
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => switchPanel(btn.dataset.panel));
@@ -292,8 +301,9 @@ async function safeCount(queryBuilder) {
   return count || 0;
 }
 
-async function loadStats() {
+async function loadStats(forceRefresh = false) {
   if (!ensureAdminContext()) return;
+  if (!forceRefresh && Date.now() < statsCacheUntil) return;
   const statsGrid = document.getElementById('stats-grid');
   showLoading(true);
   try {
@@ -301,12 +311,12 @@ async function loadStats() {
     todayStart.setHours(0, 0, 0, 0);
 
     const [totalUsers, registeredUsers, guestUsers, totalRooms, totalMessages, todayMessages, onlineUsers] = await Promise.all([
-      safeCount(sbClient.from('profiles').select('*', { count: 'exact', head: true })),
-      safeCount(sbClient.from('profiles').select('*', { count: 'exact', head: true }).eq('is_registered', true)),
-      safeCount(sbClient.from('profiles').select('*', { count: 'exact', head: true }).eq('is_registered', false)),
-      safeCount(sbClient.from('rooms').select('*', { count: 'exact', head: true })),
-      safeCount(sbClient.from('messages').select('*', { count: 'exact', head: true })),
-      safeCount(sbClient.from('messages').select('*', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString())),
+      safeCount(sbClient.from('profiles').select('id', { count: 'exact', head: true })),
+      safeCount(sbClient.from('profiles').select('id', { count: 'exact', head: true }).eq('is_registered', true)),
+      safeCount(sbClient.from('profiles').select('id', { count: 'exact', head: true }).eq('is_registered', false)),
+      safeCount(sbClient.from('rooms').select('id', { count: 'exact', head: true })),
+      safeCount(sbClient.from('messages').select('id', { count: 'exact', head: true })),
+      safeCount(sbClient.from('messages').select('id', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString())),
       getOnlineUserEstimate()
     ]);
 
@@ -326,6 +336,7 @@ async function loadStats() {
         <div class="stat-value">${c.value}</div>
       </div>
     `).join('');
+    statsCacheUntil = Date.now() + STATS_CACHE_TTL_MS;
   } catch (_) {
     statsGrid.innerHTML = '<div class="card">Could not load stats right now.</div>';
     toast('Failed to load overview stats.', 'error');
@@ -472,7 +483,7 @@ async function deleteRoom(roomId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('Room deleted successfully.');
-  await Promise.all([loadRooms(), loadMessages(), loadStats()]);
+  await Promise.all([loadRooms(), loadMessages(), loadStats(true)]);
 }
 
 function closeRoomModal() {
@@ -519,7 +530,12 @@ async function loadMessages() {
   }
 
   showLoading(true);
-  const { data, error } = await sbClient.from('messages').select('*').eq('room_id', roomId).order('created_at', { ascending: false });
+  const { data, error } = await sbClient
+    .from('messages')
+    .select('id,created_at,username,content,user_id,room_id')
+    .eq('room_id', roomId)
+    .order('created_at', { ascending: false })
+    .limit(LOG_MESSAGES_QUERY_LIMIT);
   showLoading(false);
   if (error) {
     messageCache = [];
@@ -546,7 +562,7 @@ function renderLogsTable() {
     return;
   }
 
-  const pageSize = 50;
+  const pageSize = LOG_PAGE_SIZE;
   const totalPages = Math.ceil(filtered.length / pageSize);
   logsPage = Math.min(logsPage, totalPages);
   const start = (logsPage - 1) * pageSize;
@@ -581,7 +597,7 @@ function renderLogsTable() {
   next.disabled = logsPage === totalPages;
   next.onclick = () => { logsPage += 1; renderLogsTable(); };
   const info = document.createElement('span');
-  info.textContent = `Page ${logsPage} / ${totalPages} (${filtered.length} messages)`;
+  info.textContent = `Page ${logsPage} / ${totalPages} (${filtered.length} messages${messageCache.length >= LOG_MESSAGES_QUERY_LIMIT ? `, latest ${LOG_MESSAGES_QUERY_LIMIT} loaded` : ''})`;
   pagination.append(prev, info, next);
 }
 
@@ -592,7 +608,7 @@ async function deleteMessage(messageId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('Message deleted successfully.');
-  await Promise.all([loadMessages(), loadStats(), loadAnalytics()]);
+  await Promise.all([loadMessages(), loadStats(true), loadAnalytics(true)]);
 }
 
 async function banFromMessage(userId, username) {
@@ -713,7 +729,7 @@ async function setUserBan(userId, banned, reason = '', durationHours = null) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast(`User ${banned ? 'banned' : 'unbanned'} successfully.`);
-  await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
+  await Promise.all([loadUsers(), loadBannedUsers(), loadStats(true)]);
 }
 
 async function toggleBan(userId) {
@@ -739,7 +755,7 @@ async function deleteUser(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('User profile deleted.');
-  await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
+  await Promise.all([loadUsers(), loadBannedUsers(), loadStats(true)]);
 }
 
 async function promoteToAdmin(userId) {
@@ -749,7 +765,7 @@ async function promoteToAdmin(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('User promoted to admin.');
-  await Promise.all([loadUsers(), loadStats()]);
+  await Promise.all([loadUsers(), loadStats(true)]);
 }
 
 async function makeMod(userId) {
@@ -759,7 +775,7 @@ async function makeMod(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('User is now a moderator.');
-  await Promise.all([loadUsers(), loadStats()]);
+  await Promise.all([loadUsers(), loadStats(true)]);
 }
 
 async function demoteUser(userId) {
@@ -769,7 +785,7 @@ async function demoteUser(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('User role removed.');
-  await Promise.all([loadUsers(), loadStats()]);
+  await Promise.all([loadUsers(), loadStats(true)]);
 }
 
 async function kickUser(userId) {
@@ -854,7 +870,7 @@ async function runBulkAction() {
   }
 
   document.getElementById('users-select-all').checked = false;
-  await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
+  await Promise.all([loadUsers(), loadBannedUsers(), loadStats(true)]);
 }
 
 async function loadBannedUsers() {
@@ -916,7 +932,7 @@ async function manualBanSubmit(event) {
   document.getElementById('manual-ban-reason').value = '';
   document.getElementById('manual-ban-duration').value = 'lifetime';
   toast('User banned successfully.');
-  await Promise.all([loadUsers(), loadBannedUsers(), loadStats()]);
+  await Promise.all([loadUsers(), loadBannedUsers(), loadStats(true)]);
 }
 
 function updateBroadcastPreview() {
@@ -970,7 +986,7 @@ async function sendBroadcast() {
   document.getElementById('broadcast-message').value = '';
   updateBroadcastPreview();
   toast('Broadcast sent successfully.');
-  await Promise.all([loadBroadcastHistory(), loadStats()]);
+  await Promise.all([loadBroadcastHistory(), loadStats(true)]);
 }
 
 async function loadBroadcastHistory() {
@@ -1023,9 +1039,11 @@ async function saveSettings() {
   toast('Settings saved successfully.');
 }
 
-async function loadAnalytics() {
+async function loadAnalytics(forceRefresh = false) {
   if (!ensureAdminContext()) return;
+  if (!forceRefresh && Date.now() < analyticsCacheUntil) return;
   await Promise.all([renderMessagesPerDay(), renderUsersPerDay(), renderTopRooms(), renderTopUsers()]);
+  analyticsCacheUntil = Date.now() + ANALYTICS_CACHE_TTL_MS;
 }
 
 function last7DayLabels() {
@@ -1055,7 +1073,12 @@ function renderBars(containerId, series) {
 
 async function renderMessagesPerDay() {
   const labels = last7DayLabels();
-  const { data, error } = await sbClient.from('messages').select('created_at').gte('created_at', labels[0] + 'T00:00:00.000Z');
+  const { data, error } = await sbClient
+    .from('messages')
+    .select('created_at')
+    .gte('created_at', labels[0] + 'T00:00:00.000Z')
+    .order('created_at', { ascending: false })
+    .limit(ANALYTICS_QUERY_LIMIT);
   if (error) {
     document.getElementById('chart-messages').innerHTML = '<div>Could not load message analytics.</div>';
     return;
@@ -1070,7 +1093,12 @@ async function renderMessagesPerDay() {
 
 async function renderUsersPerDay() {
   const labels = last7DayLabels();
-  const { data, error } = await sbClient.from('profiles').select('created_at').gte('created_at', labels[0] + 'T00:00:00.000Z');
+  const { data, error } = await sbClient
+    .from('profiles')
+    .select('created_at')
+    .gte('created_at', labels[0] + 'T00:00:00.000Z')
+    .order('created_at', { ascending: false })
+    .limit(ANALYTICS_QUERY_LIMIT);
   if (error) {
     document.getElementById('chart-users').innerHTML = '<div>Could not load user analytics.</div>';
     return;
@@ -1085,7 +1113,13 @@ async function renderUsersPerDay() {
 
 async function renderTopRooms() {
   const target = document.getElementById('top-rooms');
-  const { data, error } = await sbClient.from('messages').select('room_id');
+  const labels = last7DayLabels();
+  const { data, error } = await sbClient
+    .from('messages')
+    .select('room_id')
+    .gte('created_at', labels[0] + 'T00:00:00.000Z')
+    .order('created_at', { ascending: false })
+    .limit(ANALYTICS_QUERY_LIMIT);
   if (error) {
     target.innerHTML = '<li>Could not load active rooms.</li>';
     return;
@@ -1105,7 +1139,13 @@ async function renderTopRooms() {
 
 async function renderTopUsers() {
   const target = document.getElementById('top-users');
-  const { data, error } = await sbClient.from('messages').select('user_id,username');
+  const labels = last7DayLabels();
+  const { data, error } = await sbClient
+    .from('messages')
+    .select('user_id,username')
+    .gte('created_at', labels[0] + 'T00:00:00.000Z')
+    .order('created_at', { ascending: false })
+    .limit(ANALYTICS_QUERY_LIMIT);
   if (error) {
     target.innerHTML = '<li>Could not load active users.</li>';
     return;
