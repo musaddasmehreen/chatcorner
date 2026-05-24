@@ -22,6 +22,6 @@
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_classes": ["ChatRoom", "PmHub"] }
+    { "tag": "v1", "new_sqlite_classes": ["ChatRoom", "PmHub"] }
   ]
 }
