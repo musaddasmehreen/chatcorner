@@ -3,6 +3,7 @@ const pmMuted = {};
 const pmTextHistory = {};
 const pmVoiceUrls = {};
 const pmRecorders = {};
+const pmRecordingTimers = {};
 const pmCallState = {};
 let pmChannel = null;
 let pmTableAvailable = null;
@@ -42,6 +43,10 @@ async function openPrivateChat(userId, username) {
 
   if (pmWindows[userId]) {
     focusPmWindow(userId);
+    return;
+  }
+  if (typeof rateLimit === 'function' && !rateLimit('open-pm:' + currentUser.id, 10, 60000)) {
+    appendSystemMessage?.('⚠️ Slow down! Too many private chat windows opened in a short time.');
     return;
   }
 
@@ -137,6 +142,8 @@ function closePrivateChat(userId) {
   if (pmRecorders[userId]?.state === 'recording') {
     pmRecorders[userId].stop();
   }
+  clearTimeout(pmRecordingTimers[userId]);
+  delete pmRecordingTimers[userId];
   delete pmRecorders[userId];
 
   cleanupPmVoiceUrls(userId);
@@ -190,6 +197,7 @@ async function handleIncomingPm(payload) {
   await openPrivateChat(fromUserId, username);
 
   if (payload.type === 'voice' && payload.voiceDataUrl) {
+    if (!currentProfile?.is_registered) return;
     const blob = dataUrlToBlob(payload.voiceDataUrl);
     const url = URL.createObjectURL(blob);
     appendPmVoiceMessage(fromUserId, { from: fromUserId, audioUrl: url }, false);
@@ -236,6 +244,14 @@ function appendPmVoiceMessage(userId, msg, isMe) {
     <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
   `;
 
+  const audio = row.querySelector('audio');
+  if (audio) {
+    audio.onended = () => {
+      if (msg.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(msg.audioUrl);
+      row.remove();
+    };
+  }
+
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
 }
@@ -275,12 +291,17 @@ async function togglePmRecording(userId) {
     const chunks = [];
     const mediaRecorder = new MediaRecorder(stream);
     pmRecorders[userId] = mediaRecorder;
+    pmRecordingTimers[userId] = setTimeout(() => {
+      if (mediaRecorder.state === 'recording') mediaRecorder.stop();
+    }, 300000);
 
     mediaRecorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) chunks.push(e.data);
     };
 
     mediaRecorder.onstop = async () => {
+      clearTimeout(pmRecordingTimers[userId]);
+      delete pmRecordingTimers[userId];
       btn.classList.remove('recording');
       btn.textContent = '🎙️';
       stream.getTracks().forEach(t => t.stop());

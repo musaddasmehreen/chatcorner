@@ -16,8 +16,8 @@
     </div>
 
     <form id="admin-login-form" class="auth-form active" onsubmit="event.preventDefault(); adminLogin();">
-      <label class="field-label" for="admin-email">Admin Email</label>
-      <input type="email" id="admin-email" placeholder="name@example.com" autocomplete="email" required />
+      <label class="field-label" for="admin-email">Email or Username</label>
+      <input type="text" id="admin-email" placeholder="Email or Username" autocomplete="username" required />
 
       <label class="field-label" for="admin-password">Password</label>
       <input type="password" id="admin-password" placeholder="Enter your password" autocomplete="current-password" required />
@@ -60,21 +60,45 @@
     }
 
     async function adminLogin() {
-      const email = document.getElementById('admin-email').value.trim();
+      const identifier = document.getElementById('admin-email').value.trim();
       const password = document.getElementById('admin-password').value;
       const btn = document.getElementById('admin-login-btn');
 
-      if (!email || !password) {
-        setAdminMsg('Please fill in both email and password.', 'error');
+      if (!identifier || !password) {
+        setAdminMsg('Please fill in both username/email and password.', 'error');
         return;
       }
 
       btn.disabled = true;
       setAdminMsg('Signing in…', '');
 
+      let email = identifier;
+      const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+      if (!looksLikeEmail) {
+        const { data: profile, error: lookupError } = await sbClient
+          .from('profiles')
+          .select('email')
+          .eq('username', identifier)
+          .maybeSingle();
+
+        if (lookupError) {
+          setAdminMsg(lookupError.message || 'Could not verify that username.', 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        if (!profile?.email) {
+          setAdminMsg('Username not found or no email is linked to that profile.', 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        email = profile.email;
+      }
+
       const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
       if (error || !data?.user) {
-        setAdminMsg(error?.message || 'Login failed. Please try again.', 'error');
+        setAdminMsg(error?.message || 'Login failed. Please check your credentials and try again.', 'error');
         btn.disabled = false;
         return;
       }

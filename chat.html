@@ -148,6 +148,8 @@
           <button class="emoji-btn" title="Dog" onclick="insertEmoji('🐶')">🐶</button>
         </div>
         <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
+        <button class="btn-voice-note" id="btn-voice-note" onclick="toggleRoomVoiceNote()" title="Voice Note">🎙️</button>
+        <span id="voice-note-timer" class="voice-note-timer hidden" aria-live="polite"></span>
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>
         <button class="btn-send" onclick="sendMessage()">Send</button>
