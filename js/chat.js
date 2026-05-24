@@ -83,6 +83,20 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   currentProfile = prof;
+
+  // FIX 5I — Kick check: disable input if user is currently kicked
+  if (currentProfile.kicked_until && new Date(currentProfile.kicked_until) > new Date()) {
+    const kickMsg = document.createElement('div');
+    kickMsg.className = 'msg-system';
+    kickMsg.textContent = 'You have been kicked. Access restored at ' + new Date(currentProfile.kicked_until).toLocaleTimeString();
+    const msgEl = document.getElementById('messages');
+    if (msgEl) msgEl.prepend(kickMsg);
+    const inp = document.getElementById('msg-input');
+    if (inp) { inp.disabled = true; inp.placeholder = 'Kicked — access restricted.'; }
+    const sb = document.querySelector('.btn-send');
+    if (sb) sb.disabled = true;
+  }
+
   presenceBaseData = {
     userId: currentUser.id,
     username: currentProfile.username,
@@ -233,9 +247,29 @@ async function enterRoom(room) {
     });
 
   appendSystemMessage(`You joined #${room.name}`);
+
+  // FIX 1 — Apply guest UI restrictions after all room setup
+  if (!currentProfile?.is_registered) applyGuestUI();
+}
+
+// FIX 1 — Disable input controls and show notice bar for guest users
+function applyGuestUI() {
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn  = document.querySelector('.btn-send');
+  const emojiBar = document.getElementById('emoji-bar');
+  const vnBtn    = document.getElementById('btn-voice-note');
+  const guestBar = document.getElementById('guest-notice-bar');
+  if (msgInput) { msgInput.disabled = true; msgInput.placeholder = 'Register to send messages…'; }
+  if (sendBtn)  { sendBtn.disabled  = true; }
+  if (emojiBar) { emojiBar.style.display = 'none'; }
+  if (vnBtn)    { vnBtn.style.display    = 'none'; }
+  if (guestBar) { guestBar.style.display = 'flex'; }
+  document.body.classList.add('guest-mode');
 }
 
 async function sendMessage() {
+  // FIX 1 — Block guests from sending messages
+  if (!currentProfile?.is_registered) { return; }
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   if (!text || !currentRoom) return;
@@ -261,6 +295,26 @@ function buildMessageNode(msg) {
     const div = document.createElement('div');
     div.className = 'msg-system';
     div.textContent = '\u2014 ' + msg.content + ' \u2014';
+    return div;
+  }
+
+  // FIX 2 — Voice note messages: show locked placeholder for guests
+  if (msg.type === 'voice') {
+    const isMe  = msg.user_id === currentUser?.id;
+    const div   = document.createElement('div');
+    div.className = 'msg-row' + (isMe ? ' self' : '');
+    const initial = (msg.username || '?')[0].toUpperCase();
+    const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+    const audioHtml = currentProfile?.is_registered
+      ? `<audio controls src="${escHtml(msg.content)}"></audio>`
+      : '<span class="vn-locked">\uD83D\uDD12 Register to hear voice notes</span>';
+    div.innerHTML = `
+      <div class="avatar" style="background:${color}">${initial}</div>
+      <div class="msg-bubble">
+        <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
+        ${audioHtml}
+        <div class="msg-time">${formatTime(msg.created_at)}</div>
+      </div>`;
     return div;
   }
 
@@ -317,13 +371,56 @@ function renderUserList() {
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
     `;
+
+    // FIX 4 — Guests see "Register to DM" instead of opening private chat
     li.querySelector('.user-name-btn')?.addEventListener('click', () => {
+      if (!currentProfile?.is_registered) {
+        alert('Register to send private messages.');
+        return;
+      }
       if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
     });
+
     li.querySelector('.camera-user-btn')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (typeof openFloatingCamera === 'function') openFloatingCamera(u.userId, u.username);
     });
+
+    // FIX 5H — Kick/ban buttons for admins and mods (not on self)
+    if ((currentProfile?.is_admin || currentProfile?.is_mod) && u.userId !== currentUser?.id) {
+      const kickBtn = document.createElement('button');
+      kickBtn.type = 'button';
+      kickBtn.className = 'btn-mod-kick';
+      kickBtn.title = 'Kick (30 min)';
+      kickBtn.textContent = '\u26A1';
+      kickBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        if (!confirm('Kick ' + u.username + ' for 30 minutes?')) return;
+        await sbClient.from('profiles').update({ kicked_until: new Date(Date.now() + 1800000).toISOString() }).eq('id', u.userId);
+      });
+
+      const banBtn = document.createElement('button');
+      banBtn.type = 'button';
+      banBtn.className = 'btn-mod-ban';
+      banBtn.title = 'Ban user';
+      banBtn.textContent = '\uD83D\uDEAB';
+      banBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const hStr = prompt('Ban ' + u.username + '?\nDuration in hours (0 = lifetime):', '0');
+        if (hStr === null) return;
+        const h = parseInt(hStr);
+        await sbClient.from('profiles').update({
+          is_banned: true,
+          banned_at: new Date().toISOString(),
+          ban_reason: 'Banned in chat',
+          ban_expires_at: h > 0 ? new Date(Date.now() + h * 3600000).toISOString() : null
+        }).eq('id', u.userId);
+      });
+
+      li.appendChild(kickBtn);
+      li.appendChild(banBtn);
+    }
+
     frag.appendChild(li);
   });
 

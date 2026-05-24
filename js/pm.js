@@ -227,11 +227,16 @@ function appendPmVoiceMessage(userId, msg, isMe) {
   const box = getPmMessagesBox(userId);
   if (!box) return;
 
+  // FIX 2 — Lock voice notes for guest users
+  const audioHtml = currentProfile?.is_registered
+    ? `<audio controls src="${msg.audioUrl}"></audio>`
+    : '<span class="vn-locked">\uD83D\uDD12 Register to hear voice notes</span>';
+
   const row = document.createElement('div');
   row.className = 'pm-msg pm-voice' + (isMe ? ' self' : '');
   row.innerHTML = `
     <div class="pm-msg-bubble">
-      <audio controls src="${msg.audioUrl}"></audio>
+      ${audioHtml}
     </div>
     <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
   `;

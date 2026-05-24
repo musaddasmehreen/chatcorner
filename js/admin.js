@@ -8,6 +8,11 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS banned_at timestamp with time zone
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS banned_by uuid;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_reason text;
 
+-- FIX 5A — Moderation columns
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_mod boolean DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ban_expires_at timestamp with time zone;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kicked_until timestamp with time zone;
+
 -- Add rooms table if not exists
 CREATE TABLE IF NOT EXISTS rooms (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -529,7 +534,11 @@ function renderUsersTable() {
   }
 
   body.innerHTML = rows.map(p => {
-    const typeBadge = p.is_admin ? '<span class="badge admin">admin</span>' : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
+    const typeBadge = p.is_admin
+      ? '<span class="badge admin">admin</span>'
+      : p.is_mod
+        ? '<span class="badge mod">mod</span>'
+        : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`;
     const statusBadge = p.is_banned
       ? '<span class="badge banned"><span class="status-dot red"></span>banned</span>'
       : '<span class="badge registered"><span class="status-dot green"></span>active</span>';
@@ -545,6 +554,8 @@ function renderUsersTable() {
         <td class="inline-row">
           <button class="btn" title="View full profile details" onclick="viewProfile('${p.id}')">👁️ View</button>
           <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
+          <button class="btn" title="Kick user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>
+          <button class="btn" title="Toggle moderator role" onclick="toggleMod('${p.id}')">${p.is_mod ? '🛡️ Demod' : '🛡️ Mod'}</button>
           <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
           <button class="btn" title="Toggle admin role for this user" onclick="toggleAdmin('${p.id}')">👑 ${p.is_admin ? 'Demote' : 'Promote'}</button>
         </td>
@@ -562,13 +573,17 @@ function viewProfile(userId) {
   alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
 }
 
-async function setUserBan(userId, banned, reason = '') {
+async function setUserBan(userId, banned, reason = '', durationHours) {
   const warning = banned ? 'This user will be blocked from access. Continue?' : 'Unban this user and restore access?';
   if (!confirm(warning)) return;
   showLoading(true);
+  let ban_expires_at = null;
+  if (banned && durationHours > 0) {
+    ban_expires_at = new Date(Date.now() + durationHours * 3600000).toISOString();
+  }
   const payload = banned
-    ? { is_banned: true, banned_at: new Date().toISOString(), banned_by: adminUser.id, ban_reason: reason || 'Banned by admin' }
-    : { is_banned: false, banned_at: null, banned_by: null, ban_reason: null };
+    ? { is_banned: true, banned_at: new Date().toISOString(), banned_by: adminUser.id, ban_reason: reason || 'Banned by admin', ban_expires_at }
+    : { is_banned: false, banned_at: null, banned_by: null, ban_reason: null, ban_expires_at: null };
   const { error } = await sbClient.from('profiles').update(payload).eq('id', userId);
   showLoading(false);
   if (error) return toast(error.message, 'error');
@@ -579,8 +594,15 @@ async function setUserBan(userId, banned, reason = '') {
 async function toggleBan(userId) {
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
-  const reason = p.is_banned ? '' : (prompt('Reason for ban (optional):', 'Policy violation') || '');
-  await setUserBan(userId, !p.is_banned, reason);
+  if (p.is_banned) {
+    await setUserBan(userId, false, '');
+    return;
+  }
+  const reason = prompt('Reason for ban (optional):', 'Policy violation') || '';
+  const durStr = prompt('Ban duration in hours (0 = lifetime, 1, 6, 24, 168, 720):', '0');
+  if (durStr === null) return;
+  const durationHours = parseInt(durStr) > 0 ? parseInt(durStr) : null;
+  await setUserBan(userId, true, reason, durationHours);
 }
 
 async function deleteUser(userId) {
@@ -603,6 +625,31 @@ async function toggleAdmin(userId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast(`User ${action}d successfully.`);
+  await loadUsers();
+}
+
+// FIX 5D — Kick a user for 30 minutes
+async function kickUser(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p || !confirm('Kick ' + p.username + ' for 30 minutes?')) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ kicked_until: new Date(Date.now() + 1800000).toISOString() }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('User kicked for 30 minutes.');
+  await loadUsers();
+}
+
+// FIX 5E — Toggle moderator role
+async function toggleMod(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p) return;
+  if (!confirm((p.is_mod ? 'Remove mod from ' : 'Make mod: ') + p.username)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_mod: !p.is_mod }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('Mod status updated.');
   await loadUsers();
 }
 
@@ -656,22 +703,24 @@ async function loadBannedUsers() {
   const body = document.getElementById('banned-body');
   const { data, error } = await sbClient.from('profiles').select('*').eq('is_banned', true).order('banned_at', { ascending: false });
   if (error) {
-    body.innerHTML = '<tr><td colspan="5">Could not load banned users.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6">Could not load banned users.</td></tr>';
     return;
   }
   const rows = data || [];
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="5">No banned users right now.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6">No banned users right now.</td></tr>';
     return;
   }
   body.innerHTML = rows.map(p => {
     const bannedBy = profilesCache.find(x => x.id === p.banned_by)?.username || p.banned_by || '—';
+    const expiresAt = p.ban_expires_at ? formatDate(p.ban_expires_at) : 'Lifetime';
     return `
       <tr>
         <td>${escHtml(p.username || p.id)}</td>
         <td>${formatDate(p.banned_at)}</td>
         <td>${escHtml(bannedBy)}</td>
         <td>${escHtml(p.ban_reason || '—')}</td>
+        <td>${escHtml(expiresAt)}</td>
         <td><button class="btn" onclick="setUserBan('${p.id}', false)">Unban</button></td>
       </tr>
     `;
