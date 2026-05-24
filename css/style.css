@@ -628,6 +628,31 @@ body {
   background: rgba(var(--accent-rgb),0.2);
 }
 
+.user-mod-btn {
+  border: 1px solid rgba(var(--accent-rgb),0.24);
+  background: rgba(var(--accent-rgb),0.08);
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.68rem;
+  padding: 0.08rem 0.3rem;
+  flex-shrink: 0;
+}
+
+.user-mod-btn:hover {
+  background: rgba(var(--accent-rgb),0.2);
+}
+
+.user-mod-btn.kick {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.user-mod-btn.ban {
+  border-color: rgba(248,113,113,0.38);
+  background: rgba(248,113,113,0.08);
+}
+
 .dot {
   width: 7px; height: 7px;
   border-radius: 50%;
@@ -870,6 +895,47 @@ body {
 .btn-send:hover  { transform: scale(1.08); box-shadow: 0 4px 16px rgba(var(--accent-rgb),0.45); }
 .btn-send:active { transform: scale(0.95); }
 .btn-send:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+.guest-notice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.62rem 0.8rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.guest-notice-bar a {
+  color: var(--accent2);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.guest-notice-bar a:hover {
+  text-decoration: underline;
+}
+
+.chat-page.guest-mode #chat-input-row {
+  display: none;
+}
+
+.chat-page.guest-mode #guest-notice-bar {
+  display: flex;
+}
+
+.chat-page.guest-mode #messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.locked-action {
+  opacity: 0.72;
+}
 
 /* ══ PERMISSIONS BANNER ══════════════════════════════════════ */
 

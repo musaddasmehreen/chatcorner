@@ -38,6 +38,10 @@ async function ensurePmRealtime() {
 
 async function openPrivateChat(userId, username) {
   if (!userId || !currentUser?.id || userId === currentUser.id) return;
+  if (!currentProfile?.is_registered) {
+    alert('🔒 Register to use private chat.');
+    return;
+  }
   await ensurePmRealtime();
 
   if (pmWindows[userId]) {
@@ -162,6 +166,10 @@ function getPmMessagesBox(userId) {
 }
 
 async function sendPrivateText(userId) {
+  if (!currentProfile?.is_registered) {
+    alert('🔒 Register to send private messages.');
+    return;
+  }
   const input = getPmInput(userId);
   if (!input) return;
   const text = input.value.trim();
@@ -183,6 +191,7 @@ async function sendPrivateText(userId) {
 }
 
 async function handleIncomingPm(payload) {
+  if (!currentProfile?.is_registered) return;
   const fromUserId = payload.from;
   if (!fromUserId) return;
 
@@ -229,10 +238,11 @@ function appendPmVoiceMessage(userId, msg, isMe) {
 
   const row = document.createElement('div');
   row.className = 'pm-msg pm-voice' + (isMe ? ' self' : '');
+  const voiceMarkup = currentProfile?.is_registered
+    ? `<audio controls preload="none" src="${escHtml(msg.audioUrl || '')}"></audio>`
+    : '🔒 Voice notes are for registered users only.';
   row.innerHTML = `
-    <div class="pm-msg-bubble">
-      <audio controls src="${msg.audioUrl}"></audio>
-    </div>
+    <div class="pm-msg-bubble">${voiceMarkup}</div>
     <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
   `;
 
