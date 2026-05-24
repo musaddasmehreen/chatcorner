@@ -69,7 +69,8 @@ const settingsDefaults = {
 
 window.addEventListener('DOMContentLoaded', async () => {
   bindUI();
-  await checkAdminAuth();
+  const isAuthorized = await checkAdminAuth();
+  if (!isAuthorized) return;
   await initDashboard();
 });
 
@@ -115,25 +116,32 @@ function bindUI() {
 }
 
 async function checkAdminAuth() {
-  showLoading(true);
-  const { data: { session } } = await sbClient.auth.getSession();
-  if (!session?.user) {
-    window.location.href = 'adminup.html';
-    return;
-  }
+  try {
+    showLoading(true);
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session?.user) {
+      window.location.href = 'adminup.html';
+      return false;
+    }
 
-  adminUser = session.user;
-  const { data: profile, error } = await sbClient.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+    adminUser = session.user;
+    const { data: profile, error } = await sbClient.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
 
-  if (error || !profile?.is_admin) {
-    await sbClient.auth.signOut();
+    if (error || !profile?.is_admin) {
+      await sbClient.auth.signOut();
+      window.location.href = 'adminup.html?denied=1';
+      return false;
+    }
+
+    adminProfile = profile;
+    document.getElementById('admin-name').textContent = profile.username || adminUser.email || 'Admin';
+    showLoading(false);
+    return true;
+  } catch (_error) {
+    showLoading(false);
     window.location.href = 'adminup.html?denied=1';
-    return;
+    return false;
   }
-
-  adminProfile = profile;
-  document.getElementById('admin-name').textContent = profile.username || adminUser.email || 'Admin';
-  showLoading(false);
 }
 
 async function initDashboard() {
