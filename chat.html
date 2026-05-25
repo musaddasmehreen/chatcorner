@@ -148,14 +148,17 @@
           <button class="emoji-btn" title="Dog" onclick="insertEmoji('🐶')">🐶</button>
         </div>
         <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
+        <button class="btn-emoji" id="btn-voice-note" title="Voice note">🎙️</button>
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>
         <button class="btn-send" onclick="sendMessage()">Send</button>
+        <button class="btn-sm" id="btn-clear-my-messages" type="button" title="Clear my messages from my screen only">Clear My Messages</button>
       </div>
       <div id="guest-notice-bar" class="guest-notice-bar hidden" aria-live="polite">
         👤 You are viewing as a guest.
+        You can send up to 2 messages per minute in text rooms.
         <a href="index.html">Register</a>
-        to participate.
+        for full features.
       </div>
     </main>
     <aside class="sidebar right">

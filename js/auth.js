@@ -6,13 +6,36 @@ function showTab(tab) {
 }
 
 async function loginUser() {
-  const email    = document.getElementById('login-email').value.trim();
+  const loginId  = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const msg      = document.getElementById('login-msg');
 
-  if (!email || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
+  if (!loginId || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
 
   showMsg(msg, 'Logging in…', '');
+
+  let email = '';
+  const { data: byUsername } = await sbClient
+    .from('profiles')
+    .select('email')
+    .ilike('username', loginId)
+    .maybeSingle();
+  if (byUsername?.email) email = byUsername.email;
+
+  if (!email) {
+    const { data: byEmail } = await sbClient
+      .from('profiles')
+      .select('email')
+      .ilike('email', loginId)
+      .maybeSingle();
+    if (byEmail?.email) email = byEmail.email;
+  }
+
+  if (!email && loginId.includes('@')) email = loginId;
+  if (!email) {
+    showMsg(msg, 'Incorrect username/email or password.', 'error');
+    return;
+  }
 
   const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
 
@@ -20,7 +43,7 @@ async function loginUser() {
     if (error.message.includes('Email not confirmed')) {
       showMsg(msg, '📧 Please confirm your email first, then try again.', 'error');
     } else if (error.message.includes('Invalid login credentials')) {
-      showMsg(msg, 'Incorrect email or password.', 'error');
+      showMsg(msg, 'Incorrect username/email or password.', 'error');
     } else {
       showMsg(msg, error.message, 'error');
     }
