@@ -149,6 +149,7 @@ function bindUI() {
     loadMessages();
   });
   document.getElementById('export-csv-btn').addEventListener('click', exportLogsCsv);
+  document.getElementById('logs-clear-room-btn').addEventListener('click', clearRoomMessages);
 
   document.getElementById('users-apply').addEventListener('click', renderUsersTable);
   document.getElementById('users-select-all').addEventListener('change', toggleSelectAllUsers);
@@ -608,6 +609,19 @@ async function deleteMessage(messageId) {
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('Message deleted successfully.');
+  await Promise.all([loadMessages(), loadStats(true), loadAnalytics(true)]);
+}
+
+async function clearRoomMessages() {
+  const roomId = document.getElementById('logs-room-select').value;
+  const roomName = roomsCache.find(r => r.id === roomId)?.name || 'this room';
+  if (!roomId) return toast('Select a room first.', 'error');
+  if (!confirm(`Delete ALL messages in "${roomName}"? This affects all users and cannot be undone.`)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('messages').delete().eq('room_id', roomId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('All room messages deleted.');
   await Promise.all([loadMessages(), loadStats(true), loadAnalytics(true)]);
 }
 

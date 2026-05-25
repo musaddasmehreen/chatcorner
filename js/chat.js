@@ -64,6 +64,10 @@ let presenceChannel= null;
 let onlineUsers    = {};
 let cameraStates   = {};
 let presenceBaseData = {};
+const GUEST_TEXT_RATE_LIMIT_COUNT = 2;
+const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const guestMessageTimesByRoom = new Map();
+let guestRateToastTimer = null;
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
@@ -131,6 +135,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('audio-bar').classList.remove('hidden');
   applyGuestModeUI();
+  document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
+  document.getElementById('btn-clear-my-messages')?.addEventListener('click', clearMyMessagesFromScreen);
 
   // Re-apply saved theme now that DOM is ready (syncs dots)
   applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
@@ -235,6 +241,12 @@ async function enterRoom(room) {
       appendMessage(payload.new);
       scrollToBottom();
     })
+    .on('postgres_changes', {
+      event: 'DELETE', schema: 'public', table: 'messages',
+      filter: `room_id=eq.${room.id}`
+    }, payload => {
+      removeMessageNodeById(payload.old?.id);
+    })
     .subscribe();
 
   presenceChannel = sbClient.channel('presence:' + room.id, {
@@ -272,39 +284,27 @@ async function enterRoom(room) {
     });
 
   appendSystemMessage(`You joined #${room.name}`);
-
-  // FIX 1 — Apply guest UI restrictions after all room setup
-  if (!currentProfile?.is_registered) applyGuestUI();
 }
 
 // FIX 1 — Disable input controls and show notice bar for guest users
 function applyGuestUI() {
-  const msgInput = document.getElementById('msg-input');
-  const sendBtn  = document.querySelector('.btn-send');
-  const emojiBar = document.getElementById('emoji-bar');
-  const vnBtn    = document.getElementById('btn-voice-note');
-  const guestBar = document.getElementById('guest-notice-bar');
-  if (msgInput) { msgInput.disabled = true; msgInput.placeholder = 'Register to send messages…'; }
-  if (sendBtn)  { sendBtn.disabled  = true; }
-  if (emojiBar) { emojiBar.style.display = 'none'; }
-  if (vnBtn)    { vnBtn.style.display    = 'none'; }
-  if (guestBar) { guestBar.style.display = 'flex'; }
-  document.body.classList.add('guest-mode');
+  updateComposerState();
 }
 
 async function sendMessage() {
-  // FIX 1 — Block guests from sending messages
-  if (!currentProfile?.is_registered) { return; }
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   if (!text || !currentRoom) return;
-  if (!isRegisteredUser()) {
-    appendSystemMessage('Please register to send messages.');
-    return;
-  }
   if (currentRoom.is_locked) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
     return;
+  }
+  if (!isRegisteredUser() && !currentRoom?.is_audio_enabled) {
+    const waitMs = getGuestMessageWaitMs(currentRoom.id);
+    if (waitMs > 0) {
+      showGuestRateLimitToast(waitMs);
+      return;
+    }
   }
 
   input.value = '';
@@ -332,14 +332,20 @@ function buildMessageNode(msg) {
     const isMe  = msg.user_id === currentUser?.id;
     const div   = document.createElement('div');
     div.className = 'msg-row' + (isMe ? ' self' : '');
+    div.dataset.messageId = msg.id || '';
+    div.dataset.userId = msg.user_id || '';
     const initial = (msg.username || '?')[0].toUpperCase();
     const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
     const audioHtml = currentProfile?.is_registered
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
-      : '<span class="vn-locked">\uD83D\uDD12 Register to hear voice notes</span>';
+      : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
+    const deleteButton = isMe
+      ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
+      : '';
     div.innerHTML = `
       <div class="avatar" style="background:${color}">${initial}</div>
       <div class="msg-bubble">
+        ${deleteButton}
         <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
         ${audioHtml}
         <div class="msg-time">${formatTime(msg.created_at)}</div>
@@ -353,13 +359,19 @@ function buildMessageNode(msg) {
   }
   const div   = document.createElement('div');
   div.className = 'msg-row' + (isMe ? ' self' : '');
+  div.dataset.messageId = msg.id || '';
+  div.dataset.userId = msg.user_id || '';
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+  const deleteButton = isMe
+    ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
+    : '';
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${initial}</div>
     <div class="msg-bubble">
+      ${deleteButton}
       <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
       <div class="msg-text">${escHtml(msg.content)}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
@@ -518,24 +530,23 @@ function updateComposerState() {
   if (guestNoticeBar) guestNoticeBar.classList.toggle('hidden', !isGuest);
 
   if (isGuest) {
-    closeEmojiPicker();
     if (msgInput) {
-      msgInput.disabled = true;
-      msgInput.placeholder = 'Please register to send messages.';
-      msgInput.title = '🔒 Register to send messages';
+      msgInput.disabled = isLocked;
+      msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send)';
+      msgInput.title = '';
     }
     if (sendBtn) {
-      sendBtn.disabled = true;
-      sendBtn.title = '🔒 Register to send messages';
-      sendBtn.classList.add('locked-action');
+      sendBtn.disabled = isLocked;
+      sendBtn.title = '';
+      sendBtn.classList.remove('locked-action');
     }
     if (emojiBtn) {
-      emojiBtn.classList.add('hidden');
-      emojiBtn.disabled = true;
-      emojiBtn.title = '🔒 Register to use emoji';
+      emojiBtn.classList.remove('hidden');
+      emojiBtn.disabled = isLocked;
+      emojiBtn.title = '';
     }
     if (voiceBtn) {
-      voiceBtn.classList.add('hidden');
+      voiceBtn.classList.remove('hidden');
       voiceBtn.disabled = true;
       voiceBtn.title = '🔒 Voice notes are for registered users only';
     }
@@ -579,6 +590,8 @@ function sanitizeAudioSource(msg) {
 function appendVoiceNoteMessage(msg, isMe) {
   const div = document.createElement('div');
   div.className = 'msg-row' + (isMe ? ' self' : '');
+  div.dataset.messageId = msg.id || '';
+  div.dataset.userId = msg.user_id || '';
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
@@ -587,10 +600,14 @@ function appendVoiceNoteMessage(msg, isMe) {
   const voiceMarkup = isRegisteredUser()
     ? (voiceSrc ? `<audio controls preload="none" src="${escHtml(voiceSrc)}"></audio>` : '<div class="msg-text">Voice note unavailable.</div>')
     : '<div class="msg-text">🔒 Voice notes are for registered users only.</div>';
+  const deleteButton = isMe
+    ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
+    : '';
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${initial}</div>
     <div class="msg-bubble">
+      ${deleteButton}
       <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
       <div class="msg-voice">${voiceMarkup}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
@@ -640,3 +657,91 @@ async function quickBanUser(userId, username) {
   }
   appendSystemMessage(`🚫 ${username || 'User'} has been banned (${durationHours === null ? 'Lifetime' : normalized}).`);
 }
+
+function pruneGuestMessageTimes(roomId) {
+  const key = roomId || 'unknown';
+  const now = Date.now();
+  const times = guestMessageTimesByRoom.get(key) || [];
+  const recent = times.filter(ts => now - ts < GUEST_TEXT_RATE_LIMIT_WINDOW_MS);
+  guestMessageTimesByRoom.set(key, recent);
+  return recent;
+}
+
+function getGuestMessageWaitMs(roomId) {
+  const recent = pruneGuestMessageTimes(roomId);
+  if (recent.length < GUEST_TEXT_RATE_LIMIT_COUNT) {
+    recent.push(Date.now());
+    guestMessageTimesByRoom.set(roomId || 'unknown', recent);
+    return 0;
+  }
+  return Math.max(0, GUEST_TEXT_RATE_LIMIT_WINDOW_MS - (Date.now() - recent[0]));
+}
+
+function ensureChatToastWrap() {
+  let wrap = document.getElementById('chat-toast-wrap');
+  if (wrap) return wrap;
+  wrap = document.createElement('div');
+  wrap.id = 'chat-toast-wrap';
+  wrap.className = 'chat-toast-wrap';
+  document.body.appendChild(wrap);
+  return wrap;
+}
+
+function showGuestRateLimitToast(waitMs) {
+  const wrap = ensureChatToastWrap();
+  const existing = document.getElementById('guest-rate-limit-toast');
+  if (existing) existing.remove();
+  if (guestRateToastTimer) {
+    clearInterval(guestRateToastTimer);
+    guestRateToastTimer = null;
+  }
+  const toast = document.createElement('div');
+  toast.id = 'guest-rate-limit-toast';
+  toast.className = 'chat-toast warning';
+  wrap.appendChild(toast);
+
+  const render = () => {
+    const seconds = Math.max(0, Math.ceil(waitMs / 1000));
+    toast.textContent = `Guest limit reached: ${GUEST_TEXT_RATE_LIMIT_COUNT} messages/minute. Try again in ${seconds}s.`;
+    if (waitMs <= 0) {
+      if (guestRateToastTimer) clearInterval(guestRateToastTimer);
+      guestRateToastTimer = null;
+      setTimeout(() => toast.remove(), 400);
+      return;
+    }
+    waitMs -= 1000;
+  };
+
+  render();
+  guestRateToastTimer = setInterval(render, 1000);
+}
+
+function sendVoiceNote() {
+  if (!isRegisteredUser()) {
+    appendSystemMessage('🔒 Voice notes are for registered users only.');
+    return;
+  }
+  appendSystemMessage('Voice note sender is currently unavailable.');
+}
+
+function removeMessageNodeById(messageId) {
+  if (!messageId) return;
+  document
+    .querySelector(`#messages .msg-row[data-message-id="${CSS.escape(String(messageId))}"]`)
+    ?.remove();
+}
+
+function clearMyMessagesFromScreen() {
+  if (!currentUser?.id) return;
+  const mine = document.querySelectorAll(`#messages .msg-row[data-user-id="${CSS.escape(currentUser.id)}"]`);
+  mine.forEach(node => node.remove());
+}
+
+document.addEventListener('click', (event) => {
+  const deleteBtn = event.target.closest('.msg-local-delete');
+  if (!deleteBtn) return;
+  const row = deleteBtn.closest('.msg-row');
+  if (!row) return;
+  if (row.dataset.userId !== currentUser?.id) return;
+  row.remove();
+});
