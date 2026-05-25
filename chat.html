@@ -20,7 +20,6 @@
       <button class="btn-primary" onclick="location.reload()">I've Disabled My VPN — Retry</button>
     </div>
   </div>
-  <!-- ───────────────────────────────────────────────────────────────[...]
 
   <!-- ── Avatar Upload Modal ─────────────────────────────────────────────────── -->
   <div id="avatar-upload-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Update Avatar">
@@ -39,7 +38,6 @@
       </div>
     </div>
   </div>
-  <!-- ───────────────────────────────────────────────────────────────[...]
 
   <!-- ── Permissions Banner ──────────────────────────────────────────────────── -->
   <div id="permissions-banner" class="perms-banner" style="display:none">
@@ -63,97 +61,118 @@
       <button class="btn-allow-skip" onclick="dismissPermissions()">Skip</button>
     </div>
   </div>
-  <!-- ───────────────────────────────────────────────────────────────[...]
 
-  <header class="topbar">
-  <span class="logo-small">💬 ChatCorner</span>
-  <div class="topbar-center" id="current-room-name">Select a Room</div>
-  <div class="topbar-right">
-    <span id="user-badge" class="user-badge"></span>
-    <button class="btn-sm" id="btn-edit-avatar" onclick="openAvatarUpload()" title="Update avatar" style="display:none">🖼️</button>
-    <button class="btn-sm" onclick="logout()">Logout</button>
-  </div>
-</header>
+  <div class="page-shell">
 
-<div class="layout">
-
-  <!-- COL 1: CAM -->
-  <div class="cam-area" id="cam-area">
-    <span id="cam-area-placeholder" style="text-align:center;font-size:0.7rem;opacity:0.35;padding:8px;margin-top:1.5rem">📷<br>Click 📷 to view a cam</span>
-  </div>
-
-  <!-- COL 2: ROOMS -->
-  <div class="sidebar left" id="rooms-sidebar">
-    <div class="sidebar-title">🏠 Rooms</div>
-    <ul id="room-list" class="room-list"></ul>
-    <div class="sidebar-sep"></div>
-    <div class="sidebar-title">🎤 Voice Rooms</div>
-    <ul id="voice-room-list" class="room-list"></ul>
-  </div>
-
-  <!-- COL 3: CENTER -->
-  <div class="chat-main">
-
-    <div class="rooms-bar" id="rooms-horizontal"></div>
-
-    <div class="chat-theme-bar" id="chat-theme-bar">
-      <span class="chat-theme-label">🎨 Theme:</span>
-      <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" title="Nebula" onclick="setTheme('nebula')"></button>
-      <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" title="Ember 🔥" onclick="setTheme('ember')"></button>
-      <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" title="Arctic ❄️" onclick="setTheme('arctic')"></button>
-      <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" title="Matrix" onclick="setTheme('matrix')"></button>
-      <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" title="Rose 🌸" onclick="setTheme('rose')"></button>
-      <span id="chat-theme-name" class="chat-theme-label" style="margin-left:4px;opacity:0.6"></span>
-    </div>
-
-    <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
-
-    <div class="minimized-cams-bar" id="minimized-cams-bar"></div>
-
-    <div class="audio-bar hidden" id="audio-bar">
-      <span id="audio-status"></span>
-      <canvas class="voice-visualizer hidden" id="voice-visualizer" width="60" height="24" aria-hidden="true"></canvas>
-      <div class="peers-list" id="peers-list"></div>
-      <button class="btn-audio hidden" id="btn-join-voice" onclick="joinVoice()">🎤 Join Voice</button>
-      <button class="btn-audio red hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
-    </div>
-
-    <div class="input-row" id="chat-input-row" style="position:relative">
-      <div id="emoji-picker" class="emoji-picker hidden"></div>
-      <div id="room-image-url-popover" class="room-image-url-popover hidden">
-        <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
-        <button id="btn-room-image-url-clear" class="btn-sm" title="Clear">✕</button>
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-logo">💬 ChatCorner</div>
+      <div class="topbar-room" id="current-room-name">Select a Room</div>
+      <div class="topbar-actions">
+        <span id="user-badge" class="user-badge"></span>
+        <button class="topbar-btn" id="btn-edit-avatar" onclick="openAvatarUpload()" style="display:none">🖼️</button>
+        <button class="topbar-btn" onclick="logout()">Logout</button>
       </div>
-      <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
-      <button class="btn-emoji" id="btn-image-url" title="Share image">🖼️</button>
-      <button class="btn-voice-note" id="btn-voice-note" onclick="toggleRoomVoiceNote()" title="Voice note" style="display:none">🎙️</button>
-      <span class="voice-note-timer" id="voice-note-timer" style="display:none"></span>
-      <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off"/>
-      <button class="btn-send" onclick="sendMessage()">Send</button>
-      <button class="btn-sm" onclick="clearMyMessages()" style="white-space:nowrap;flex-shrink:0">Clear My Messages</button>
+    </header>
+
+    <!-- THREE COLUMNS -->
+    <div class="layout">
+
+      <!-- LEFT SIDEBAR -->
+      <aside class="sidebar sidebar-left" id="sidebar-left">
+        <!-- Theme bar -->
+        <div class="theme-bar" id="theme-bar">
+          <span class="theme-bar-label">🎨 THEME:</span>
+          <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
+          <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember 🔥"></button>
+          <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic ❄️"></button>
+          <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" onclick="setTheme('matrix')" title="Matrix"></button>
+          <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose 🌸"></button>
+          <span id="theme-name-label" class="theme-name-label">Nebula</span>
+        </div>
+
+        <!-- Active cam window -->
+        <div class="cam-window-area" id="cam-window-area" style="display:none">
+          <div class="cam-window-header">
+            <span class="cam-window-username" id="cam-window-username"></span>
+            <button class="cam-btn" id="btn-cam-minimize" title="Minimize">−</button>
+            <button class="cam-btn" id="btn-cam-close" title="Close">✕</button>
+          </div>
+          <video id="cam-video" autoplay playsinline muted></video>
+        </div>
+
+        <!-- Rooms list -->
+        <div class="sidebar-section-label">🏠 ROOMS</div>
+        <ul class="room-list" id="room-list"></ul>
+      </aside>
+
+      <!-- CENTER -->
+      <main class="chat-main">
+        <!-- Rooms top bar -->
+        <div class="rooms-topbar" id="rooms-topbar"></div>
+
+        <!-- Messages -->
+        <div class="messages" id="messages" role="log" aria-live="polite"></div>
+
+        <!-- Minimized cams bar -->
+        <div class="mini-cams-bar" id="minimized-cams-bar"></div>
+      </main>
+
+      <!-- RIGHT SIDEBAR -->
+      <aside class="sidebar sidebar-right" id="sidebar-right">
+        <!-- Private users -->
+        <div class="sidebar-section-label" id="pm-users-section">🔒 PRIVATE USERS</div>
+        <ul class="pm-user-list" id="pm-user-list"></ul>
+
+        <div class="sidebar-sep"></div>
+
+        <!-- Users in room -->
+        <div class="sidebar-section-label">👥 USERS IN ROOM</div>
+        <ul class="user-list" id="user-list"></ul>
+      </aside>
+
+    </div><!-- end .layout -->
+
+    <!-- BOTTOM INPUT ROW (full width, split into 3 zones) -->
+    <div class="input-strip">
+      <div class="input-strip-left">
+        <div id="emoji-picker" class="emoji-picker hidden" role="dialog"></div>
+        <div id="room-image-url-popover" class="room-image-url-popover hidden">
+          <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
+          <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
+        </div>
+        <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
+        <button class="input-btn" id="btn-image-url" title="Image/GIF">🖼️</button>
+        <button class="input-btn" id="btn-voice-note" onclick="toggleRoomVoiceNote()" title="Voice note" style="display:none">🎙️</button>
+        <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
+      </div>
+      <div class="input-strip-center">
+        <input id="msg-input" class="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off"/>
+      </div>
+      <div class="input-strip-right">
+        <button class="btn-send" id="btn-send" onclick="sendMessage()">Send</button>
+        <button class="btn-clear-msgs" id="btn-clear-my-messages" onclick="clearMyMessages()">Clear My Messages</button>
+      </div>
     </div>
 
-    <div id="guest-notice-bar" class="guest-notice-bar" style="display:none">
+    <!-- Audio bar (voice room status, inside chat-main area, hidden when not in voice) -->
+    <div class="audio-bar hidden" id="audio-bar">
+      <span class="audio-icon">🎤</span>
+      <span id="audio-status" class="audio-status-text">Voice: Off</span>
+      <canvas class="voice-visualizer hidden" id="voice-visualizer" width="60" height="24"></canvas>
+      <div class="peers-list" id="peers-list"></div>
+      <button class="btn-join-voice hidden" id="btn-join-voice" onclick="joinVoice()">Join Voice</button>
+      <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
+    </div>
+
+    <!-- Guest notice -->
+    <div id="guest-notice-bar" class="guest-bar" style="display:none">
       👤 Guest mode — <a href="index.html">Sign in</a> for full access
     </div>
 
-  </div><!-- end .chat-main -->
+  </div><!-- end .page-shell -->
 
-  <!-- COL 4: PVT USERS -->
-  <div class="sidebar pvt" id="pvt-sidebar">
-    <div class="sidebar-title">💌 My PVT</div>
-    <ul class="user-list" id="pvt-user-list"></ul>
-  </div>
-
-  <!-- COL 5: ROOM USERS -->
-  <div class="sidebar right" id="users-sidebar">
-    <div class="sidebar-title">👥 Online</div>
-    <ul class="user-list" id="user-list"></ul>
-  </div>
-
-</div><!-- end .layout -->
-
-<div id="audio-elements"></div>
+  <div id="audio-elements"></div>
   <div id="pm-root" class="pm-root"></div>
   <div id="floating-camera-window" class="floating-camera hidden" aria-live="polite">
     <div id="floating-camera-header" class="floating-camera-header">

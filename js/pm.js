@@ -12,19 +12,22 @@ let pmAudioCtx = null;
 const pvtOpenUsers = new Map(); // userId -> username
 
 function renderPvtBar() {
-  const bar = document.getElementById('pvt-users-bar');
+  const bar = document.getElementById('pm-user-list') || document.getElementById('pvt-users-bar');
   if (!bar) return;
-  bar.innerHTML = '<span class="pvt-bar-label">💬 PVT:</span>';
+  bar.innerHTML = '';
   if (pvtOpenUsers.size === 0) {
-    bar.innerHTML += '<span class="pvt-placeholder" id="pvt-placeholder">No private chats</span>';
+    const empty = document.createElement('li');
+    empty.className = 'pvt-placeholder';
+    empty.id = 'pvt-placeholder';
+    empty.textContent = 'No private chats';
+    bar.appendChild(empty);
     return;
   }
   pvtOpenUsers.forEach((username, userId) => {
-    const btn = document.createElement('button');
-    btn.className = 'pvt-pill';
-    btn.textContent = username;
-    btn.onclick = () => openPrivateChat(userId, username);
-    bar.appendChild(btn);
+    const item = document.createElement('li');
+    item.textContent = username;
+    item.onclick = () => openPrivateChat(userId, username);
+    bar.appendChild(item);
   });
 }
 
