@@ -39,6 +39,7 @@
     <div class="topbar-center" id="current-room-name">Select a Room</div>
     <div class="topbar-right">
       <span id="user-badge" class="user-badge"></span>
+      <button class="btn-sm" id="clear-my-messages-btn" onclick="clearMyMessagesLocal()">Clear My Messages</button>
       <button class="btn-sm" onclick="logout()">Logout</button>
     </div>
   </header>
@@ -164,6 +165,7 @@
     </aside>
   </div>
   <div id="audio-elements"></div>
+  <div id="chat-toast-wrap" class="chat-toast-wrap" aria-live="polite"></div>
   <div id="pm-root" class="pm-root"></div>
   <div id="floating-camera-window" class="floating-camera hidden" aria-live="polite">
     <div id="floating-camera-header" class="floating-camera-header">
