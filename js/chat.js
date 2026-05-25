@@ -23,7 +23,7 @@ function applyTheme(name, animate) {
     btn.classList.toggle('active', btn.dataset.theme === name);
   });
   // Update in-chat label
-  const lbl = document.getElementById('chat-theme-name');
+  const lbl = document.getElementById('theme-name-label') || document.getElementById('chat-theme-name');
   if (lbl) lbl.textContent = THEME_NAMES[name] || name;
 }
 
@@ -223,34 +223,37 @@ async function loadRooms() {
     const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
     if (error || !rooms?.length) return;
     const textList = document.getElementById('room-list');
-    const voiceList = document.getElementById('voice-room-list');
-    const bar = document.getElementById('rooms-horizontal');
     if (textList) textList.innerHTML = '';
-    if (voiceList) voiceList.innerHTML = '';
-    if (bar) bar.innerHTML = '';
     rooms.forEach(room => {
       const icon = room.is_audio_enabled ? '🎤' : '💬';
-      // Sidebar li
       const li = document.createElement('li');
       li.textContent = `${icon} ${room.name}`;
-      li.title = room.name;
+      li.title = room.user_count != null ? `${room.name} — ${room.user_count} users` : room.name;
       li.dataset.roomId = String(room.id);
       li.onclick = () => enterRoom(room);
-      if (room.is_audio_enabled) { if (voiceList) voiceList.appendChild(li); }
-      else { if (textList) textList.appendChild(li); }
-      // Pill bar
-      if (bar) {
-        const pill = document.createElement('button');
-        pill.className = 'room-pill';
-        pill.dataset.roomId = String(room.id);
-        pill.textContent = `${icon} ${room.name}`;
-        pill.title = room.name;
-        pill.onclick = () => enterRoom(room);
-        bar.appendChild(pill);
-      }
+      if (textList) textList.appendChild(li);
     });
+    renderRoomsTopbar(rooms);
     enterRoom(rooms[0]);
   } catch(e) { console.error('loadRooms error', e); }
+}
+
+// Render rooms as pill tabs in the center top bar
+function renderRoomsTopbar(rooms) {
+  const bar = document.getElementById('rooms-topbar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  rooms.forEach(room => {
+    const tab = document.createElement('button');
+    tab.className = 'room-tab' + (currentRoom && currentRoom.id === room.id ? ' active' : '');
+    tab.dataset.roomId = room.id;
+    tab.textContent = (room.type === 'voice' || room.is_audio_enabled ? '🎤 ' : '💬 ') + room.name;
+    tab.title = room.user_count != null
+      ? `${room.name} — ${room.user_count} users — click to join`
+      : `${room.name} — click to join`;
+    tab.onclick = () => enterRoom(room);
+    bar.appendChild(tab);
+  });
 }
 
 async function enterRoom(room) {
@@ -265,13 +268,21 @@ async function enterRoom(room) {
   if (typeof leaveVoice === 'function') leaveVoice();
 
   currentRoom = room;
-  document.getElementById('current-room-name').textContent = '# ' + room.name;
+  const titleEl = document.getElementById('current-room-name');
+  if (titleEl) titleEl.textContent = '# ' + room.name;
   document.getElementById('messages').innerHTML = '';
   onlineUsers = {};
   cameraStates = {};
 
-  document.querySelectorAll('#room-list li, #voice-room-list li').forEach(el => el.classList.toggle('active', el.dataset.roomId === String(room.id)));
-  document.querySelectorAll('#rooms-horizontal .room-pill').forEach(el => el.classList.toggle('active', el.dataset.roomId === String(room.id)));
+  // Update active tab in topbar
+  document.querySelectorAll('.room-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.roomId === String(currentRoom.id)));
+  // Update active item in left sidebar room list
+  document.querySelectorAll('#room-list li').forEach(li =>
+    li.classList.toggle('active', li.dataset.roomId === String(currentRoom.id)));
+  // Update topbar room name
+  const el = document.getElementById('current-room-name');
+  if (el) el.textContent = '# ' + currentRoom.name;
 
   const audioBar = document.getElementById('audio-bar');
   const msgInput = document.getElementById('msg-input');
@@ -602,7 +613,7 @@ let _camAreaStream = null;
 let _camAreaUserId = null;
 
 function showCamInArea(userId, username) {
-  const area = document.getElementById('cam-area');
+  const area = document.getElementById('cam-window-area');
   if (!area) {
     if (typeof openFloatingCamera === 'function') openFloatingCamera(userId, username);
     return;
@@ -639,64 +650,39 @@ function _mirrorFloatingCamToArea(userId, username) {
 }
 
 function _placeCamInArea(stream, userId, username) {
-  const area = document.getElementById('cam-area');
-  const placeholder = document.getElementById('cam-area-placeholder');
+  const area = document.getElementById('cam-window-area');
+  const video = document.getElementById('cam-video');
+  const usernameEl = document.getElementById('cam-window-username');
+  const minBtn = document.getElementById('btn-cam-minimize');
+  const closeBtn = document.getElementById('btn-cam-close');
   if (!area) return;
 
-  // Stop any previous stream in cam-area
+  // Stop any previous stream in cam window
   _clearCamArea(false);
 
   _camAreaStream = stream;
   _camAreaUserId = userId;
-
-  const vid = document.createElement('video');
-  vid.autoplay = true;
-  vid.playsInline = true;
-  vid.srcObject = stream;
-  vid.id = 'cam-area-video';
-
-  const label = document.createElement('div');
-  label.className = 'cam-area-label';
-  label.textContent = username || '';
-
-  const controls = document.createElement('div');
-  controls.className = 'cam-area-controls';
-
-  const minBtn = document.createElement('button');
-  minBtn.className = 'cam-area-btn';
-  minBtn.title = 'Minimize';
-  minBtn.textContent = '▼';
-  minBtn.onclick = () => _minimizeCamToBar(userId, username, stream);
-
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'cam-area-btn';
-  closeBtn.title = 'Close';
-  closeBtn.textContent = '✕';
-  closeBtn.onclick = () => _clearCamArea(true);
-
-  controls.appendChild(minBtn);
-  controls.appendChild(closeBtn);
-
-  if (placeholder) placeholder.style.display = 'none';
-  area.appendChild(vid);
-  area.appendChild(label);
-  area.appendChild(controls);
+  if (usernameEl) usernameEl.textContent = username || '';
+  if (video) video.srcObject = stream;
+  if (minBtn) minBtn.onclick = () => _minimizeCamToBar(userId, username, stream);
+  if (closeBtn) closeBtn.onclick = () => _clearCamArea(true);
+  area.style.display = '';
 }
 
 function _clearCamArea(stopStream) {
-  const area = document.getElementById('cam-area');
-  const placeholder = document.getElementById('cam-area-placeholder');
+  const area = document.getElementById('cam-window-area');
+  const video = document.getElementById('cam-video');
+  const usernameEl = document.getElementById('cam-window-username');
   if (!area) return;
 
-  const vid = document.getElementById('cam-area-video');
-  if (vid) {
-    if (stopStream && vid.srcObject) {
-      vid.srcObject.getTracks().forEach(t => t.stop());
+  if (video) {
+    if (stopStream && video.srcObject) {
+      video.srcObject.getTracks().forEach(t => t.stop());
     }
-    vid.remove();
+    video.srcObject = null;
   }
-  area.querySelectorAll('.cam-area-label, .cam-area-controls').forEach(el => el.remove());
-  if (placeholder) placeholder.style.display = '';
+  if (usernameEl) usernameEl.textContent = '';
+  area.style.display = 'none';
   _camAreaStream = null;
   _camAreaUserId = null;
 }
@@ -707,24 +693,27 @@ function _minimizeCamToBar(userId, username, stream) {
   if (!bar) return;
 
   const pill = document.createElement('div');
-  pill.className = 'mini-cam-pill';
+  pill.className = 'mini-cam-item';
   pill.dataset.userId = userId;
 
-  const label = document.createElement('span');
-  label.textContent = `👤 ${username}`;
+  const thumb = document.createElement('video');
+  thumb.className = 'mini-cam-thumb';
+  thumb.autoplay = true;
+  thumb.playsInline = true;
+  thumb.muted = true;
+  thumb.srcObject = stream;
 
-  const restoreBtn = document.createElement('button');
-  restoreBtn.textContent = '▲ Restore';
-  restoreBtn.onclick = () => {
+  const label = document.createElement('span');
+  label.textContent = username || 'User';
+
+  pill.onclick = () => {
     pill.remove();
-    if (!bar.querySelector('.mini-cam-pill')) bar.classList.remove('has-items');
     _placeCamInArea(stream, userId, username);
   };
 
+  pill.appendChild(thumb);
   pill.appendChild(label);
-  pill.appendChild(restoreBtn);
   bar.appendChild(pill);
-  bar.classList.add('has-items');
 }
 
 function escHtml(str) {
@@ -1344,6 +1333,10 @@ async function clearMyMessagesFromScreen() {
     }, 1800);
   }
   showChatToast(`Deleted ${mine.length} message${mine.length === 1 ? '' : 's'} for everyone${archivedCount ? ' and saved to your archive.' : '.'}`, 'success');
+}
+
+function clearMyMessages() {
+  return clearMyMessagesFromScreen();
 }
 
 document.addEventListener('click', async (event) => {
