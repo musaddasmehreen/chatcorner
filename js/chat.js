@@ -129,9 +129,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     registered: currentProfile.is_registered,
     isAdmin: !!currentProfile.is_admin,
     isMod: !!currentProfile.is_mod,
+    isOwner: !!currentProfile.is_owner,
+    isVip: !!currentProfile.is_vip,
     cameraOn: false
   };
   document.getElementById('user-badge').textContent = currentProfile.username + (currentProfile.is_registered ? ' \u2713' : ' \ud83d\udc64');
+  if (currentProfile.is_registered) {
+    const avatarBtn = document.getElementById('btn-edit-avatar');
+    if (avatarBtn) avatarBtn.style.display = '';
+  }
 
   document.getElementById('audio-bar').classList.remove('hidden');
   applyGuestModeUI();
@@ -148,6 +154,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (picker.contains(event.target) || emojiBtn?.contains(event.target)) return;
     closeEmojiPicker();
   });
+
+  // Feature 2 — VPN check (non-blocking; shows overlay if VPN detected)
+  checkVpnOnEntry();
 
   await loadRooms();
 });
@@ -336,6 +345,9 @@ function buildMessageNode(msg) {
     div.dataset.userId = msg.user_id || '';
     const initial = (msg.username || '?')[0].toUpperCase();
     const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+    const avatarInner = isMe && currentProfile?.avatar_url
+      ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
+      : initial;
     const audioHtml = currentProfile?.is_registered
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
       : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
@@ -343,7 +355,7 @@ function buildMessageNode(msg) {
       ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
       : '';
     div.innerHTML = `
-      <div class="avatar" style="background:${color}">${initial}</div>
+      <div class="avatar" style="background:${color}">${avatarInner}</div>
       <div class="msg-bubble">
         ${deleteButton}
         <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
@@ -364,12 +376,15 @@ function buildMessageNode(msg) {
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+  const avatarInner = isMe && currentProfile?.avatar_url
+    ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
+    : initial;
   const deleteButton = isMe
     ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
     : '';
 
   div.innerHTML = `
-    <div class="avatar" style="background:${color}">${initial}</div>
+    <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
       <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
@@ -406,15 +421,20 @@ function renderUserList() {
   const frag = document.createDocumentFragment();
   const canModerate = canRunQuickModeration();
   const isGuest = !isRegisteredUser();
+  const viewerLevel = getViewerRoleLevel();
 
   Object.values(onlineUsers).forEach(u => {
     const li = document.createElement('li');
     li.className = 'user-item';
     li.dataset.userId = u.userId;
-    const showModeration = canModerate && u.userId !== currentUser?.id;
+    const targetLevel = getRoleLevel(u);
+    const showModeration = canModerate && u.userId !== currentUser?.id && viewerLevel > targetLevel;
+    const roleBadge = getRoleBadgeHtml(u);
+    const vipBadge  = u.isVip ? '<span class="role-badge vip" title="VIP">⭐</span>' : '';
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
-      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : ''}>${escHtml(u.username)}${u.registered ? ' \u2713' : ''}</button>
+      ${roleBadge}${vipBadge}
+      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : ''}>${escHtml(u.username)}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
       ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick for 30 minutes">\u26a1</button>` : ''}
@@ -422,13 +442,18 @@ function renderUserList() {
     `;
 
     // FIX 4 — Guests see "Register to DM" instead of opening private chat
-    li.querySelector('.user-name-btn')?.addEventListener('click', () => {
+    const nameBtn = li.querySelector('.user-name-btn');
+    nameBtn?.addEventListener('click', () => {
       if (isGuest) {
         appendSystemMessage('\ud83d\udd12 Register to start private chats.');
         return;
       }
       if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
     });
+
+    // Feature 1 — Hover profile card
+    nameBtn?.addEventListener('mouseenter', () => scheduleProfileCard(u, nameBtn));
+    nameBtn?.addEventListener('mouseleave', cancelProfileCard);
 
     li.querySelector('.camera-user-btn')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -745,3 +770,293 @@ document.addEventListener('click', (event) => {
   if (row.dataset.userId !== currentUser?.id) return;
   row.remove();
 });
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 1 — Hover Profile Card & Role Hierarchy
+════════════════════════════════════════════════════════════════ */
+
+/* Role level: Guest=0, User=1, Mod=2, Admin=3, Owner=4 */
+function getRoleLevel(u) {
+  if (u.isOwner || u.is_owner) return 4;
+  if (u.isAdmin || u.is_admin) return 3;
+  if (u.isMod   || u.is_mod)   return 2;
+  if (u.registered || u.is_registered) return 1;
+  return 0;
+}
+
+function getViewerRoleLevel() {
+  return getRoleLevel(currentProfile || {});
+}
+
+function getRoleBadgeHtml(u) {
+  if (u.isOwner || u.is_owner) return '<span class="role-badge owner" title="Owner">👑</span>';
+  if (u.isAdmin || u.is_admin) return '<span class="role-badge admin" title="Admin">🛡️</span>';
+  if (u.isMod   || u.is_mod)   return '<span class="role-badge mod" title="Moderator">🔨</span>';
+  if (u.registered || u.is_registered) return '<span class="role-badge user" title="User">✅</span>';
+  return '<span class="role-badge guest" title="Guest">👤</span>';
+}
+
+function getRoleLabel(u) {
+  if (u.isOwner || u.is_owner) return 'Owner';
+  if (u.isAdmin || u.is_admin) return 'Admin';
+  if (u.isMod   || u.is_mod)   return 'Moderator';
+  if (u.registered || u.is_registered) return 'User';
+  return 'Guest';
+}
+
+let _pcTimer  = null;
+let _pcHide   = null;
+let _pcActive = null;
+
+function scheduleProfileCard(u, anchor) {
+  clearTimeout(_pcTimer);
+  clearTimeout(_pcHide);
+  _pcTimer = setTimeout(() => showProfileCard(u, anchor), 350);
+}
+
+function cancelProfileCard() {
+  clearTimeout(_pcTimer);
+  // Small grace period so user can move cursor into the card
+  _pcHide = setTimeout(() => hideProfileCard(), 220);
+}
+
+function hideProfileCard() {
+  if (_pcActive) {
+    _pcActive.remove();
+    _pcActive = null;
+  }
+}
+
+async function showProfileCard(u, anchor) {
+  hideProfileCard();
+
+  // Fetch full profile for join date, IP, avatar, VIP status
+  let profile = null;
+  try {
+    const { data } = await sbClient.from('profiles').select('*').eq('id', u.userId).single();
+    profile = data;
+  } catch (_) {}
+  if (!profile) return;
+
+  const viewerLevel  = getViewerRoleLevel();
+  const targetLevel  = getRoleLevel(u);
+  const canSeeIp     = viewerLevel >= 3;
+  const canBan       = viewerLevel > targetLevel && u.userId !== currentUser?.id;
+  const canGrantVip  = viewerLevel >= 3 && targetLevel === 1; // Admin/Owner → regular Users only
+  const isVip        = !!(profile.is_vip);
+
+  const roleLabel = getRoleLabel(u);
+  const roleBadge = getRoleBadgeHtml(u);
+  const vipBadge  = isVip ? '<span class="role-badge vip" title="VIP">⭐</span>' : '';
+  const joinDate  = profile.created_at
+    ? new Date(profile.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+    : 'Unknown';
+
+  const avatarHtml = profile.avatar_url
+    ? `<img class="pc-avatar-img" src="${escHtml(profile.avatar_url)}" alt=""/>`
+    : `<div class="pc-avatar-init" style="background:${escHtml(profile.avatar_color || '#7c3aed')}">${(profile.username || '?')[0].toUpperCase()}</div>`;
+
+  const ipRow  = canSeeIp && profile.last_ip
+    ? `<div class="pc-ip">🌐 ${escHtml(profile.last_ip)}</div>`
+    : '';
+  const banBtn = canBan
+    ? `<button class="pc-ban-btn" type="button" data-uid="${escHtml(u.userId)}">🚫 Ban</button>`
+    : '';
+  const vipBtn = canGrantVip
+    ? `<button class="pc-vip-btn" type="button" data-uid="${escHtml(u.userId)}" data-action="${isVip ? 'revoke' : 'grant'}">${isVip ? '⭐ Revoke VIP' : '⭐ Grant VIP'}</button>`
+    : '';
+
+  const card = document.createElement('div');
+  card.id = 'profile-card';
+  card.className = 'profile-card';
+  card.innerHTML = `
+    <div class="pc-header">
+      ${avatarHtml}
+      <div class="pc-info">
+        <div class="pc-name">${escHtml(profile.username || 'Unknown')} ${vipBadge}</div>
+        <div class="pc-role">${roleBadge} ${escHtml(roleLabel)}</div>
+      </div>
+    </div>
+    <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
+    ${ipRow}
+    <div class="pc-actions">${banBtn}${vipBtn}</div>
+  `;
+
+  document.body.appendChild(card);
+  _pcActive = card;
+
+  // Position: right of the anchor, clamped to viewport
+  const rect = anchor.getBoundingClientRect();
+  let top  = rect.top;
+  let left = rect.right + 8;
+  card.style.visibility = 'hidden';
+  card.style.left = left + 'px';
+  card.style.top  = top  + 'px';
+
+  requestAnimationFrame(() => {
+    const cr = card.getBoundingClientRect();
+    if (cr.right  > window.innerWidth  - 8) left = rect.left - cr.width - 8;
+    if (cr.bottom > window.innerHeight - 8) top  = window.innerHeight - cr.height - 8;
+    card.style.left = left + 'px';
+    card.style.top  = top  + 'px';
+    card.style.visibility = 'visible';
+  });
+
+  // Keep card alive when mouse enters it
+  card.addEventListener('mouseenter', () => { clearTimeout(_pcHide); });
+  card.addEventListener('mouseleave', () => hideProfileCard());
+
+  card.querySelector('.pc-ban-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    hideProfileCard();
+    quickBanUser(u.userId, u.username);
+  });
+
+  card.querySelector('.pc-vip-btn')?.addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    const grant = ev.currentTarget.dataset.action === 'grant';
+    await toggleVip(u.userId, u.username, grant);
+    hideProfileCard();
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 4 — VIP Management
+════════════════════════════════════════════════════════════════ */
+async function toggleVip(userId, username, grant) {
+  const { error } = await sbClient.from('profiles')
+    .update({ is_vip: grant })
+    .eq('id', userId);
+  if (error) {
+    appendSystemMessage(`VIP update failed: ${error.message}`);
+    return;
+  }
+  // Update presence for the target if they're online in current room
+  if (onlineUsers[userId]) onlineUsers[userId].isVip = grant;
+  scheduleRenderUserList();
+  appendSystemMessage(`⭐ ${username || 'User'} VIP status ${grant ? 'granted' : 'revoked'}.`);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 2 — Chatroom VPN Gatekeeper
+════════════════════════════════════════════════════════════════ */
+async function checkVpnOnEntry() {
+  try {
+    const res = await fetch('https://ipwho.is/');
+    if (!res.ok) { console.warn('VPN check: API unavailable, allowing entry'); return; }
+    const data = await res.json();
+    const conn = data.connection || {};
+    if (conn.proxy || conn.vpn || conn.tor || conn.hosting) {
+      showVpnBlocker();
+    }
+  } catch (e) {
+    console.warn('VPN check failed, allowing entry:', e);
+  }
+}
+
+function showVpnBlocker() {
+  const overlay = document.getElementById('vpn-overlay');
+  if (overlay) overlay.classList.remove('hidden');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 3 — Dynamic Avatar Scaling
+════════════════════════════════════════════════════════════════ */
+function openAvatarUpload() {
+  if (!isRegisteredUser()) {
+    appendSystemMessage('🔒 Avatar upload is for registered users only.');
+    return;
+  }
+  const modal = document.getElementById('avatar-upload-modal');
+  if (!modal) return;
+  // Reset state
+  const preview = document.getElementById('avatar-preview');
+  const hint    = document.getElementById('avatar-upload-hint');
+  const saveBtn = document.getElementById('btn-save-avatar');
+  const fileInput = document.getElementById('avatar-file-input');
+  if (preview)   { preview.src = ''; preview.classList.add('hidden'); }
+  if (hint)      hint.textContent = 'Select an image to preview your avatar.';
+  if (saveBtn)   saveBtn.disabled = true;
+  if (fileInput) fileInput.value = '';
+  modal.classList.remove('hidden');
+}
+
+function closeAvatarUpload() {
+  const modal = document.getElementById('avatar-upload-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function onAvatarFileSelect(event) {
+  const file = event.target.files?.[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => renderAvatarPreview(img);
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderAvatarPreview(img) {
+  const canvas = document.getElementById('avatar-canvas');
+  if (!canvas) return;
+  const SIZE = 100;
+  canvas.width  = SIZE;
+  canvas.height = SIZE;
+  const ctx = canvas.getContext('2d');
+
+  // Center-crop: cover (not stretch) — pick the smaller dimension
+  const srcAspect = img.naturalWidth / img.naturalHeight;
+  let sx, sy, sw, sh;
+  if (srcAspect >= 1) {
+    // Landscape or square: fit height, crop width
+    sh = img.naturalHeight;
+    sw = img.naturalHeight;
+    sx = (img.naturalWidth  - sw) / 2;
+    sy = 0;
+  } else {
+    // Portrait: fit width, crop height
+    sw = img.naturalWidth;
+    sh = img.naturalWidth;
+    sx = 0;
+    sy = (img.naturalHeight - sh) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
+
+  const preview = document.getElementById('avatar-preview');
+  const hint    = document.getElementById('avatar-upload-hint');
+  const saveBtn = document.getElementById('btn-save-avatar');
+
+  if (preview) {
+    preview.src = canvas.toDataURL('image/jpeg', 0.85);
+    preview.classList.remove('hidden');
+  }
+  if (hint)    hint.textContent = '100 × 100 px preview (center-cropped)';
+  if (saveBtn) saveBtn.disabled = false;
+}
+
+async function saveAvatar() {
+  const canvas = document.getElementById('avatar-canvas');
+  if (!canvas) return;
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  if (!dataUrl || dataUrl === 'data:,') return;
+
+  const saveBtn = document.getElementById('btn-save-avatar');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
+  const { error } = await sbClient.from('profiles')
+    .update({ avatar_url: dataUrl })
+    .eq('id', currentUser.id);
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+
+  if (error) {
+    appendSystemMessage('Avatar save failed: ' + error.message);
+    return;
+  }
+
+  currentProfile.avatar_url = dataUrl;
+  closeAvatarUpload();
+  appendSystemMessage('✅ Avatar updated!');
+}
