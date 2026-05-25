@@ -18,12 +18,13 @@ function setTheme(name) {
 
 function applyTheme(name, animate) {
   document.documentElement.setAttribute('data-theme', name);
+  if (animate !== false) localStorage.setItem('cc-theme', name);
   // Sync all theme dots on the page
   document.querySelectorAll('.theme-dot').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.theme === name);
   });
   // Update in-chat label
-  const lbl = document.getElementById('chat-theme-name');
+  const lbl = document.getElementById('theme-name') || document.getElementById('chat-theme-name');
   if (lbl) lbl.textContent = THEME_NAMES[name] || name;
 }
 
@@ -55,11 +56,23 @@ function closeEmojiPicker() {
   if (picker) picker.classList.add('hidden');
 }
 
+function getRoomImagePopoverEl() {
+  return document.getElementById('media-url-popover') || document.getElementById('room-image-url-popover');
+}
+
+function getRoomImageInputEl() {
+  return document.getElementById('media-url-input') || document.getElementById('room-image-url-input');
+}
+
+function getRoomImageTriggerEl() {
+  return document.getElementById('btn-media') || document.getElementById('btn-image-url');
+}
+
 function toggleRoomImageUrlInput(event) {
   event?.stopPropagation();
-  const popover = document.getElementById('room-image-url-popover');
-  const input = document.getElementById('room-image-url-input');
-  const trigger = document.getElementById('btn-image-url');
+  const popover = getRoomImagePopoverEl();
+  const input = getRoomImageInputEl();
+  const trigger = getRoomImageTriggerEl();
   if (!popover || !input || trigger?.disabled) return;
   closeEmojiPicker();
   if (!popover.classList.contains('hidden')) {
@@ -71,14 +84,18 @@ function toggleRoomImageUrlInput(event) {
 }
 
 function closeRoomImageUrlInput(clearValue = true) {
-  const popover = document.getElementById('room-image-url-popover');
-  const input = document.getElementById('room-image-url-input');
+  const popover = getRoomImagePopoverEl();
+  const input = getRoomImageInputEl();
   if (popover) popover.classList.add('hidden');
   if (clearValue && input) input.value = '';
 }
 
 function getRoomImageUrlValue() {
-  return document.getElementById('room-image-url-input')?.value.trim() || '';
+  return getRoomImageInputEl()?.value.trim() || '';
+}
+
+function sendMediaUrl() {
+  sendMessage();
 }
 
 /* ══ Chat State ═════════════════════════════════════════════════ */
@@ -176,12 +193,12 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('audio-bar').classList.remove('hidden');
   applyGuestModeUI();
-  document.getElementById('btn-image-url')?.addEventListener('click', toggleRoomImageUrlInput);
-  document.getElementById('btn-room-image-url-clear')?.addEventListener('click', (event) => {
+  getRoomImageTriggerEl()?.addEventListener('click', toggleRoomImageUrlInput);
+  (document.getElementById('btn-media-url-clear') || document.getElementById('btn-room-image-url-clear'))?.addEventListener('click', (event) => {
     event.stopPropagation();
     closeRoomImageUrlInput();
   });
-  document.getElementById('room-image-url-input')?.addEventListener('keydown', (event) => {
+  getRoomImageInputEl()?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       sendMessage();
@@ -203,8 +220,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         closeEmojiPicker();
       }
     }
-    const imagePopover = document.getElementById('room-image-url-popover');
-    const imageBtn = document.getElementById('btn-image-url');
+    const imagePopover = getRoomImagePopoverEl();
+    const imageBtn = getRoomImageTriggerEl();
     if (imagePopover && !imagePopover.classList.contains('hidden')) {
       if (!(imagePopover.contains(event.target) || imageBtn?.contains(event.target))) {
         closeRoomImageUrlInput();
@@ -236,13 +253,15 @@ async function loadRooms() {
 
   try {
     safeRooms.forEach(room => {
+      const roomUsers = room.user_count ?? room.users_count ?? room.total_users ?? 0;
+      const roomTitle = `${room.name} (${roomUsers} users)`;
       // Horizontal pill in rooms-bar
       if (bar) {
         const pill = document.createElement('button');
         pill.className = 'room-pill';
         pill.dataset.roomId = String(room.id);
         pill.textContent = `${room.is_audio_enabled ? '🎤 ' : '💬 '}${room.name}`;
-        pill.title = room.name;
+        pill.title = roomTitle;
         pill.onclick = () => enterRoom(room);
         bar.appendChild(pill);
       }
@@ -250,6 +269,7 @@ async function loadRooms() {
       if (textList || voiceList) {
         const li = document.createElement('li');
         li.innerHTML = `${room.is_audio_enabled ? '\ud83c\udfa4\ufe0f' : '\ud83d\udcac'} ${room.name}`;
+        li.title = roomTitle;
         li.onclick = () => enterRoom(room);
         if (room.is_audio_enabled) {
           if (voiceList) voiceList.appendChild(li);
@@ -404,7 +424,7 @@ async function sendMessage() {
   const text  = input.value.trim();
   const rawImageUrl = getRoomImageUrlValue();
   const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : '';
-  const imagePopover = document.getElementById('room-image-url-popover');
+  const imagePopover = getRoomImagePopoverEl();
   const isSendingImage = !imagePopover?.classList.contains('hidden') && !!rawImageUrl;
   if (!text && !isSendingImage) return;
   if (!currentRoom) {
@@ -417,7 +437,7 @@ async function sendMessage() {
   }
   if (isSendingImage && !imageUrl) {
     showChatToast('Enter a valid http(s) image/GIF URL.', 'warning');
-    document.getElementById('room-image-url-input')?.focus();
+    getRoomImageInputEl()?.focus();
     return;
   }
   if (!isRegisteredUser() && !currentRoom?.is_audio_enabled) {
@@ -590,21 +610,6 @@ function renderUserList() {
 
   ul.innerHTML = '';
   ul.appendChild(frag);
-
-  // Update room-users-bar
-  const bar = document.getElementById('room-users-bar');
-  if (bar) {
-    bar.innerHTML = '';
-    const bfrag = document.createDocumentFragment();
-    Object.values(onlineUsers).forEach(u => {
-      const pill = document.createElement('span');
-      pill.className = 'room-user-pill';
-      const dot = u.registered ? '🟢' : '👤';
-      pill.textContent = `${dot} ${u.username}`;
-      bfrag.appendChild(pill);
-    });
-    bar.appendChild(bfrag);
-  }
 }
 
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
@@ -656,7 +661,7 @@ function _mirrorFloatingCamToArea(userId, username) {
 
 function _placeCamInArea(stream, userId, username) {
   const area = document.getElementById('cam-area');
-  const placeholder = document.getElementById('cam-area-placeholder');
+  const placeholder = document.getElementById('cam-placeholder') || document.getElementById('cam-area-placeholder');
   if (!area) return;
 
   // Stop any previous stream in cam-area
@@ -701,7 +706,7 @@ function _placeCamInArea(stream, userId, username) {
 
 function _clearCamArea(stopStream) {
   const area = document.getElementById('cam-area');
-  const placeholder = document.getElementById('cam-area-placeholder');
+  const placeholder = document.getElementById('cam-placeholder') || document.getElementById('cam-area-placeholder');
   if (!area) return;
 
   const vid = document.getElementById('cam-area-video');
@@ -718,29 +723,23 @@ function _clearCamArea(stopStream) {
 }
 
 function _minimizeCamToBar(userId, username, stream) {
+  if (!userId || !stream) return;
   _clearCamArea(false);
-  const bar = document.getElementById('minimized-cams-bar');
+  const bar = document.getElementById('mini-cams-bar') || document.getElementById('minimized-cams-bar');
   if (!bar) return;
 
-  const pill = document.createElement('div');
-  pill.className = 'mini-cam-pill';
-  pill.dataset.userId = userId;
+  bar.querySelector(`[data-user-id="${String(userId)}"]`)?.remove();
 
-  const label = document.createElement('span');
-  label.textContent = `👤 ${username}`;
-
-  const restoreBtn = document.createElement('button');
-  restoreBtn.textContent = '▲ Restore';
-  restoreBtn.onclick = () => {
-    pill.remove();
-    if (!bar.querySelector('.mini-cam-pill')) bar.classList.remove('has-items');
+  const chip = document.createElement('div');
+  chip.className = 'mini-cam-chip';
+  chip.dataset.userId = userId;
+  chip.textContent = `📷 ${username || 'User'}`;
+  chip.title = `Restore ${username || 'camera'}`;
+  chip.onclick = () => {
+    chip.remove();
     _placeCamInArea(stream, userId, username);
   };
-
-  pill.appendChild(label);
-  pill.appendChild(restoreBtn);
-  bar.appendChild(pill);
-  bar.classList.add('has-items');
+  bar.appendChild(chip);
 }
 
 function escHtml(str) {
@@ -824,7 +823,7 @@ function updateComposerState() {
   const msgInput = document.getElementById('msg-input');
   const sendBtn = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
-  const imageBtn = document.getElementById('btn-image-url');
+  const imageBtn = getRoomImageTriggerEl();
   const voiceBtn = document.getElementById('btn-voice-note');
   const guestNoticeBar = document.getElementById('guest-notice-bar');
   const joinVoiceBtn = document.getElementById('btn-join-voice');

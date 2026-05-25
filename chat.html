@@ -65,7 +65,7 @@
   </div>
   <!-- ───────────────────────────────────────────────────────────────[...]
 
-  <header class="topbar">
+  <div class="topbar" id="topbar">
     <span class="logo-small">💬 ChatCorner</span>
     <div class="topbar-center" id="current-room-name">Select a Room</div>
     <div class="topbar-right">
@@ -73,45 +73,47 @@
       <button class="btn-sm" id="btn-edit-avatar" onclick="openAvatarUpload()" title="Update avatar" style="display:none">🖼️</button>
       <button class="btn-sm" onclick="logout()">Logout</button>
     </div>
-  </header>
-  <div class="app-body">
+  </div>
+  <div class="layout" id="main-layout">
     <div class="cam-area" id="cam-area">
-      <span id="cam-area-placeholder" style="padding:8px;text-align:center;font-size:0.75rem;opacity:0.5">📷<br>Click 📷 to view a cam</span>
+      <div class="cam-placeholder" id="cam-placeholder">📷</div>
+      <div class="cam-controls" id="cam-controls" style="display:none">
+        <button onclick="_minimizeCamToBar()">−</button>
+        <button onclick="_clearCamArea(true)">×</button>
+      </div>
     </div>
-    <div class="center-col">
-      <!-- ── Rooms Bar ──────────────────────────────────────────────── -->
+
+    <div class="sidebar left" id="rooms-sidebar">
+      <div class="sidebar-title">💬 Rooms</div>
+      <hr/>
+      <ul id="room-list" class="room-list" role="listbox"></ul>
+      <ul id="voice-room-list" class="room-list" role="listbox"></ul>
+    </div>
+
+    <div class="chat-main" id="chat-main">
       <div class="rooms-bar" id="rooms-horizontal"></div>
-      <!-- Hidden legacy room lists for backward compat with audio.js -->
-      <ul id="room-list" class="room-list" style="display:none"></ul>
-      <ul id="voice-room-list" class="room-list" style="display:none"></ul>
-
-      <!-- ── Minimized Cams Bar ─────────────────────────────────────── -->
-      <div class="minimized-cams-bar" id="minimized-cams-bar"></div>
-
-      <!-- ── Theme Bar ─────────────────────────────────────────────── -->
-      <div class="chat-theme-bar" id="chat-theme-bar">
-        <span class="chat-theme-label">🎨 Theme:</span>
+      <div class="chat-theme-bar" id="theme-bar">
+        <span class="chat-theme-label">THEME:</span>
         <button class="theme-dot" data-theme="nebula"
           style="background:linear-gradient(135deg,#8b6ded,#38c8e8)"
-          title="Nebula" onclick="setTheme('nebula')"></button>
+          title="Nebula" onclick="applyTheme('nebula')"></button>
         <button class="theme-dot" data-theme="ember"
           style="background:linear-gradient(135deg,#e8921a,#f5c842)"
-          title="Ember 🔥" onclick="setTheme('ember')"></button>
+          title="Ember 🔥" onclick="applyTheme('ember')"></button>
         <button class="theme-dot" data-theme="arctic"
           style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)"
-          title="Arctic ❄️" onclick="setTheme('arctic')"></button>
+          title="Arctic ❄️" onclick="applyTheme('arctic')"></button>
         <button class="theme-dot" data-theme="matrix"
           style="background:linear-gradient(135deg,#3dd668,#7af09a)"
-          title="Matrix" onclick="setTheme('matrix')"></button>
+          title="Matrix" onclick="applyTheme('matrix')"></button>
         <button class="theme-dot" data-theme="rose"
           style="background:linear-gradient(135deg,#e0628a,#f0a0c0)"
-          title="Rose 🌸" onclick="setTheme('rose')"></button>
-        <span class="chat-theme-name" id="chat-theme-name">Nebula</span>
+          title="Rose 🌸" onclick="applyTheme('rose')"></button>
+        <span class="chat-theme-name" id="theme-name">Nebula</span>
       </div>
-      <!-- ─────────────────────────────────────────────────────────────────────────── -->
-
       <div id="video-grid" class="video-grid hidden"></div>
-      <div id="messages" class="messages"></div>
+      <div id="messages" class="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
+      <div class="mini-cams-bar" id="mini-cams-bar"></div>
       <video id="local-video" class="local-video hidden" autoplay muted playsinline></video>
       <div id="audio-bar" class="audio-bar hidden">
         <span id="audio-status">🎤️ Voice: Off</span>
@@ -122,9 +124,6 @@
         <button id="btn-toggle-camera" class="btn-audio hidden" onclick="toggleCamera()">📷 Camera Off</button>
         <div id="peers-list" class="peers-list"></div>
       </div>
-
-      <!-- ── Room Users Bar ─────────────────────────────────────────── -->
-      <div class="room-users-bar" id="room-users-bar"></div>
 
       <div id="chat-input-row" class="input-row" style="position:relative">
         <div id="emoji-picker" class="emoji-picker hidden">
@@ -186,18 +185,19 @@
           <button class="emoji-btn" title="Cat" onclick="insertEmoji('😺')">😺</button>
           <button class="emoji-btn" title="Dog" onclick="insertEmoji('🐶')">🐶</button>
         </div>
-        <div id="room-image-url-popover" class="media-url-popover hidden">
+        <div id="media-url-popover" class="media-url-popover hidden">
           <input
-            id="room-image-url-input"
+            id="media-url-input"
             type="text"
             placeholder="Paste an image/GIF URL…"
             autocomplete="off"
             maxlength="1000"
           />
-          <button id="btn-room-image-url-clear" class="media-url-clear" type="button" title="Cancel image URL">✕</button>
+          <button class="btn-primary" style="padding:0.4rem 0.8rem;font-size:0.82rem" type="button" onclick="sendMediaUrl()">Send</button>
+          <button id="btn-media-url-clear" class="media-url-clear" type="button" title="Cancel image URL">✕</button>
         </div>
         <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
-        <button class="btn-emoji" id="btn-image-url" type="button" title="Share image/GIF by URL">🖼️</button>
+        <button class="btn-emoji" id="btn-media" type="button" title="Share image/GIF by URL">🖼️</button>
         <button class="btn-emoji" id="btn-voice-note" title="Voice note">🎙️</button>
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>
@@ -211,13 +211,17 @@
         for full features.
       </div>
     </div>
-    <div class="right-col">
-      <div class="pvt-users-bar" id="pvt-users-bar">
-        <span class="pvt-bar-label">💬 PVT:</span>
-        <span class="pvt-placeholder" id="pvt-placeholder">No private chats</span>
-      </div>
-      <div class="sidebar-title">👥 Online Users</div>
-      <ul id="user-list" class="user-list"></ul>
+
+    <div class="sidebar pvt" id="pvt-sidebar">
+      <div class="sidebar-title">💌 My PVT Users</div>
+      <hr/>
+      <ul id="pvt-user-list" class="user-list" role="listbox"></ul>
+    </div>
+
+    <div class="sidebar right" id="users-sidebar">
+      <div class="sidebar-title">👥 Online Now</div>
+      <hr/>
+      <ul id="user-list" class="user-list" role="listbox"></ul>
     </div>
   </div>
   <div id="audio-elements"></div>
@@ -234,8 +238,9 @@
   <script src="js/auth.js"></script>
   <script src="js/permissions.js"></script>
   <script src="js/chat.js"></script>
-  <script src="js/pm.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/pm.js"></script>
+  <script src="js/ui-enhancements.js"></script>
   <script src="js/resizable-layout.js"></script>
 </body>
 </html>
