@@ -178,7 +178,18 @@
           <button class="emoji-btn" title="Cat" onclick="insertEmoji('😺')">😺</button>
           <button class="emoji-btn" title="Dog" onclick="insertEmoji('🐶')">🐶</button>
         </div>
+        <div id="room-image-url-popover" class="media-url-popover hidden">
+          <input
+            id="room-image-url-input"
+            type="text"
+            placeholder="Paste an image/GIF URL…"
+            autocomplete="off"
+            maxlength="1000"
+          />
+          <button id="btn-room-image-url-clear" class="media-url-clear" type="button" title="Cancel image URL">✕</button>
+        </div>
         <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
+        <button class="btn-emoji" id="btn-image-url" type="button" title="Share image/GIF by URL">🖼️</button>
         <button class="btn-emoji" id="btn-voice-note" title="Voice note">🎙️</button>
         <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
                onkeydown="if(event.key==='Enter') sendMessage()"/>

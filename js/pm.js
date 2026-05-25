@@ -12,6 +12,16 @@ window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => { ensurePmRealtime(); }, 600);
 });
 
+document.addEventListener('click', (event) => {
+  Object.keys(pmWindows).forEach(userId => {
+    const row = getPmImageRow(userId);
+    const btn = pmWindows[userId]?.el.querySelector('.pm-image-btn');
+    if (!row || row.classList.contains('hidden')) return;
+    if (row.contains(event.target) || btn?.contains(event.target)) return;
+    closePmImageInput(userId);
+  });
+});
+
 async function ensurePmRealtime() {
   if (!currentUser?.id || pmChannel) return;
 
@@ -74,8 +84,13 @@ async function openPrivateChat(userId, username) {
       <button type="button" class="pm-call-end">End Call</button>
     </div>
     <div class="pm-messages"></div>
+    <div class="pm-image-url-row hidden">
+      <input class="pm-image-url-input" type="text" maxlength="1000" placeholder="Paste an image/GIF URL…" autocomplete="off"/>
+      <button type="button" class="media-url-clear pm-image-url-clear" title="Cancel image URL">✕</button>
+    </div>
     <div class="pm-input-row">
       <input class="pm-input" type="text" maxlength="500" placeholder="Type a private message…"/>
+      <button type="button" class="pm-image-btn" title="Share image/GIF by URL">🖼️</button>
       <button type="button" class="pm-record-btn" title="Record voice message">🎙️</button>
       <button type="button" class="pm-send-btn">Send</button>
     </div>
@@ -89,6 +104,9 @@ async function openPrivateChat(userId, username) {
   const closeBtn = wrap.querySelector('.pm-close-btn');
   const muteBtn = wrap.querySelector('.pm-mute-btn');
   const recordBtn = wrap.querySelector('.pm-record-btn');
+  const imageBtn = wrap.querySelector('.pm-image-btn');
+  const imageInput = wrap.querySelector('.pm-image-url-input');
+  const imageClearBtn = wrap.querySelector('.pm-image-url-clear');
   const callBtn = wrap.querySelector('.pm-call-btn');
   const acceptBtn = wrap.querySelector('.pm-call-accept');
   const declineBtn = wrap.querySelector('.pm-call-decline');
@@ -106,6 +124,22 @@ async function openPrivateChat(userId, username) {
   };
 
   recordBtn.onclick = () => togglePmRecording(userId);
+  imageBtn.onclick = (event) => {
+    event.stopPropagation();
+    togglePmImageInput(userId);
+  };
+  imageClearBtn.onclick = (event) => {
+    event.stopPropagation();
+    closePmImageInput(userId);
+  };
+  imageInput.onkeydown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      sendPrivateText(userId);
+      return;
+    }
+    if (event.key === 'Escape') closePmImageInput(userId);
+  };
   callBtn.onclick = () => startPmVoiceCall(userId);
   acceptBtn.onclick = () => acceptPmVoiceCall(userId);
   declineBtn.onclick = () => declinePmVoiceCall(userId);
@@ -165,6 +199,33 @@ function getPmMessagesBox(userId) {
   return pmWindows[userId]?.el.querySelector('.pm-messages');
 }
 
+function getPmImageRow(userId) {
+  return pmWindows[userId]?.el.querySelector('.pm-image-url-row');
+}
+
+function getPmImageInput(userId) {
+  return pmWindows[userId]?.el.querySelector('.pm-image-url-input');
+}
+
+function closePmImageInput(userId, clearValue = true) {
+  const row = getPmImageRow(userId);
+  const input = getPmImageInput(userId);
+  if (row) row.classList.add('hidden');
+  if (clearValue && input) input.value = '';
+}
+
+function togglePmImageInput(userId) {
+  const row = getPmImageRow(userId);
+  const input = getPmImageInput(userId);
+  if (!row || !input) return;
+  if (!row.classList.contains('hidden')) {
+    closePmImageInput(userId);
+    return;
+  }
+  row.classList.remove('hidden');
+  input.focus();
+}
+
 async function sendPrivateText(userId) {
   if (!currentProfile?.is_registered) {
     alert('🔒 Register to send private messages.');
@@ -173,21 +234,33 @@ async function sendPrivateText(userId) {
   const input = getPmInput(userId);
   if (!input) return;
   const text = input.value.trim();
-  if (!text) return;
+  const rawImageUrl = getPmImageInput(userId)?.value.trim() || '';
+  const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : '';
+  const isSendingImage = !getPmImageRow(userId)?.classList.contains('hidden') && !!rawImageUrl;
+  if (!text && !isSendingImage) return;
+  if (isSendingImage && !imageUrl) {
+    if (typeof showChatToast === 'function') showChatToast('Enter a valid http(s) image/GIF URL.', 'warning');
+    getPmImageInput(userId)?.focus();
+    return;
+  }
 
-  input.value = '';
+  const createdAt = new Date().toISOString();
+  if (!isSendingImage) input.value = '';
 
-  appendPmTextMessage(userId, {
-    from: currentUser.id,
-    text,
-    createdAt: new Date().toISOString()
-  }, true);
+  const message = isSendingImage
+    ? { from: currentUser.id, type: 'image', imageUrl, createdAt }
+    : { from: currentUser.id, type: 'text', text, createdAt };
+  appendPmHistoryMessage(userId, message, true);
 
   if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
-  pmTextHistory[userId].push({ from: currentUser.id, text, createdAt: new Date().toISOString() });
+  pmTextHistory[userId].push(message);
 
-  await persistPmToDb(userId, text);
-  await sendPmBroadcast({ to: userId, type: 'text', text });
+  await persistPmToDb(userId, isSendingImage ? imageUrl : text, isSendingImage ? 'image' : 'text');
+  await sendPmBroadcast(isSendingImage ? { to: userId, type: 'image', imageUrl } : { to: userId, type: 'text', text });
+  if (isSendingImage) {
+    closePmImageInput(userId);
+    if (typeof showChatToast === 'function') showChatToast('Image/GIF sent in private message.', 'success');
+  }
 }
 
 async function handleIncomingPm(payload) {
@@ -207,12 +280,23 @@ async function handleIncomingPm(payload) {
     return;
   }
 
+  if (payload.type === 'image') {
+    const createdAt = payload.createdAt || new Date().toISOString();
+    const message = { from: fromUserId, type: 'image', imageUrl: payload.imageUrl || '', createdAt };
+    appendPmHistoryMessage(fromUserId, message, false);
+    if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
+    pmTextHistory[fromUserId].push(message);
+    playPmNotification(fromUserId);
+    return;
+  }
+
   if (payload.type === 'text') {
     const createdAt = payload.createdAt || new Date().toISOString();
-    appendPmTextMessage(fromUserId, { from: fromUserId, text: payload.text || '', createdAt }, false);
+    const message = { from: fromUserId, type: 'text', text: payload.text || '', createdAt };
+    appendPmHistoryMessage(fromUserId, message, false);
 
     if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
-    pmTextHistory[fromUserId].push({ from: fromUserId, text: payload.text || '', createdAt });
+    pmTextHistory[fromUserId].push(message);
     playPmNotification(fromUserId);
   }
 }
@@ -230,6 +314,45 @@ function appendPmTextMessage(userId, msg, isMe) {
 
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
+}
+
+function appendPmImageMessage(userId, msg, isMe) {
+  const box = getPmMessagesBox(userId);
+  if (!box) return;
+
+  const imageSrc = normalizeImageUrl(msg.imageUrl || '');
+  const row = document.createElement('div');
+  row.className = 'pm-msg pm-image' + (isMe ? ' self' : '');
+  row.innerHTML = `
+    <div class="pm-msg-bubble">
+      ${imageSrc
+        ? `
+          <img class="pm-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="lazy"/>
+          <div class="pm-image-error hidden">⚠️ Image could not be loaded.</div>
+          <a class="pm-image-link" href="${escHtml(imageSrc)}" target="_blank" rel="noopener noreferrer">Open image</a>
+        `
+        : '<div class="pm-image-error">⚠️ Invalid image URL.</div>'}
+    </div>
+    <div class="pm-msg-time">${formatTime(msg.createdAt)}</div>
+  `;
+
+  const image = row.querySelector('.pm-inline-image');
+  const error = row.querySelector('.pm-image-error');
+  image?.addEventListener('error', () => {
+    image.remove();
+    if (error) error.classList.remove('hidden');
+  }, { once: true });
+
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function appendPmHistoryMessage(userId, msg, isMe) {
+  if (msg.type === 'image') {
+    appendPmImageMessage(userId, msg, isMe);
+    return;
+  }
+  appendPmTextMessage(userId, msg, isMe);
 }
 
 function appendPmVoiceMessage(userId, msg, isMe) {
@@ -261,7 +384,7 @@ function renderPmTextHistory(userId) {
   box.innerHTML = '';
 
   (pmTextHistory[userId] || []).forEach(msg => {
-    appendPmTextMessage(userId, msg, msg.from === currentUser.id);
+    appendPmHistoryMessage(userId, msg, msg.from === currentUser.id);
   });
 }
 
@@ -646,15 +769,15 @@ async function ensurePrivateTableSupport() {
   return pmTableAvailable;
 }
 
-async function persistPmToDb(userId, text) {
+async function persistPmToDb(userId, content, type = 'text') {
   const ok = await ensurePrivateTableSupport();
   if (!ok) return;
 
   const payload = {
     sender_id: currentUser.id,
     recipient_id: userId,
-    content: text,
-    type: 'text'
+    content,
+    type
   };
 
   const { error } = await sbClient.from('private_messages').insert(payload);
@@ -678,16 +801,18 @@ async function loadPmHistoryFromDb(userId) {
   }
 
   const existing = pmTextHistory[userId] || [];
-  const seen = new Set(existing.map(m => `${m.from}|${m.text}|${m.createdAt}`));
+  const seen = new Set(existing.map(m => `${m.from}|${m.type || 'text'}|${m.text || m.imageUrl || ''}|${m.createdAt}`));
 
   (data || []).forEach(row => {
-    if (row.type && row.type !== 'text') return;
+    if (row.type && !['text', 'image'].includes(row.type)) return;
     const item = {
       from: row.sender_id,
-      text: row.content || '',
+      type: row.type || 'text',
       createdAt: row.created_at || new Date().toISOString()
     };
-    const key = `${item.from}|${item.text}|${item.createdAt}`;
+    if (item.type === 'image') item.imageUrl = row.content || '';
+    else item.text = row.content || '';
+    const key = `${item.from}|${item.type}|${item.text || item.imageUrl || ''}|${item.createdAt}`;
     if (!seen.has(key)) {
       existing.push(item);
       seen.add(key);

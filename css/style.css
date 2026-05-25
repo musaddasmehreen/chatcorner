@@ -762,6 +762,39 @@ body {
   opacity: 0.95;
 }
 
+.msg-inline-image,
+.pm-inline-image {
+  display: block;
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+  margin-top: 0.2rem;
+  background: rgba(255,255,255,0.04);
+}
+
+.msg-image-link,
+.pm-image-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: var(--accent2);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.msg-image-link:hover,
+.pm-image-link:hover {
+  text-decoration: underline;
+}
+
+.msg-image-error,
+.pm-image-error {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #fca5a5;
+}
+
 .msg-time {
   font-size: 0.67rem;
   color: var(--muted);
@@ -1212,6 +1245,25 @@ body {
 }
 
 .pm-msg.self .pm-msg-bubble { background: var(--msg-self); }
+
+.pm-image-url-row {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.42rem 0.42rem 0;
+  background: var(--panel);
+}
+
+.pm-image-url-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0.34rem 0.5rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
 
 .pm-msg-time {
   font-size: 0.64rem;

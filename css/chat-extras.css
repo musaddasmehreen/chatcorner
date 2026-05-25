@@ -243,6 +243,48 @@ body.guest-mode .emoji-bar { display: none; }
   display: inline-flex;
 }
 
+.media-url-popover {
+  position: absolute;
+  left: 0.8rem;
+  right: 0.8rem;
+  bottom: calc(100% + 0.5rem);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--accent-rgb),0.28);
+  background: rgba(14, 18, 31, 0.94);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 19;
+}
+
+.media-url-popover input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+
+.media-url-popover input::placeholder {
+  color: rgba(255,255,255,0.6);
+}
+
+.media-url-clear {
+  border: 1px solid rgba(248,113,113,.35);
+  background: rgba(248,113,113,.12);
+  color: #fca5a5;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  line-height: 1;
+}
+
 .chat-toast-wrap {
   position: fixed;
   right: 1rem;
@@ -266,6 +308,11 @@ body.guest-mode .emoji-bar { display: none; }
 .chat-toast.warning {
   border-color: rgba(245,158,11,.5);
   color: #fcd34d;
+}
+
+.chat-toast.success {
+  border-color: rgba(74,222,128,.5);
+  color: #86efac;
 }
 
 /* ══ FEATURE 2 — VPN Block Overlay ═══════════════════════════════ */
