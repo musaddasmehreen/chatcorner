@@ -55,6 +55,32 @@ function closeEmojiPicker() {
   if (picker) picker.classList.add('hidden');
 }
 
+function toggleRoomImageUrlInput(event) {
+  event?.stopPropagation();
+  const popover = document.getElementById('room-image-url-popover');
+  const input = document.getElementById('room-image-url-input');
+  const trigger = document.getElementById('btn-image-url');
+  if (!popover || !input || trigger?.disabled) return;
+  closeEmojiPicker();
+  if (!popover.classList.contains('hidden')) {
+    closeRoomImageUrlInput();
+    return;
+  }
+  popover.classList.remove('hidden');
+  input.focus();
+}
+
+function closeRoomImageUrlInput(clearValue = true) {
+  const popover = document.getElementById('room-image-url-popover');
+  const input = document.getElementById('room-image-url-input');
+  if (popover) popover.classList.add('hidden');
+  if (clearValue && input) input.value = '';
+}
+
+function getRoomImageUrlValue() {
+  return document.getElementById('room-image-url-input')?.value.trim() || '';
+}
+
 /* ══ Chat State ═════════════════════════════════════════════════ */
 let currentUser    = null;
 let currentProfile = null;
@@ -74,6 +100,8 @@ let roomVoiceNoteChunks = [];
 let roomVoiceNoteStarting = false;
 let roomVoiceNoteRoomId = null;
 let discardRoomVoiceNoteOnStop = false;
+const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
+const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
@@ -147,6 +175,19 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('audio-bar').classList.remove('hidden');
   applyGuestModeUI();
+  document.getElementById('btn-image-url')?.addEventListener('click', toggleRoomImageUrlInput);
+  document.getElementById('btn-room-image-url-clear')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    closeRoomImageUrlInput();
+  });
+  document.getElementById('room-image-url-input')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      sendMessage();
+      return;
+    }
+    if (event.key === 'Escape') closeRoomImageUrlInput();
+  });
   document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
   document.getElementById('btn-clear-my-messages')?.addEventListener('click', clearMyMessagesFromScreen);
 
@@ -156,9 +197,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('click', (event) => {
     const picker = document.getElementById('emoji-picker');
     const emojiBtn = document.getElementById('btn-emoji');
-    if (!picker || picker.classList.contains('hidden')) return;
-    if (picker.contains(event.target) || emojiBtn?.contains(event.target)) return;
-    closeEmojiPicker();
+    if (picker && !picker.classList.contains('hidden')) {
+      if (!(picker.contains(event.target) || emojiBtn?.contains(event.target))) {
+        closeEmojiPicker();
+      }
+    }
+    const imagePopover = document.getElementById('room-image-url-popover');
+    const imageBtn = document.getElementById('btn-image-url');
+    if (imagePopover && !imagePopover.classList.contains('hidden')) {
+      if (!(imagePopover.contains(event.target) || imageBtn?.contains(event.target))) {
+        closeRoomImageUrlInput();
+      }
+    }
   });
 
   // Feature 2 — VPN check (non-blocking; shows overlay if VPN detected)
@@ -224,6 +274,7 @@ async function enterRoom(room) {
     if (sendBtn)  sendBtn.disabled  = true;
     if (emojiBtn) emojiBtn.disabled = true;
     closeEmojiPicker();
+    closeRoomImageUrlInput(false);
   } else {
     msgInput.disabled = false;
     msgInput.placeholder = 'Type a message\u2026 (Enter to send)';
@@ -313,9 +364,18 @@ function applyGuestUI() {
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
-  if (!text || !currentRoom) return;
+  const rawImageUrl = getRoomImageUrlValue();
+  const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : '';
+  const imagePopover = document.getElementById('room-image-url-popover');
+  const isSendingImage = !imagePopover?.classList.contains('hidden') && !!rawImageUrl;
+  if ((!text && !isSendingImage) || !currentRoom) return;
   if (currentRoom.is_locked) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
+    return;
+  }
+  if (isSendingImage && !imageUrl) {
+    showChatToast('Enter a valid http(s) image/GIF URL.', 'warning');
+    document.getElementById('room-image-url-input')?.focus();
     return;
   }
   if (!isRegisteredUser() && !currentRoom?.is_audio_enabled) {
@@ -326,15 +386,23 @@ async function sendMessage() {
     }
   }
 
-  input.value = '';
+  if (!isSendingImage) input.value = '';
 
-  await sbClient.from('messages').insert({
+  const { error } = await sbClient.from('messages').insert({
     room_id:  currentRoom.id,
     user_id:  currentUser.id,
     username: currentProfile.username,
-    content:  text,
-    type:     'text'
+    content:  isSendingImage ? imageUrl : text,
+    type:     isSendingImage ? 'image' : 'text'
   });
+  if (error) {
+    appendSystemMessage(isSendingImage ? 'Could not share image. Please try again.' : 'Could not send message. Please try again.');
+    return;
+  }
+  if (isSendingImage) {
+    closeRoomImageUrlInput();
+    showChatToast('Image/GIF shared in chat.', 'success');
+  }
 }
 
 /* Builds a message DOM node without appending it (used for batch & single) */
@@ -346,13 +414,16 @@ function buildMessageNode(msg) {
     return div;
   }
 
+  if (msg.type === 'image') {
+    return buildImageMessageNode(msg);
+  }
+
   // FIX 2 — Voice note messages: show locked placeholder for guests
   if (msg.type === 'voice') {
     const isMe  = msg.user_id === currentUser?.id;
     const div   = document.createElement('div');
     div.className = 'msg-row' + (isMe ? ' self' : '');
-    div.dataset.messageId = msg.id || '';
-    div.dataset.userId = msg.user_id || '';
+    setMessageRowData(div, msg, sanitizeAudioSource(msg));
     const initial = (msg.username || '?')[0].toUpperCase();
     const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
     const avatarInner = isMe && currentProfile?.avatar_url
@@ -381,8 +452,7 @@ function buildMessageNode(msg) {
   }
   const div   = document.createElement('div');
   div.className = 'msg-row' + (isMe ? ' self' : '');
-  div.dataset.messageId = msg.id || '';
-  div.dataset.userId = msg.user_id || '';
+  setMessageRowData(div, msg, msg.content || '');
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
@@ -492,7 +562,7 @@ function scrollToBottom() {
 }
 
 function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function formatTime(iso) {
@@ -555,6 +625,7 @@ function updateComposerState() {
   const msgInput = document.getElementById('msg-input');
   const sendBtn = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
+  const imageBtn = document.getElementById('btn-image-url');
   const voiceBtn = document.getElementById('btn-voice-note');
   const guestNoticeBar = document.getElementById('guest-notice-bar');
   const joinVoiceBtn = document.getElementById('btn-join-voice');
@@ -579,6 +650,11 @@ function updateComposerState() {
       emojiBtn.classList.remove('hidden');
       emojiBtn.disabled = isLocked;
       emojiBtn.title = '';
+    }
+    if (imageBtn) {
+      imageBtn.classList.remove('hidden');
+      imageBtn.disabled = isLocked;
+      imageBtn.title = '';
     }
     if (voiceBtn) {
       voiceBtn.classList.remove('hidden');
@@ -606,11 +682,41 @@ function updateComposerState() {
     emojiBtn.disabled = isLocked;
     emojiBtn.title = '';
   }
+  if (imageBtn) {
+    imageBtn.classList.remove('hidden');
+    imageBtn.disabled = isLocked;
+    imageBtn.title = '';
+  }
   if (voiceBtn) {
     voiceBtn.classList.remove('hidden');
     voiceBtn.disabled = isLocked;
     voiceBtn.title = '';
   }
+}
+
+function setMessageRowData(row, msg, content) {
+  if (!row) return;
+  row.dataset.messageId = msg?.id || '';
+  row.dataset.userId = msg?.user_id || '';
+  row.dataset.messageType = msg?.type || 'text';
+  row.dataset.messageContent = content || '';
+  row.dataset.createdAt = msg?.created_at || '';
+}
+
+function normalizeImageUrl(value) {
+  if (!value) return '';
+  try {
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+    if (!/\.(apng|avif|bmp|gif|ico|jpe?g|jfif|png|svg|webp)$/i.test(parsed.pathname)) return '';
+    return parsed.href;
+  } catch (_) {
+    return '';
+  }
+}
+
+function sanitizeImageSource(msg) {
+  return normalizeImageUrl(msg?.image_url || msg?.content || '');
 }
 
 function sanitizeAudioSource(msg) {
@@ -622,11 +728,52 @@ function sanitizeAudioSource(msg) {
   return '';
 }
 
+function buildImageMessageNode(msg) {
+  const isMe  = msg.user_id === currentUser?.id;
+  const div   = document.createElement('div');
+  div.className = 'msg-row' + (isMe ? ' self' : '');
+  const imageSrc = sanitizeImageSource(msg);
+  setMessageRowData(div, msg, imageSrc || msg?.content || '');
+
+  const initial = (msg.username || '?')[0].toUpperCase();
+  const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+  const avatarInner = isMe && currentProfile?.avatar_url
+    ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
+    : initial;
+  const deleteButton = isMe
+    ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
+    : '';
+  const imageMarkup = imageSrc
+    ? `
+      <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="lazy"/>
+      <div class="msg-image-error hidden">⚠️ Image could not be loaded.</div>
+      <a class="msg-image-link" href="${escHtml(imageSrc)}" target="_blank" rel="noopener noreferrer">Open image</a>
+    `
+    : '<div class="msg-image-error">⚠️ Invalid image URL.</div>';
+
+  div.innerHTML = `
+    <div class="avatar" style="background:${color}">${avatarInner}</div>
+    <div class="msg-bubble">
+      ${deleteButton}
+      <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
+      <div class="msg-text">${imageMarkup}</div>
+      <div class="msg-time">${formatTime(msg.created_at)}</div>
+    </div>`;
+
+  const image = div.querySelector('.msg-inline-image');
+  const error = div.querySelector('.msg-image-error');
+  image?.addEventListener('error', () => {
+    image.remove();
+    if (error) error.classList.remove('hidden');
+  }, { once: true });
+
+  return div;
+}
+
 function appendVoiceNoteMessage(msg, isMe) {
   const div = document.createElement('div');
   div.className = 'msg-row' + (isMe ? ' self' : '');
-  div.dataset.messageId = msg.id || '';
-  div.dataset.userId = msg.user_id || '';
+  setMessageRowData(div, msg, sanitizeAudioSource(msg));
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
@@ -749,6 +896,15 @@ function showGuestRateLimitToast(waitMs) {
 
   render();
   guestRateToastTimer = setInterval(render, 1000);
+}
+
+function showChatToast(text, variant = 'success', timeoutMs = 2200) {
+  const wrap = ensureChatToastWrap();
+  const toast = document.createElement('div');
+  toast.className = `chat-toast ${variant}`.trim();
+  toast.textContent = text;
+  wrap.appendChild(toast);
+  setTimeout(() => toast.remove(), timeoutMs);
 }
 
 function setVoiceNoteButtonState(isRecording) {
@@ -884,10 +1040,50 @@ function removeMessageNodeById(messageId) {
     ?.remove();
 }
 
+function archiveClearedMessageRows(rows, reason = 'clear-my-messages') {
+  if (!rows?.length) return 0;
+  try {
+    const existing = JSON.parse(localStorage.getItem(CLEARED_MESSAGE_ARCHIVE_KEY) || '[]');
+    const archivedRows = rows.map(row => ({
+      messageId: row.dataset.messageId || '',
+      userId: row.dataset.userId || '',
+      username: row.querySelector('.msg-username')?.textContent || currentProfile?.username || 'Unknown',
+      type: row.dataset.messageType || 'text',
+      content: row.dataset.messageContent || '',
+      createdAt: row.dataset.createdAt || '',
+      roomId: currentRoom?.id || '',
+      roomName: currentRoom?.name || '',
+      clearedAt: new Date().toISOString(),
+      reason
+    }));
+    localStorage.setItem(
+      CLEARED_MESSAGE_ARCHIVE_KEY,
+      JSON.stringify(existing.concat(archivedRows).slice(-MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS))
+    );
+    return archivedRows.length;
+  } catch (_) {
+    return 0;
+  }
+}
+
 function clearMyMessagesFromScreen() {
   if (!currentUser?.id) return;
-  const mine = document.querySelectorAll(`#messages .msg-row[data-user-id="${CSS.escape(currentUser.id)}"]`);
+  const mine = Array.from(document.querySelectorAll(`#messages .msg-row[data-user-id="${CSS.escape(currentUser.id)}"]`));
+  if (!mine.length) {
+    showChatToast('No messages to clear.', 'warning');
+    return;
+  }
+  const archivedCount = archiveClearedMessageRows(mine);
   mine.forEach(node => node.remove());
+  const clearBtn = document.getElementById('btn-clear-my-messages');
+  if (clearBtn) {
+    const originalText = clearBtn.textContent;
+    clearBtn.textContent = 'Cleared ✓';
+    setTimeout(() => {
+      clearBtn.textContent = originalText;
+    }, 1800);
+  }
+  showChatToast(`Cleared ${mine.length} message${mine.length === 1 ? '' : 's'}${archivedCount ? ' and saved them to your archive.' : '.'}`, 'success');
 }
 
 document.addEventListener('click', (event) => {
@@ -896,6 +1092,7 @@ document.addEventListener('click', (event) => {
   const row = deleteBtn.closest('.msg-row');
   if (!row) return;
   if (row.dataset.userId !== currentUser?.id) return;
+  archiveClearedMessageRows([row], 'single-message-remove');
   row.remove();
 });
 
