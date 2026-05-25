@@ -15,6 +15,8 @@ async function loginUser() {
   showMsg(msg, 'Logging in…', '');
 
   let email = '';
+
+  // 1) Try username lookup in profiles (may be blocked by RLS when unauthenticated)
   const { data: byUsername } = await sbClient
     .from('profiles')
     .select('email')
@@ -22,6 +24,7 @@ async function loginUser() {
     .maybeSingle();
   if (byUsername?.email) email = byUsername.email;
 
+  // 2) Try email lookup in profiles
   if (!email) {
     const { data: byEmail } = await sbClient
       .from('profiles')
@@ -31,7 +34,20 @@ async function loginUser() {
     if (byEmail?.email) email = byEmail.email;
   }
 
+  // 3) Direct email field
   if (!email && loginId.includes('@')) email = loginId;
+
+  // 4) Fallback: use cc_pending_email saved at registration time.
+  //    This handles the case where RLS blocks the profiles lookup for
+  //    unauthenticated users (common when email confirmation is required).
+  if (!email) {
+    const pendingUsername = localStorage.getItem('cc_pending_username') || '';
+    const pendingEmail    = localStorage.getItem('cc_pending_email')    || '';
+    if (pendingEmail && (pendingUsername.toLowerCase() === loginId.toLowerCase() || pendingEmail.toLowerCase() === loginId.toLowerCase())) {
+      email = pendingEmail;
+    }
+  }
+
   if (!email) {
     showMsg(msg, 'Incorrect username/email or password.', 'error');
     return;
@@ -41,7 +57,7 @@ async function loginUser() {
 
   if (error) {
     if (error.message.includes('Email not confirmed')) {
-      showMsg(msg, '📧 Please confirm your email first, then try again.', 'error');
+      showMsg(msg, '📧 Please confirm your email first, then try logging in again.', 'error');
     } else if (error.message.includes('Invalid login credentials')) {
       showMsg(msg, 'Incorrect username/email or password.', 'error');
     } else {
@@ -50,11 +66,13 @@ async function loginUser() {
     return;
   }
 
-  // If profile is missing (e.g. upsert failed at register time), recreate it now
+  // After a successful login we are authenticated — safe to read/write profiles.
   const { data: existingProf } = await sbClient
-    .from('profiles').select('id,email').eq('id', data.user.id).maybeSingle();
+    .from('profiles').select('id,email,username').eq('id', data.user.id).maybeSingle();
 
   if (!existingProf) {
+    // Profile was never saved (RLS blocked the upsert at registration time).
+    // Restore it now using the locally-stored pending values.
     const pendingUsername = localStorage.getItem('cc_pending_username')
       || 'User_' + data.user.id.substr(0, 5);
     await sbClient.from('profiles').upsert({
@@ -65,8 +83,14 @@ async function loginUser() {
       is_registered: true
     });
     localStorage.removeItem('cc_pending_username');
-  } else if (!existingProf.email && data.user.email) {
-    await sbClient.from('profiles').update({ email: data.user.email }).eq('id', data.user.id);
+    localStorage.removeItem('cc_pending_email');
+  } else {
+    // Profile exists — patch missing email if needed, then clear pending keys.
+    if (!existingProf.email && data.user.email) {
+      await sbClient.from('profiles').update({ email: data.user.email }).eq('id', data.user.id);
+    }
+    localStorage.removeItem('cc_pending_username');
+    localStorage.removeItem('cc_pending_email');
   }
 
   window.location.href = 'chat.html';
@@ -106,12 +130,16 @@ async function registerUser() {
     });
 
     if (profErr) {
-      // Non-fatal: store username so login can recover the profile
+      // Non-fatal: RLS may block this before email confirmation.
+      // Both username and email are saved below so loginUser() can recover.
       console.warn('Profile save error (will retry on login):', profErr.message);
     }
   }
 
+  // Always persist both so loginUser() can resolve username → email
+  // even when RLS prevents unauthenticated profile reads.
   localStorage.setItem('cc_pending_username', username);
+  localStorage.setItem('cc_pending_email', email);
 
   // Supabase returns a session immediately when email confirmation is disabled
   if (data.session) {
