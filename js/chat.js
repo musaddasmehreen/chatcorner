@@ -102,6 +102,7 @@ let roomVoiceNoteRoomId = null;
 let discardRoomVoiceNoteOnStop = false;
 const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
+const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
@@ -317,6 +318,12 @@ async function enterRoom(room) {
     }, payload => {
       removeMessageNodeById(payload.old?.id);
     })
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'messages',
+      filter: `room_id=eq.${room.id}`
+    }, payload => {
+      handleRealtimeMessageUpdate(payload.new);
+    })
     .subscribe();
 
   presenceChannel = sbClient.channel('presence:' + room.id, {
@@ -408,10 +415,7 @@ async function sendMessage() {
 /* Builds a message DOM node without appending it (used for batch & single) */
 function buildMessageNode(msg) {
   if (msg.type === 'system') {
-    const div = document.createElement('div');
-    div.className = 'msg-system';
-    div.textContent = '\u2014 ' + msg.content + ' \u2014';
-    return div;
+    return buildSystemMessageNode(msg.content, msg.created_at);
   }
 
   if (msg.type === 'image') {
@@ -432,9 +436,7 @@ function buildMessageNode(msg) {
     const audioHtml = currentProfile?.is_registered
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
       : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
-    const deleteButton = isMe
-      ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
-      : '';
+    const deleteButton = buildDeleteButtonHtml(msg.user_id);
     div.innerHTML = `
       <div class="avatar" style="background:${color}">${avatarInner}</div>
       <div class="msg-bubble">
@@ -459,9 +461,7 @@ function buildMessageNode(msg) {
   const avatarInner = isMe && currentProfile?.avatar_url
     ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
     : initial;
-  const deleteButton = isMe
-    ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
-    : '';
+  const deleteButton = buildDeleteButtonHtml(msg.user_id);
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${avatarInner}</div>
@@ -481,9 +481,7 @@ function appendMessage(msg) {
 }
 
 function appendSystemMessage(text) {
-  const div = document.createElement('div');
-  div.className = 'msg-system';
-  div.textContent = '\u2014 ' + text + ' \u2014';
+  const div = buildSystemMessageNode(text, new Date().toISOString());
   document.getElementById('messages').appendChild(div);
 }
 
@@ -610,6 +608,23 @@ function isRegisteredUser() {
 
 function canRunQuickModeration() {
   return currentProfile?.is_admin === true || currentProfile?.is_mod === true;
+}
+
+function canDeleteAnyMessage() {
+  return currentProfile?.is_owner === true || canRunQuickModeration();
+}
+
+function canDeleteMessageForUserId(userId) {
+  if (!currentUser?.id) return false;
+  return userId === currentUser.id || canDeleteAnyMessage();
+}
+
+function buildDeleteButtonHtml(userId) {
+  if (!canDeleteMessageForUserId(userId)) return '';
+  const title = userId === currentUser?.id
+    ? 'Delete permanently for everyone'
+    : 'Delete this message as admin/moderator';
+  return `<button type="button" class="msg-local-delete" title="${escHtml(title)}">🗑️</button>`;
 }
 
 function isKickActive(profile) {
@@ -740,9 +755,7 @@ function buildImageMessageNode(msg) {
   const avatarInner = isMe && currentProfile?.avatar_url
     ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
     : initial;
-  const deleteButton = isMe
-    ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
-    : '';
+  const deleteButton = buildDeleteButtonHtml(msg.user_id);
   const imageMarkup = imageSrc
     ? `
       <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="lazy"/>
@@ -782,9 +795,7 @@ function appendVoiceNoteMessage(msg, isMe) {
   const voiceMarkup = isRegisteredUser()
     ? (voiceSrc ? `<audio controls preload="none" src="${escHtml(voiceSrc)}"></audio>` : '<div class="msg-text">Voice note unavailable.</div>')
     : '<div class="msg-text">🔒 Voice notes are for registered users only.</div>';
-  const deleteButton = isMe
-    ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
-    : '';
+  const deleteButton = buildDeleteButtonHtml(msg.user_id);
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${initial}</div>
@@ -1035,9 +1046,63 @@ async function sendVoiceNote() {
 
 function removeMessageNodeById(messageId) {
   if (!messageId) return;
-  document
-    .querySelector(`#messages .msg-row[data-message-id="${CSS.escape(String(messageId))}"]`)
-    ?.remove();
+  const row = document
+    .querySelector(`#messages .msg-row[data-message-id="${CSS.escape(String(messageId))}"]`);
+  if (!row) return;
+  row.classList.add('is-deleting');
+  setTimeout(() => row.remove(), 220);
+}
+
+function buildSystemMessageNode(content, createdAt) {
+  const div = document.createElement('div');
+  const text = String(content || '');
+  const isDeletionNotice = text.startsWith(DELETED_MESSAGE_PREFIX);
+  const time = formatTime(createdAt);
+  div.className = `msg-system${isDeletionNotice ? ' msg-system-deleted' : ''}`;
+  div.innerHTML = `
+    <span class="msg-system-text">${isDeletionNotice ? escHtml(text) : `— ${escHtml(text)} —`}</span>
+    ${time ? `<span class="msg-system-time">${escHtml(time)}</span>` : ''}
+  `;
+  return div;
+}
+
+function handleRealtimeMessageUpdate(msg) {
+  if (!msg?.id || !msg?.is_deleted) return;
+  const deletedBy = msg.deleted_by || msg.username || 'Moderator';
+  const replacement = buildSystemMessageNode(
+    `${DELETED_MESSAGE_PREFIX}${deletedBy}`,
+    msg.deleted_at || msg.updated_at || new Date().toISOString()
+  );
+  const row = document.querySelector(`#messages .msg-row[data-message-id="${CSS.escape(String(msg.id))}"]`);
+  if (!row) return;
+  row.replaceWith(replacement);
+}
+
+async function deleteMessageForEveryone(messageId, targetUserId, targetUsername) {
+  const deletingOwn = targetUserId === currentUser?.id;
+  const deletingAsModerator = !deletingOwn && canDeleteAnyMessage();
+  const { error: deleteError } = await sbClient.from('messages').delete().eq('id', messageId);
+  if (deleteError) throw deleteError;
+
+  if (deletingAsModerator && currentRoom?.id) {
+    const deleterName = currentProfile?.username || 'Admin';
+    const { error: placeholderError } = await sbClient.from('messages').insert({
+      room_id: currentRoom.id,
+      user_id: currentUser.id,
+      username: deleterName,
+      content: `${DELETED_MESSAGE_PREFIX}${deleterName}`,
+      type: 'system'
+    });
+    if (placeholderError) {
+      console.warn('Failed to write moderation deletion placeholder', {
+        deleterId: currentUser?.id,
+        targetUserId,
+        targetUsername,
+        messageId,
+        error: placeholderError.message
+      });
+    }
+  }
 }
 
 function archiveClearedMessageRows(rows, reason = 'clear-my-messages') {
@@ -1066,34 +1131,96 @@ function archiveClearedMessageRows(rows, reason = 'clear-my-messages') {
   }
 }
 
-function clearMyMessagesFromScreen() {
+async function clearMyMessagesFromScreen() {
   if (!currentUser?.id) return;
   const mine = Array.from(document.querySelectorAll(`#messages .msg-row[data-user-id="${CSS.escape(currentUser.id)}"]`));
   if (!mine.length) {
-    showChatToast('No messages to clear.', 'warning');
+    showChatToast('No messages to delete.', 'warning');
     return;
   }
-  const archivedCount = archiveClearedMessageRows(mine);
-  mine.forEach(node => node.remove());
+  const messageIds = mine.map(row => row.dataset.messageId).filter(Boolean);
+  if (!messageIds.length) {
+    showChatToast('No deletable messages found.', 'warning');
+    return;
+  }
   const clearBtn = document.getElementById('btn-clear-my-messages');
   if (clearBtn) {
-    const originalText = clearBtn.textContent;
-    clearBtn.textContent = 'Cleared ✓';
+    clearBtn.disabled = true;
+    clearBtn.textContent = 'Deleting…';
+  }
+  const archivedCount = archiveClearedMessageRows(mine, 'clear-my-messages-db');
+  const { error } = await sbClient.from('messages').delete().in('id', messageIds).eq('room_id', currentRoom?.id);
+  if (error) {
+    showChatToast(`Could not delete messages: ${error.message}`, 'warning', 3200);
+    console.warn('Failed to clear messages permanently', {
+      userId: currentUser?.id,
+      roomId: currentRoom?.id,
+      count: messageIds.length,
+      error: error.message
+    });
+    if (clearBtn) {
+      clearBtn.disabled = false;
+      clearBtn.textContent = 'Clear My Messages';
+    }
+    return;
+  }
+  mine.forEach(node => {
+    node.classList.add('is-deleting');
+    setTimeout(() => node.remove(), 240);
+  });
+  if (clearBtn) {
+    clearBtn.textContent = 'Deleted ✓';
     setTimeout(() => {
-      clearBtn.textContent = originalText;
+      clearBtn.disabled = false;
+      clearBtn.textContent = 'Clear My Messages';
     }, 1800);
   }
-  showChatToast(`Cleared ${mine.length} message${mine.length === 1 ? '' : 's'}${archivedCount ? ' and saved them to your archive.' : '.'}`, 'success');
+  showChatToast(`Deleted ${mine.length} message${mine.length === 1 ? '' : 's'} for everyone${archivedCount ? ' and saved to your archive.' : '.'}`, 'success');
 }
 
-document.addEventListener('click', (event) => {
+document.addEventListener('click', async (event) => {
   const deleteBtn = event.target.closest('.msg-local-delete');
   if (!deleteBtn) return;
   const row = deleteBtn.closest('.msg-row');
   if (!row) return;
-  if (row.dataset.userId !== currentUser?.id) return;
+  const targetUserId = row.dataset.userId || '';
+  const messageId = row.dataset.messageId || '';
+  const targetUsername = row.querySelector('.msg-username')?.textContent || 'Unknown';
+  if (!messageId) return;
+  if (!canDeleteMessageForUserId(targetUserId)) {
+    showChatToast('You do not have permission to delete this message.', 'warning', 3200);
+    console.warn('Blocked unauthorized message deletion attempt', {
+      actorId: currentUser?.id,
+      actorName: currentProfile?.username,
+      targetUserId,
+      targetUsername,
+      messageId,
+      roomId: currentRoom?.id
+    });
+    return;
+  }
+  deleteBtn.disabled = true;
+  deleteBtn.textContent = '…';
+  row.classList.add('is-deleting');
   archiveClearedMessageRows([row], 'single-message-remove');
-  row.remove();
+  try {
+    await deleteMessageForEveryone(messageId, targetUserId, targetUsername);
+    removeMessageNodeById(messageId);
+  } catch (error) {
+    row.classList.remove('is-deleting');
+    deleteBtn.disabled = false;
+    deleteBtn.textContent = '🗑️';
+    showChatToast(`Could not delete message: ${error.message || 'Please try again.'}`, 'warning', 3200);
+    console.warn('Message deletion failed', {
+      actorId: currentUser?.id,
+      actorName: currentProfile?.username,
+      targetUserId,
+      targetUsername,
+      messageId,
+      roomId: currentRoom?.id,
+      error: error?.message || error
+    });
+  }
 });
 
 /* ════════════════════════════════════════════════════════════════
