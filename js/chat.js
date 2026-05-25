@@ -64,6 +64,11 @@ let presenceChannel= null;
 let onlineUsers    = {};
 let cameraStates   = {};
 let presenceBaseData = {};
+const ignoredUserIds = new Set();
+const profileCache = new Map();
+let activeProfileCardUserId = null;
+let profileHoverTimer = null;
+let avatarUploadInFlight = false;
 const GUEST_TEXT_RATE_LIMIT_COUNT = 2;
 const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const guestMessageTimesByRoom = new Map();
@@ -93,6 +98,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   currentProfile = prof;
+  hydrateIgnoredUsers();
   if (currentProfile?.is_banned) {
     const expiresAt = currentProfile.ban_expires_at ? new Date(currentProfile.ban_expires_at).getTime() : null;
     if (expiresAt && expiresAt <= Date.now()) {
@@ -122,6 +128,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.location.href = 'index.html';
     return;
   }
+  await syncProfileSessionMetadata();
+  if (await enforceVpnGatekeeper()) return;
   presenceBaseData = {
     userId: currentUser.id,
     username: currentProfile.username,
@@ -129,14 +137,26 @@ window.addEventListener('DOMContentLoaded', async () => {
     registered: currentProfile.is_registered,
     isAdmin: !!currentProfile.is_admin,
     isMod: !!currentProfile.is_mod,
+    isOwner: !!currentProfile.is_owner,
+    isVip: !!currentProfile.is_vip,
+    avatarUrl: currentProfile.avatar_url || '',
     cameraOn: false
   };
-  document.getElementById('user-badge').textContent = currentProfile.username + (currentProfile.is_registered ? ' \u2713' : ' \ud83d\udc64');
+  renderCurrentUserBadge();
 
   document.getElementById('audio-bar').classList.remove('hidden');
   applyGuestModeUI();
   document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
   document.getElementById('btn-clear-my-messages')?.addEventListener('click', clearMyMessagesFromScreen);
+  document.getElementById('btn-avatar-upload')?.addEventListener('click', () => {
+    if (!isRegisteredUser()) {
+      appendSystemMessage('🔒 Register to upload a custom avatar.');
+      return;
+    }
+    document.getElementById('avatar-upload-input')?.click();
+  });
+  document.getElementById('avatar-upload-input')?.addEventListener('change', handleAvatarFileSelection);
+  document.getElementById('profile-card-close')?.addEventListener('click', hideProfileCard);
 
   // Re-apply saved theme now that DOM is ready (syncs dots)
   applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
@@ -148,6 +168,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (picker.contains(event.target) || emojiBtn?.contains(event.target)) return;
     closeEmojiPicker();
   });
+  document.addEventListener('click', handleProfileCardClickOutside);
+  document.addEventListener('keydown', handleGlobalChatKeydown);
 
   await loadRooms();
 });
@@ -318,8 +340,109 @@ async function sendMessage() {
   });
 }
 
+function hydrateIgnoredUsers() {
+  ignoredUserIds.clear();
+  try {
+    const raw = localStorage.getItem(getIgnoredUsersStorageKey());
+    const parsed = raw ? JSON.parse(raw) : [];
+    parsed.forEach(id => ignoredUserIds.add(id));
+  } catch (_) {}
+}
+
+function persistIgnoredUsers() {
+  try {
+    localStorage.setItem(getIgnoredUsersStorageKey(), JSON.stringify(Array.from(ignoredUserIds)));
+  } catch (_) {}
+}
+
+function getIgnoredUsersStorageKey() {
+  return `cc-ignored-users:${currentUser?.id || 'guest'}`;
+}
+
+function getRoleKey(entity = {}) {
+  if (entity.isOwner || entity.is_owner) return 'owner';
+  if (entity.isAdmin || entity.is_admin) return 'admin';
+  if (entity.isMod || entity.is_mod) return 'mod';
+  if (entity.registered || entity.is_registered) return 'registered';
+  return 'guest';
+}
+
+function getRoleMeta(entity = {}) {
+  const role = getRoleKey(entity);
+  const map = {
+    owner: { key: 'owner', icon: '👑', label: 'Owner', className: 'role-owner', rank: 4 },
+    admin: { key: 'admin', icon: '🛡️', label: 'Admin', className: 'role-admin', rank: 3 },
+    mod: { key: 'mod', icon: '⚔️', label: 'Moderator', className: 'role-mod', rank: 2 },
+    registered: { key: 'registered', icon: '✅', label: 'Registered', className: 'role-registered', rank: 1 },
+    guest: { key: 'guest', icon: '👤', label: 'Guest', className: 'role-guest', rank: 0 }
+  };
+  return map[role];
+}
+
+function renderRoleBadges(entity = {}) {
+  const base = getRoleMeta(entity);
+  const badges = [`<span class="role-badge ${base.className}">${base.icon} ${base.label}</span>`];
+  if (entity.isVip || entity.is_vip) badges.push('<span class="role-badge role-vip">⭐ VIP</span>');
+  return badges.join('');
+}
+
+function renderCurrentUserBadge() {
+  const badge = document.getElementById('user-badge');
+  if (!badge || !currentProfile) return;
+  badge.innerHTML = `${escHtml(currentProfile.username || 'User')} <span class="role-stack">${renderRoleBadges(currentProfile)}</span>`;
+}
+
+function obfuscateEmail(email) {
+  const value = String(email || '');
+  if (!value.includes('@')) return '—';
+  const [name, domain] = value.split('@');
+  if (!name) return `*@${domain}`;
+  const visible = name[0];
+  return `${visible}${'*'.repeat(Math.max(4, name.length - 1))}@${domain}`;
+}
+
+function obfuscateIp(ipAddress) {
+  const value = String(ipAddress || '').trim();
+  if (!value) return '—';
+  if (currentProfile?.is_admin || currentProfile?.is_owner) return value;
+  if (value.includes(':')) {
+    const parts = value.split(':');
+    return parts.slice(0, 2).join(':') + ':****';
+  }
+  const parts = value.split('.');
+  if (parts.length !== 4) return '***.***.***.***';
+  return `${parts[0]}.${parts[1]}.*.*`;
+}
+
+function summarizeBrowserInfo(userAgent) {
+  const value = String(userAgent || '').trim();
+  if (!value) return 'Unknown';
+  if (value.includes('Firefox')) return 'Firefox';
+  if (value.includes('Edg/')) return 'Edge';
+  if (value.includes('Chrome/')) return 'Chrome';
+  if (value.includes('Safari/') && !value.includes('Chrome/')) return 'Safari';
+  return value.slice(0, 48);
+}
+
+function canModerateTargetEntity(target = {}) {
+  if (!currentProfile || !target || target.userId === currentUser?.id || target.id === currentUser?.id) return false;
+  if (currentProfile.is_owner) return true;
+  if (currentProfile.is_admin) return !target.is_owner && !target.isOwner && !target.is_admin && !target.isAdmin;
+  if (currentProfile.is_mod) return !target.is_owner && !target.isOwner && !target.is_admin && !target.isAdmin && !target.is_mod && !target.isMod;
+  return false;
+}
+
+function renderAvatarMarkup({ username = '?', color = '#7c3aed', avatarUrl = '', className = 'avatar' }) {
+  const safeInitial = escHtml((username || '?')[0]?.toUpperCase() || '?');
+  if (avatarUrl) {
+    return `<div class="${className} has-image" style="background:${color}"><img src="${escHtml(avatarUrl)}" alt="${escHtml(username)} avatar" /></div>`;
+  }
+  return `<div class="${className}" style="background:${color}">${safeInitial}</div>`;
+}
+
 /* Builds a message DOM node without appending it (used for batch & single) */
 function buildMessageNode(msg) {
+  if (ignoredUserIds.has(msg.user_id)) return null;
   if (msg.type === 'system') {
     const div = document.createElement('div');
     div.className = 'msg-system';
@@ -336,6 +459,7 @@ function buildMessageNode(msg) {
     div.dataset.userId = msg.user_id || '';
     const initial = (msg.username || '?')[0].toUpperCase();
     const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+    const avatarUrl = isMe ? currentProfile?.avatar_url : (onlineUsers[msg.user_id]?.avatarUrl || profileCache.get(msg.user_id)?.avatar_url || '');
     const audioHtml = currentProfile?.is_registered
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
       : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
@@ -343,7 +467,7 @@ function buildMessageNode(msg) {
       ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
       : '';
     div.innerHTML = `
-      <div class="avatar" style="background:${color}">${initial}</div>
+      ${renderAvatarMarkup({ username: msg.username, color, avatarUrl, className: 'avatar' })}
       <div class="msg-bubble">
         ${deleteButton}
         <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
@@ -362,14 +486,14 @@ function buildMessageNode(msg) {
   div.dataset.messageId = msg.id || '';
   div.dataset.userId = msg.user_id || '';
 
-  const initial = (msg.username || '?')[0].toUpperCase();
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+  const avatarUrl = isMe ? currentProfile?.avatar_url : (onlineUsers[msg.user_id]?.avatarUrl || profileCache.get(msg.user_id)?.avatar_url || '');
   const deleteButton = isMe
     ? '<button type="button" class="msg-local-delete" title="Delete from my screen">🗑️</button>'
     : '';
 
   div.innerHTML = `
-    <div class="avatar" style="background:${color}">${initial}</div>
+    ${renderAvatarMarkup({ username: msg.username, color, avatarUrl, className: 'avatar' })}
     <div class="msg-bubble">
       ${deleteButton}
       <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
@@ -405,30 +529,36 @@ function renderUserList() {
   const ul   = document.getElementById('user-list');
   const frag = document.createDocumentFragment();
   const canModerate = canRunQuickModeration();
-  const isGuest = !isRegisteredUser();
+  const isGuestViewer = !isRegisteredUser();
 
   Object.values(onlineUsers).forEach(u => {
     const li = document.createElement('li');
-    li.className = 'user-item';
+    li.className = 'user-item' + (u.isVip ? ' user-vip' : '');
     li.dataset.userId = u.userId;
-    const showModeration = canModerate && u.userId !== currentUser?.id;
+    const showModeration = canModerate && canModerateTargetEntity(u);
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
-      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : ''}>${escHtml(u.username)}${u.registered ? ' \u2713' : ''}</button>
+      <button type="button" class="user-name-btn" title="View profile card">
+        <span class="user-name-meta">
+          <span class="user-name-text">${escHtml(u.username)}</span>
+          <span class="role-stack">${renderRoleBadges(u)}</span>
+        </span>
+      </button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
       ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick for 30 minutes">\u26a1</button>` : ''}
       ${showModeration ? `<button type="button" class="user-mod-btn ban" data-user-id="${u.userId}" title="Ban user">\ud83d\udeab</button>` : ''}
     `;
 
-    // FIX 4 — Guests see "Register to DM" instead of opening private chat
-    li.querySelector('.user-name-btn')?.addEventListener('click', () => {
-      if (isGuest) {
-        appendSystemMessage('\ud83d\udd12 Register to start private chats.');
-        return;
-      }
-      if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
+    const nameBtn = li.querySelector('.user-name-btn');
+    const openCard = (event) => showProfileCardForUser(u.userId, event, u);
+    nameBtn?.addEventListener('click', openCard);
+    nameBtn?.addEventListener('mouseenter', (event) => {
+      clearTimeout(profileHoverTimer);
+      profileHoverTimer = setTimeout(() => openCard(event), 180);
     });
+    nameBtn?.addEventListener('mouseleave', () => clearTimeout(profileHoverTimer));
+    nameBtn?.addEventListener('focus', openCard);
 
     li.querySelector('.camera-user-btn')?.addEventListener('click', (ev) => {
       ev.stopPropagation();

@@ -39,6 +39,8 @@
     <div class="topbar-center" id="current-room-name">Select a Room</div>
     <div class="topbar-right">
       <span id="user-badge" class="user-badge"></span>
+      <button class="btn-sm" id="btn-avatar-upload" type="button" title="Upload avatar">Avatar</button>
+      <input id="avatar-upload-input" type="file" accept="image/*" class="hidden" />
       <button class="btn-sm" onclick="logout()">Logout</button>
     </div>
   </header>
@@ -168,6 +170,38 @@
   </div>
   <div id="audio-elements"></div>
   <div id="pm-root" class="pm-root"></div>
+  <div id="pm-taskbar" class="pm-taskbar" aria-live="polite"></div>
+  <div id="profile-card" class="profile-card hidden" role="dialog" aria-modal="false" aria-label="User profile card">
+    <div class="profile-card-header">
+      <div id="profile-card-avatar" class="profile-card-avatar"></div>
+      <div class="profile-card-meta">
+        <div class="profile-card-title-row">
+          <strong id="profile-card-name">User</strong>
+          <span id="profile-card-role" class="role-badge role-guest">👤 Guest</span>
+        </div>
+        <div id="profile-card-email" class="profile-card-sub">—</div>
+      </div>
+      <button id="profile-card-close" class="profile-card-close" type="button" aria-label="Close profile card">✕</button>
+    </div>
+    <div class="profile-card-body">
+      <div class="profile-card-grid">
+        <div><span class="profile-label">IP</span><span id="profile-card-ip">—</span></div>
+        <div><span class="profile-label">Country</span><span id="profile-card-country">—</span></div>
+        <div><span class="profile-label">Browser</span><span id="profile-card-browser">—</span></div>
+        <div><span class="profile-label">Status</span><span id="profile-card-status">—</span></div>
+      </div>
+      <div id="profile-card-actions" class="profile-card-actions">
+        <button type="button" data-action="mention">Mention</button>
+        <button type="button" data-action="private">Private</button>
+        <button type="button" data-action="profile">Profile</button>
+        <button type="button" data-action="ignore">Ignore</button>
+      </div>
+      <div id="profile-card-moderation" class="profile-card-moderation hidden">
+        <button type="button" data-action="kick">⚡ Kick</button>
+        <button type="button" data-action="ban">🚫 Ban</button>
+      </div>
+    </div>
+  </div>
   <div id="floating-camera-window" class="floating-camera hidden" aria-live="polite">
     <div id="floating-camera-header" class="floating-camera-header">
       <span id="floating-camera-title">📷 Camera</span>
@@ -178,6 +212,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/vpn-check.js"></script>
   <script src="js/permissions.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/pm.js"></script>
