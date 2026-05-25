@@ -468,11 +468,22 @@ body.guest-mode .emoji-bar { display: none; }
   line-height: 1.4;
 }
 
+.avatar-upload-error {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #fca5a5;
+}
+
 .avatar-upload-actions {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.9rem;
   justify-content: flex-end;
+}
+
+#btn-voice-note.recording {
+  border-color: rgba(248,113,113,0.45);
+  color: var(--red);
 }
 
 /* Avatar image inside chat avatar circle */

@@ -31,6 +31,7 @@
       </div>
       <canvas id="avatar-canvas" width="100" height="100" style="display:none" aria-hidden="true"></canvas>
       <input type="file" id="avatar-file-input" accept="image/*" onchange="onAvatarFileSelect(event)"/>
+      <div id="avatar-upload-error" class="avatar-upload-error hidden" role="alert" aria-live="polite"></div>
       <div class="avatar-upload-actions">
         <button class="btn-sm" onclick="closeAvatarUpload()">Cancel</button>
         <button class="btn-primary" id="btn-save-avatar" onclick="saveAvatar()" disabled>Save</button>

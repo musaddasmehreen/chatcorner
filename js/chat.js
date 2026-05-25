@@ -68,6 +68,12 @@ const GUEST_TEXT_RATE_LIMIT_COUNT = 2;
 const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const guestMessageTimesByRoom = new Map();
 let guestRateToastTimer = null;
+let roomVoiceNoteRecorder = null;
+let roomVoiceNoteStream = null;
+let roomVoiceNoteChunks = [];
+let roomVoiceNoteStarting = false;
+let roomVoiceNoteRoomId = null;
+let discardRoomVoiceNoteOnStop = false;
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
@@ -182,6 +188,10 @@ async function loadRooms() {
 
 async function enterRoom(room) {
   if (currentRoom?.id === room.id) return;
+  if (roomVoiceNoteRecorder?.state === 'recording') {
+    discardRoomVoiceNoteOnStop = true;
+    roomVoiceNoteRecorder.stop();
+  }
 
   if (messageChannel) sbClient.removeChannel(messageChannel);
   if (presenceChannel) sbClient.removeChannel(presenceChannel);
@@ -741,12 +751,130 @@ function showGuestRateLimitToast(waitMs) {
   guestRateToastTimer = setInterval(render, 1000);
 }
 
-function sendVoiceNote() {
+function setVoiceNoteButtonState(isRecording) {
+  const voiceBtn = document.getElementById('btn-voice-note');
+  if (!voiceBtn) return;
+  voiceBtn.classList.toggle('recording', !!isRecording);
+  voiceBtn.textContent = isRecording ? '⏹️' : '🎙️';
+  voiceBtn.title = isRecording ? 'Stop and send voice note' : 'Voice note';
+}
+
+function stopRoomVoiceNoteStream() {
+  roomVoiceNoteStream?.getTracks()?.forEach(track => track.stop());
+  roomVoiceNoteStream = null;
+}
+
+function roomVoiceBlobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function getVoiceNoteStartErrorMessage(error) {
+  if (!error) return 'Could not start voice note recording.';
+  if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+    return 'Microphone permission denied.';
+  }
+  if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+    return 'No microphone was found.';
+  }
+  if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+    return 'Microphone is busy in another app.';
+  }
+  return 'Could not start voice note recording.';
+}
+
+async function sendVoiceNote() {
   if (!isRegisteredUser()) {
     appendSystemMessage('🔒 Voice notes are for registered users only.');
     return;
   }
-  appendSystemMessage('Voice note sender is currently unavailable.');
+  if (currentRoom?.is_locked) {
+    appendSystemMessage('This room is locked by admin. Voice notes are disabled.');
+    return;
+  }
+  if (!currentRoom?.id) return;
+  if (roomVoiceNoteRecorder?.state === 'recording') {
+    roomVoiceNoteRecorder.stop();
+    return;
+  }
+  if (roomVoiceNoteStarting) return;
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    appendSystemMessage('Your browser does not support voice notes.');
+    return;
+  }
+
+  roomVoiceNoteStarting = true;
+  try {
+    roomVoiceNoteStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    roomVoiceNoteChunks = [];
+    roomVoiceNoteRecorder = new MediaRecorder(roomVoiceNoteStream);
+    roomVoiceNoteRoomId = currentRoom.id;
+    discardRoomVoiceNoteOnStop = false;
+
+    roomVoiceNoteRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) roomVoiceNoteChunks.push(event.data);
+    };
+
+    roomVoiceNoteRecorder.onerror = () => {
+      appendSystemMessage('Voice note recording failed.');
+    };
+
+    roomVoiceNoteRecorder.onstop = async () => {
+      setVoiceNoteButtonState(false);
+      stopRoomVoiceNoteStream();
+
+      const chunks = roomVoiceNoteChunks.slice();
+      roomVoiceNoteChunks = [];
+      roomVoiceNoteRecorder = null;
+      const roomIdForVoiceNote = roomVoiceNoteRoomId;
+      roomVoiceNoteRoomId = null;
+
+      if (discardRoomVoiceNoteOnStop) {
+        discardRoomVoiceNoteOnStop = false;
+        return;
+      }
+
+      if (!chunks.length) {
+        appendSystemMessage('Voice note cancelled.');
+        return;
+      }
+
+      try {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const dataUrl = await roomVoiceBlobToDataUrl(blob);
+        const { error } = await sbClient.from('messages').insert({
+          room_id: roomIdForVoiceNote,
+          user_id: currentUser.id,
+          username: currentProfile.username,
+          content: dataUrl,
+          type: 'voice'
+        });
+        if (error) {
+          appendSystemMessage('Could not send voice note. Please try again.');
+        }
+      } catch (_) {
+        appendSystemMessage('Could not send voice note. Please try again.');
+      }
+    };
+
+    roomVoiceNoteRecorder.start();
+    setVoiceNoteButtonState(true);
+    appendSystemMessage('🎙️ Recording voice note… click again to send.');
+  } catch (error) {
+    appendSystemMessage(getVoiceNoteStartErrorMessage(error));
+    setVoiceNoteButtonState(false);
+    stopRoomVoiceNoteStream();
+    roomVoiceNoteChunks = [];
+    roomVoiceNoteRecorder = null;
+    roomVoiceNoteRoomId = null;
+    discardRoomVoiceNoteOnStop = false;
+  } finally {
+    roomVoiceNoteStarting = false;
+  }
 }
 
 function removeMessageNodeById(messageId) {
@@ -972,10 +1100,12 @@ function openAvatarUpload() {
   // Reset state
   const preview = document.getElementById('avatar-preview');
   const hint    = document.getElementById('avatar-upload-hint');
+  const errorEl = document.getElementById('avatar-upload-error');
   const saveBtn = document.getElementById('btn-save-avatar');
   const fileInput = document.getElementById('avatar-file-input');
   if (preview)   { preview.src = ''; preview.classList.add('hidden'); }
   if (hint)      hint.textContent = 'Select an image to preview your avatar.';
+  if (errorEl)   { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
   if (saveBtn)   saveBtn.disabled = true;
   if (fileInput) fileInput.value = '';
   modal.classList.remove('hidden');
@@ -983,12 +1113,29 @@ function openAvatarUpload() {
 
 function closeAvatarUpload() {
   const modal = document.getElementById('avatar-upload-modal');
+  const errorEl = document.getElementById('avatar-upload-error');
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.add('hidden');
+  }
   if (modal) modal.classList.add('hidden');
+}
+
+function setAvatarUploadError(message) {
+  const errorEl = document.getElementById('avatar-upload-error');
+  if (!errorEl) return;
+  const text = String(message || '').trim();
+  errorEl.textContent = text;
+  errorEl.classList.toggle('hidden', !text);
 }
 
 function onAvatarFileSelect(event) {
   const file = event.target.files?.[0];
-  if (!file || !file.type.startsWith('image/')) return;
+  if (!file || !file.type.startsWith('image/')) {
+    setAvatarUploadError('❌ Please choose a valid image file.');
+    return;
+  }
+  setAvatarUploadError('');
   const reader = new FileReader();
   reader.onload = (e) => {
     const img = new Image();
@@ -1034,6 +1181,7 @@ function renderAvatarPreview(img) {
   }
   if (hint)    hint.textContent = '100 × 100 px preview (center-cropped)';
   if (saveBtn) saveBtn.disabled = false;
+  setAvatarUploadError('');
 }
 
 async function saveAvatar() {
@@ -1041,6 +1189,7 @@ async function saveAvatar() {
   if (!canvas) return;
   const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
   if (!dataUrl || dataUrl === 'data:,') return;
+  setAvatarUploadError('');
 
   const saveBtn = document.getElementById('btn-save-avatar');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
@@ -1052,7 +1201,13 @@ async function saveAvatar() {
   if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
 
   if (error) {
-    appendSystemMessage('Avatar save failed: ' + error.message);
+    const rawMessage = String(error.message || '');
+    const lower = rawMessage.toLowerCase();
+    if (lower.includes("'avatar_url'") && lower.includes('schema cache')) {
+      setAvatarUploadError('❌ Image avatars are not supported yet. Contact admin.');
+      return;
+    }
+    setAvatarUploadError('❌ Could not save avatar. Please try again.');
     return;
   }
 
