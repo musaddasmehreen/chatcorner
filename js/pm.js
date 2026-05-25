@@ -8,25 +8,26 @@ let pmChannel = null;
 let pmTableAvailable = null;
 let pmAudioCtx = null;
 
-// Track open private chat users for pvt-users-bar
+// Track open private chat users for pvt sidebar list
 const pvtOpenUsers = new Map(); // userId -> username
 
-function renderPvtBar() {
-  const bar = document.getElementById('pvt-users-bar');
-  if (!bar) return;
-  bar.innerHTML = '<span class="pvt-bar-label">💬 PVT:</span>';
-  if (pvtOpenUsers.size === 0) {
-    bar.innerHTML += '<span class="pvt-placeholder" id="pvt-placeholder">No private chats</span>';
-    return;
-  }
+function renderPvtUserList() {
+  const list = document.getElementById('pvt-user-list');
+  if (!list) return;
+  list.innerHTML = '';
   pvtOpenUsers.forEach((username, userId) => {
-    const btn = document.createElement('button');
-    btn.className = 'pvt-pill';
-    btn.textContent = username;
-    btn.onclick = () => openPrivateChat(userId, username);
-    bar.appendChild(btn);
+    const li = document.createElement('li');
+    li.className = 'user-item';
+    li.dataset.userId = userId;
+    li.innerHTML = `<span class="dot"></span> ${escHtml(username)}`;
+    li.onclick = () => openPrivateChat(userId, username);
+    list.appendChild(li);
   });
 }
+
+// backward compatibility
+function renderPvtBar() { renderPvtUserList(); }
+window.renderPvtUserList = renderPvtUserList;
 
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => { ensurePmRealtime(); }, 600);
@@ -80,7 +81,7 @@ async function openPrivateChat(userId, username) {
   }
 
   pvtOpenUsers.set(userId, username || getUsernameById(userId));
-  renderPvtBar();
+  renderPvtUserList();
 
   const root = document.getElementById('pm-root');
   if (!root) return;
@@ -205,7 +206,7 @@ function closePrivateChat(userId) {
   delete pmWindows[userId];
   delete pmCallState[userId];
   pvtOpenUsers.delete(userId);
-  renderPvtBar();
+  renderPvtUserList();
   positionPmWindows();
 }
 

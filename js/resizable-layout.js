@@ -78,7 +78,7 @@ class ResizableLayout {
     const rightDivider = document.createElement('div');
     rightDivider.className = 'resize-divider resize-divider-right';
     rightDivider.setAttribute('data-position', 'right');
-    this.layout.appendChild(rightDivider);
+    this.layout.insertBefore(rightDivider, this.rightSidebar);
   }
 
   /**

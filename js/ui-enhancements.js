@@ -19,6 +19,7 @@ class UIEnhancements {
    * FEATURE 1: Display all users in PVT at top (expandable/minimizable)
    */
   setupPVTUsersDisplay() {
+    if (document.getElementById('pvt-user-list')) return;
     const topbar = document.querySelector('.topbar');
     if (!topbar) return;
 
@@ -110,6 +111,7 @@ class UIEnhancements {
    * Shows minimized camera feeds with username on a single line
    */
   setupMinimizedCamsDisplay() {
+    if (document.getElementById('mini-cams-bar') || document.getElementById('minimized-cams-bar')) return;
     const chatMain = document.querySelector('.chat-main');
     if (!chatMain) return;
 
