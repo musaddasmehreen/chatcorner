@@ -32,6 +32,8 @@ class ResizableLayout {
   }
 
   init() {
+    // Guard: skip if old layout elements are absent (new layout uses app-body)
+    if (!this.leftSidebar || !this.rightSidebar || !this.layout) return;
     this.loadSavedWidths();
     this.createResizeDividers();
     this.attachEventListeners();

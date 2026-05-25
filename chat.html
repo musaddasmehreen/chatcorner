@@ -74,15 +74,19 @@
       <button class="btn-sm" onclick="logout()">Logout</button>
     </div>
   </header>
-  <div class="layout">
-    <aside class="sidebar left">
-      <div class="sidebar-title">🏠 Rooms</div>
-      <ul id="room-list" class="room-list"></ul>
-      <hr/>
-      <div class="sidebar-title">🎤️ Voice Rooms</div>
-      <ul id="voice-room-list" class="room-list"></ul>
-    </aside>
-    <main class="chat-main">
+  <div class="app-body">
+    <div class="cam-area" id="cam-area">
+      <span id="cam-area-placeholder" style="padding:8px;text-align:center;font-size:0.75rem;opacity:0.5">📷<br>Click 📷 to view a cam</span>
+    </div>
+    <div class="center-col">
+      <!-- ── Rooms Bar ──────────────────────────────────────────────── -->
+      <div class="rooms-bar" id="rooms-horizontal"></div>
+      <!-- Hidden legacy room lists for backward compat with audio.js -->
+      <ul id="room-list" class="room-list" style="display:none"></ul>
+      <ul id="voice-room-list" class="room-list" style="display:none"></ul>
+
+      <!-- ── Minimized Cams Bar ─────────────────────────────────────── -->
+      <div class="minimized-cams-bar" id="minimized-cams-bar"></div>
 
       <!-- ── Theme Bar ─────────────────────────────────────────────── -->
       <div class="chat-theme-bar" id="chat-theme-bar">
@@ -118,6 +122,9 @@
         <button id="btn-toggle-camera" class="btn-audio hidden" onclick="toggleCamera()">📷 Camera Off</button>
         <div id="peers-list" class="peers-list"></div>
       </div>
+
+      <!-- ── Room Users Bar ─────────────────────────────────────────── -->
+      <div class="room-users-bar" id="room-users-bar"></div>
 
       <div id="chat-input-row" class="input-row" style="position:relative">
         <div id="emoji-picker" class="emoji-picker hidden">
@@ -203,11 +210,15 @@
         <a href="index.html">Register</a>
         for full features.
       </div>
-    </main>
-    <aside class="sidebar right">
+    </div>
+    <div class="right-col">
+      <div class="pvt-users-bar" id="pvt-users-bar">
+        <span class="pvt-bar-label">💬 PVT:</span>
+        <span class="pvt-placeholder" id="pvt-placeholder">No private chats</span>
+      </div>
       <div class="sidebar-title">👥 Online Users</div>
       <ul id="user-list" class="user-list"></ul>
-    </aside>
+    </div>
   </div>
   <div id="audio-elements"></div>
   <div id="pm-root" class="pm-root"></div>
