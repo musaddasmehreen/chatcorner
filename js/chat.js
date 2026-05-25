@@ -223,15 +223,28 @@ async function loadRooms() {
 
   const textList  = document.getElementById('room-list');
   const voiceList = document.getElementById('voice-room-list');
-  textList.innerHTML = '';
-  voiceList.innerHTML = '';
+  const bar       = document.getElementById('rooms-horizontal');
+  if (textList)  textList.innerHTML = '';
+  if (voiceList) voiceList.innerHTML = '';
+  if (bar)       bar.innerHTML = '';
 
   rooms.forEach(room => {
+    // Horizontal pill in rooms-bar
+    if (bar) {
+      const pill = document.createElement('button');
+      pill.className = 'room-pill';
+      pill.dataset.roomId = room.id;
+      pill.textContent = `${room.is_audio_enabled ? '🎤' : '💬'} ${room.name}`;
+      pill.title = '0 users online';
+      pill.onclick = () => enterRoom(room);
+      bar.appendChild(pill);
+    }
+    // Hidden legacy lists for backward compat with audio.js
     const li = document.createElement('li');
     li.innerHTML = `${room.is_audio_enabled ? '\ud83c\udfa4\ufe0f' : '\ud83d\udcac'} ${room.name}`;
     li.onclick = () => enterRoom(room);
-    if (room.is_audio_enabled) voiceList.appendChild(li);
-    else textList.appendChild(li);
+    if (room.is_audio_enabled) { if (voiceList) voiceList.appendChild(li); }
+    else { if (textList) textList.appendChild(li); }
   });
 
   if (rooms.length) enterRoom(rooms[0]);
@@ -256,6 +269,9 @@ async function enterRoom(room) {
 
   document.querySelectorAll('.room-list li').forEach(li => {
     li.classList.toggle('active', li.textContent.includes(room.name));
+  });
+  document.querySelectorAll('#rooms-horizontal .room-pill').forEach(pill => {
+    pill.classList.toggle('active', pill.dataset.roomId === String(room.id));
   });
 
   const audioBar = document.getElementById('audio-bar');
@@ -535,7 +551,11 @@ function renderUserList() {
 
     li.querySelector('.camera-user-btn')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      if (typeof openFloatingCamera === 'function') openFloatingCamera(u.userId, u.username);
+      if (typeof showCamInArea === 'function') {
+        showCamInArea(u.userId, u.username);
+      } else if (typeof openFloatingCamera === 'function') {
+        openFloatingCamera(u.userId, u.username);
+      }
     });
     li.querySelector('.user-mod-btn.kick')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -551,12 +571,157 @@ function renderUserList() {
 
   ul.innerHTML = '';
   ul.appendChild(frag);
+
+  // Update room-users-bar
+  const bar = document.getElementById('room-users-bar');
+  if (bar) {
+    bar.innerHTML = '';
+    const bfrag = document.createDocumentFragment();
+    Object.values(onlineUsers).forEach(u => {
+      const pill = document.createElement('span');
+      pill.className = 'room-user-pill';
+      const dot = u.registered ? '🟢' : '👤';
+      pill.textContent = `${dot} ${u.username}`;
+      bfrag.appendChild(pill);
+    });
+    bar.appendChild(bfrag);
+  }
 }
 
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
 function scrollToBottom() {
   const el = document.getElementById('messages');
   el.scrollTop = el.scrollHeight;
+}
+
+/* ── Cam Area: show a user's camera stream inside #cam-area ── */
+let _camAreaStream = null;
+let _camAreaUserId = null;
+
+function showCamInArea(userId, username) {
+  const area = document.getElementById('cam-area');
+  if (!area) {
+    if (typeof openFloatingCamera === 'function') openFloatingCamera(userId, username);
+    return;
+  }
+
+  // If audio.js has a peer stream, use it; otherwise delegate to openFloatingCamera
+  let stream = null;
+  if (typeof peerConnections !== 'undefined' && peerConnections[userId]) {
+    const receivers = peerConnections[userId].getReceivers?.() || [];
+    const videoReceiver = receivers.find(r => r.track?.kind === 'video');
+    if (videoReceiver?.track) {
+      stream = new MediaStream([videoReceiver.track]);
+    }
+  }
+
+  if (!stream) {
+    // Delegate to audio.js floating camera and mirror the video element
+    if (typeof openFloatingCamera === 'function') openFloatingCamera(userId, username);
+    // Mirror: after short delay, grab video from floating window into cam-area
+    setTimeout(() => _mirrorFloatingCamToArea(userId, username), 200);
+    return;
+  }
+
+  _placeCamInArea(stream, userId, username);
+}
+
+function _mirrorFloatingCamToArea(userId, username) {
+  const floatWin = document.getElementById('floating-camera-window');
+  const floatVid = document.getElementById('floating-camera-video');
+  if (!floatVid || !floatVid.srcObject) return;
+  _placeCamInArea(floatVid.srcObject, userId, username);
+  // Hide floating window now that cam-area is showing
+  if (floatWin) floatWin.classList.add('hidden');
+}
+
+function _placeCamInArea(stream, userId, username) {
+  const area = document.getElementById('cam-area');
+  const placeholder = document.getElementById('cam-area-placeholder');
+  if (!area) return;
+
+  // Stop any previous stream in cam-area
+  _clearCamArea(false);
+
+  _camAreaStream = stream;
+  _camAreaUserId = userId;
+
+  const vid = document.createElement('video');
+  vid.autoplay = true;
+  vid.playsInline = true;
+  vid.srcObject = stream;
+  vid.id = 'cam-area-video';
+
+  const label = document.createElement('div');
+  label.className = 'cam-area-label';
+  label.textContent = username || '';
+
+  const controls = document.createElement('div');
+  controls.className = 'cam-area-controls';
+
+  const minBtn = document.createElement('button');
+  minBtn.className = 'cam-area-btn';
+  minBtn.title = 'Minimize';
+  minBtn.textContent = '▼';
+  minBtn.onclick = () => _minimizeCamToBar(userId, username, stream);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'cam-area-btn';
+  closeBtn.title = 'Close';
+  closeBtn.textContent = '✕';
+  closeBtn.onclick = () => _clearCamArea(true);
+
+  controls.appendChild(minBtn);
+  controls.appendChild(closeBtn);
+
+  if (placeholder) placeholder.style.display = 'none';
+  area.appendChild(vid);
+  area.appendChild(label);
+  area.appendChild(controls);
+}
+
+function _clearCamArea(stopStream) {
+  const area = document.getElementById('cam-area');
+  const placeholder = document.getElementById('cam-area-placeholder');
+  if (!area) return;
+
+  const vid = document.getElementById('cam-area-video');
+  if (vid) {
+    if (stopStream && vid.srcObject) {
+      vid.srcObject.getTracks().forEach(t => t.stop());
+    }
+    vid.remove();
+  }
+  area.querySelectorAll('.cam-area-label, .cam-area-controls').forEach(el => el.remove());
+  if (placeholder) placeholder.style.display = '';
+  _camAreaStream = null;
+  _camAreaUserId = null;
+}
+
+function _minimizeCamToBar(userId, username, stream) {
+  _clearCamArea(false);
+  const bar = document.getElementById('minimized-cams-bar');
+  if (!bar) return;
+
+  const pill = document.createElement('div');
+  pill.className = 'mini-cam-pill';
+  pill.dataset.userId = userId;
+
+  const label = document.createElement('span');
+  label.textContent = `👤 ${username}`;
+
+  const restoreBtn = document.createElement('button');
+  restoreBtn.textContent = '▲ Restore';
+  restoreBtn.onclick = () => {
+    pill.remove();
+    if (!bar.querySelector('.mini-cam-pill')) bar.classList.remove('has-items');
+    _placeCamInArea(stream, userId, username);
+  };
+
+  pill.appendChild(label);
+  pill.appendChild(restoreBtn);
+  bar.appendChild(pill);
+  bar.classList.add('has-items');
 }
 
 function escHtml(str) {
