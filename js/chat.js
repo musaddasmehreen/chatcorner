@@ -17,14 +17,21 @@ function setTheme(name) {
 }
 
 function applyTheme(name, animate) {
+  if (animate !== false && THEMES.includes(name)) {
+    localStorage.setItem('cc-theme', name);
+  }
   document.documentElement.setAttribute('data-theme', name);
   // Sync all theme dots on the page
   document.querySelectorAll('.theme-dot').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.theme === name);
   });
   // Update in-chat label
-  const lbl = document.getElementById('chat-theme-name');
+  const lbl = document.getElementById('theme-name-label') || document.getElementById('chat-theme-name');
   if (lbl) lbl.textContent = THEME_NAMES[name] || name;
+}
+
+function clearMyMessages() {
+  return clearMyMessagesFromScreen();
 }
 
 /* ══ Emoji Insertion ════════════════════════════════════════════
@@ -224,13 +231,10 @@ async function loadRooms() {
     if (error || !rooms?.length) return;
     const textList = document.getElementById('room-list');
     const voiceList = document.getElementById('voice-room-list');
-    const bar = document.getElementById('rooms-horizontal');
     if (textList) textList.innerHTML = '';
     if (voiceList) voiceList.innerHTML = '';
-    if (bar) bar.innerHTML = '';
     rooms.forEach(room => {
       const icon = room.is_audio_enabled ? '🎤' : '💬';
-      // Sidebar li
       const li = document.createElement('li');
       li.textContent = `${icon} ${room.name}`;
       li.title = room.name;
@@ -238,16 +242,6 @@ async function loadRooms() {
       li.onclick = () => enterRoom(room);
       if (room.is_audio_enabled) { if (voiceList) voiceList.appendChild(li); }
       else { if (textList) textList.appendChild(li); }
-      // Pill bar
-      if (bar) {
-        const pill = document.createElement('button');
-        pill.className = 'room-pill';
-        pill.dataset.roomId = String(room.id);
-        pill.textContent = `${icon} ${room.name}`;
-        pill.title = room.name;
-        pill.onclick = () => enterRoom(room);
-        bar.appendChild(pill);
-      }
     });
     enterRoom(rooms[0]);
   } catch(e) { console.error('loadRooms error', e); }
@@ -265,13 +259,12 @@ async function enterRoom(room) {
   if (typeof leaveVoice === 'function') leaveVoice();
 
   currentRoom = room;
-  document.getElementById('current-room-name').textContent = '# ' + room.name;
+  document.getElementById('current-room-name').textContent = `# ${room.name}`;
   document.getElementById('messages').innerHTML = '';
   onlineUsers = {};
   cameraStates = {};
 
   document.querySelectorAll('#room-list li, #voice-room-list li').forEach(el => el.classList.toggle('active', el.dataset.roomId === String(room.id)));
-  document.querySelectorAll('#rooms-horizontal .room-pill').forEach(el => el.classList.toggle('active', el.dataset.roomId === String(room.id)));
 
   const audioBar = document.getElementById('audio-bar');
   const msgInput = document.getElementById('msg-input');
