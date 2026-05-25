@@ -225,44 +225,39 @@ async function loadRooms() {
     return;
   }
 
-  const textList  = document.getElementById('room-list');
+  const textList = document.getElementById('room-list');
   const voiceList = document.getElementById('voice-room-list');
-  const bar       = document.getElementById('rooms-horizontal');
-  if (textList)  textList.innerHTML = '';
+  const bar = document.getElementById('rooms-horizontal');
+  if (textList) textList.innerHTML = '';
   if (voiceList) voiceList.innerHTML = '';
-  if (bar)       bar.innerHTML = '';
+  if (bar) bar.innerHTML = '';
+  if (!rooms?.length) return;
 
-  const safeRooms = Array.isArray(rooms) ? rooms : [];
+  rooms.forEach(room => {
+    const icon = room.is_audio_enabled ? '🎤' : '💬';
 
-  try {
-    safeRooms.forEach(room => {
-      // Horizontal pill in rooms-bar
-      if (bar) {
-        const pill = document.createElement('button');
-        pill.className = 'room-pill';
-        pill.dataset.roomId = String(room.id);
-        pill.textContent = `${room.is_audio_enabled ? '🎤 ' : '💬 '}${room.name}`;
-        pill.title = room.name;
-        pill.onclick = () => enterRoom(room);
-        bar.appendChild(pill);
-      }
-      // Hidden legacy lists for backward compat with audio.js
-      if (textList || voiceList) {
-        const li = document.createElement('li');
-        li.innerHTML = `${room.is_audio_enabled ? '\ud83c\udfa4\ufe0f' : '\ud83d\udcac'} ${room.name}`;
-        li.onclick = () => enterRoom(room);
-        if (room.is_audio_enabled) {
-          if (voiceList) voiceList.appendChild(li);
-        } else {
-          if (textList) textList.appendChild(li);
-        }
-      }
-    });
-  } catch (renderErr) {
-    console.error('Failed to render room lists:', renderErr);
-  }
+    const li = document.createElement('li');
+    li.textContent = `${icon} ${room.name}`;
+    li.title = `${room.name} — hover to see user count`;
+    li.onclick = () => enterRoom(room);
+    if (room.is_audio_enabled) {
+      if (voiceList) voiceList.appendChild(li);
+    } else {
+      if (textList) textList.appendChild(li);
+    }
 
-  if (safeRooms.length) enterRoom(safeRooms[0]);
+    if (bar) {
+      const pill = document.createElement('button');
+      pill.className = 'room-pill';
+      pill.dataset.roomId = String(room.id);
+      pill.textContent = `${icon} ${room.name}`;
+      pill.title = room.name;
+      pill.onclick = () => enterRoom(room);
+      bar.appendChild(pill);
+    }
+  });
+
+  enterRoom(rooms[0]);
 }
 
 async function enterRoom(room) {
