@@ -6,6 +6,7 @@
   <title>ChatCorner – Rooms</title>
   <link rel="stylesheet" href="css/style.css"/>
   <link rel="stylesheet" href="css/chat-extras.css"/>
+  <link rel="stylesheet" href="css/resizable-layout.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
 <body class="chat-page">
@@ -19,7 +20,7 @@
       <button class="btn-primary" onclick="location.reload()">I've Disabled My VPN — Retry</button>
     </div>
   </div>
-  <!-- ────────────────────────────────────────────────────────────────────────── -->
+  <!-- ───────────────────────────────────────────────────────────────[...]
 
   <!-- ── Avatar Upload Modal ─────────────────────────────────────────────────── -->
   <div id="avatar-upload-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Update Avatar">
@@ -38,7 +39,7 @@
       </div>
     </div>
   </div>
-  <!-- ────────────────────────────────────────────────────────────────────────── -->
+  <!-- ───────────────────────────────────────────────────────────────[...]
 
   <!-- ── Permissions Banner ──────────────────────────────────────────────────── -->
   <div id="permissions-banner" class="perms-banner" style="display:none">
@@ -62,7 +63,7 @@
       <button class="btn-allow-skip" onclick="dismissPermissions()">Skip</button>
     </div>
   </div>
-  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <!-- ───────────────────────────────────────────────────────────────[...]
 
   <header class="topbar">
     <span class="logo-small">💬 ChatCorner</span>
@@ -103,7 +104,7 @@
           title="Rose 🌸" onclick="setTheme('rose')"></button>
         <span class="chat-theme-name" id="chat-theme-name">Nebula</span>
       </div>
-      <!-- ─────────────────────────────────────────────────────────────────── -->
+      <!-- ─────────────────────────────────────────────────────────────────────────── -->
 
       <div id="video-grid" class="video-grid hidden"></div>
       <div id="messages" class="messages"></div>
@@ -224,5 +225,6 @@
   <script src="js/chat.js"></script>
   <script src="js/pm.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/resizable-layout.js"></script>
 </body>
 </html>
