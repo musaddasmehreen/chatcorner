@@ -219,7 +219,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadRooms() {
-  const { data: rooms } = await sbClient.from('rooms').select('*').order('name');
+  const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
+  if (error) {
+    appendSystemMessage('Could not load rooms. Please refresh.');
+    return;
+  }
 
   const textList  = document.getElementById('room-list');
   const voiceList = document.getElementById('voice-room-list');
@@ -228,26 +232,37 @@ async function loadRooms() {
   if (voiceList) voiceList.innerHTML = '';
   if (bar)       bar.innerHTML = '';
 
-  rooms.forEach(room => {
-    // Horizontal pill in rooms-bar
-    if (bar) {
-      const pill = document.createElement('button');
-      pill.className = 'room-pill';
-      pill.dataset.roomId = room.id;
-      pill.textContent = `${room.is_audio_enabled ? '🎤' : '💬'} ${room.name}`;
-      pill.title = '0 users online';
-      pill.onclick = () => enterRoom(room);
-      bar.appendChild(pill);
-    }
-    // Hidden legacy lists for backward compat with audio.js
-    const li = document.createElement('li');
-    li.innerHTML = `${room.is_audio_enabled ? '\ud83c\udfa4\ufe0f' : '\ud83d\udcac'} ${room.name}`;
-    li.onclick = () => enterRoom(room);
-    if (room.is_audio_enabled) { if (voiceList) voiceList.appendChild(li); }
-    else { if (textList) textList.appendChild(li); }
-  });
+  const safeRooms = Array.isArray(rooms) ? rooms : [];
 
-  if (rooms.length) enterRoom(rooms[0]);
+  try {
+    safeRooms.forEach(room => {
+      // Horizontal pill in rooms-bar
+      if (bar) {
+        const pill = document.createElement('button');
+        pill.className = 'room-pill';
+        pill.dataset.roomId = String(room.id);
+        pill.textContent = `${room.is_audio_enabled ? '🎤 ' : '💬 '}${room.name}`;
+        pill.title = room.name;
+        pill.onclick = () => enterRoom(room);
+        bar.appendChild(pill);
+      }
+      // Hidden legacy lists for backward compat with audio.js
+      if (textList || voiceList) {
+        const li = document.createElement('li');
+        li.innerHTML = `${room.is_audio_enabled ? '\ud83c\udfa4\ufe0f' : '\ud83d\udcac'} ${room.name}`;
+        li.onclick = () => enterRoom(room);
+        if (room.is_audio_enabled) {
+          if (voiceList) voiceList.appendChild(li);
+        } else {
+          if (textList) textList.appendChild(li);
+        }
+      }
+    });
+  } catch (renderErr) {
+    console.error('Failed to render room lists:', renderErr);
+  }
+
+  if (safeRooms.length) enterRoom(safeRooms[0]);
 }
 
 async function enterRoom(room) {
@@ -391,7 +406,11 @@ async function sendMessage() {
   const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : '';
   const imagePopover = document.getElementById('room-image-url-popover');
   const isSendingImage = !imagePopover?.classList.contains('hidden') && !!rawImageUrl;
-  if ((!text && !isSendingImage) || !currentRoom) return;
+  if (!text && !isSendingImage) return;
+  if (!currentRoom) {
+    appendSystemMessage('No room selected. Please wait for rooms to load...');
+    return;
+  }
   if (currentRoom.is_locked) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
     return;
