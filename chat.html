@@ -66,161 +66,94 @@
   <!-- ───────────────────────────────────────────────────────────────[...]
 
   <header class="topbar">
-    <span class="logo-small">💬 ChatCorner</span>
-    <div class="topbar-center" id="current-room-name">Select a Room</div>
-    <div class="topbar-right">
-      <span id="user-badge" class="user-badge"></span>
-      <button class="btn-sm" id="btn-edit-avatar" onclick="openAvatarUpload()" title="Update avatar" style="display:none">🖼️</button>
-      <button class="btn-sm" onclick="logout()">Logout</button>
-    </div>
-  </header>
-  <div class="app-body">
-    <div class="cam-area" id="cam-area">
-      <span id="cam-area-placeholder" style="padding:8px;text-align:center;font-size:0.75rem;opacity:0.5">📷<br>Click 📷 to view a cam</span>
-    </div>
-    <div class="center-col">
-      <!-- ── Rooms Bar ──────────────────────────────────────────────── -->
-      <div class="rooms-bar" id="rooms-horizontal"></div>
-      <!-- Hidden legacy room lists for backward compat with audio.js -->
-      <ul id="room-list" class="room-list" style="display:none"></ul>
-      <ul id="voice-room-list" class="room-list" style="display:none"></ul>
-
-      <!-- ── Minimized Cams Bar ─────────────────────────────────────── -->
-      <div class="minimized-cams-bar" id="minimized-cams-bar"></div>
-
-      <!-- ── Theme Bar ─────────────────────────────────────────────── -->
-      <div class="chat-theme-bar" id="chat-theme-bar">
-        <span class="chat-theme-label">🎨 Theme:</span>
-        <button class="theme-dot" data-theme="nebula"
-          style="background:linear-gradient(135deg,#8b6ded,#38c8e8)"
-          title="Nebula" onclick="setTheme('nebula')"></button>
-        <button class="theme-dot" data-theme="ember"
-          style="background:linear-gradient(135deg,#e8921a,#f5c842)"
-          title="Ember 🔥" onclick="setTheme('ember')"></button>
-        <button class="theme-dot" data-theme="arctic"
-          style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)"
-          title="Arctic ❄️" onclick="setTheme('arctic')"></button>
-        <button class="theme-dot" data-theme="matrix"
-          style="background:linear-gradient(135deg,#3dd668,#7af09a)"
-          title="Matrix" onclick="setTheme('matrix')"></button>
-        <button class="theme-dot" data-theme="rose"
-          style="background:linear-gradient(135deg,#e0628a,#f0a0c0)"
-          title="Rose 🌸" onclick="setTheme('rose')"></button>
-        <span class="chat-theme-name" id="chat-theme-name">Nebula</span>
-      </div>
-      <!-- ─────────────────────────────────────────────────────────────────────────── -->
-
-      <div id="video-grid" class="video-grid hidden"></div>
-      <div id="messages" class="messages"></div>
-      <video id="local-video" class="local-video hidden" autoplay muted playsinline></video>
-      <div id="audio-bar" class="audio-bar hidden">
-        <span id="audio-status">🎤️ Voice: Off</span>
-        <canvas id="voice-visualizer" class="voice-visualizer hidden" width="200" height="24" aria-label="Voice activity visualizer"></canvas>
-        <button id="btn-join-voice" class="btn-audio" onclick="joinVoice()">Join Voice</button>
-        <button id="btn-leave-voice" class="btn-audio red hidden" onclick="leaveVoice()">Leave Voice</button>
-        <button id="btn-mute" class="btn-audio hidden" onclick="toggleMute()">🔇 Mute</button>
-        <button id="btn-toggle-camera" class="btn-audio hidden" onclick="toggleCamera()">📷 Camera Off</button>
-        <div id="peers-list" class="peers-list"></div>
-      </div>
-
-      <!-- ── Room Users Bar ─────────────────────────────────────────── -->
-      <div class="room-users-bar" id="room-users-bar"></div>
-
-      <div id="chat-input-row" class="input-row" style="position:relative">
-        <div id="emoji-picker" class="emoji-picker hidden">
-          <button class="emoji-btn" title="Grinning" onclick="insertEmoji('😀')">😀</button>
-          <button class="emoji-btn" title="Big smile" onclick="insertEmoji('😃')">😃</button>
-          <button class="emoji-btn" title="Beaming" onclick="insertEmoji('😄')">😄</button>
-          <button class="emoji-btn" title="Wink" onclick="insertEmoji('😉')">😉</button>
-          <button class="emoji-btn" title="Smiling" onclick="insertEmoji('😊')">😊</button>
-          <button class="emoji-btn" title="Laughing" onclick="insertEmoji('😂')">😂</button>
-          <button class="emoji-btn" title="Rolling" onclick="insertEmoji('🤣')">🤣</button>
-          <button class="emoji-btn" title="Star-struck" onclick="insertEmoji('🤩')">🤩</button>
-          <button class="emoji-btn" title="Heart eyes" onclick="insertEmoji('😍')">😍</button>
-          <button class="emoji-btn" title="Blowing kiss" onclick="insertEmoji('😘')">😘</button>
-          <button class="emoji-btn" title="Thinking" onclick="insertEmoji('🤔')">🤔</button>
-          <button class="emoji-btn" title="Shush" onclick="insertEmoji('🤫')">🤫</button>
-          <button class="emoji-btn" title="Sunglasses" onclick="insertEmoji('😎')">😎</button>
-          <button class="emoji-btn" title="Nerd" onclick="insertEmoji('🤓')">🤓</button>
-          <button class="emoji-btn" title="Smirk" onclick="insertEmoji('😏')">😏</button>
-          <button class="emoji-btn" title="Upside down" onclick="insertEmoji('🙃')">🙃</button>
-          <button class="emoji-btn" title="Rolling eyes" onclick="insertEmoji('🙄')">🙄</button>
-          <button class="emoji-btn" title="Surprised" onclick="insertEmoji('😲')">😲</button>
-          <button class="emoji-btn" title="Mind blown" onclick="insertEmoji('🤯')">🤯</button>
-          <button class="emoji-btn" title="Party" onclick="insertEmoji('🥳')">🥳</button>
-          <button class="emoji-btn" title="Crying" onclick="insertEmoji('😢')">😢</button>
-          <button class="emoji-btn" title="Loudly crying" onclick="insertEmoji('😭')">😭</button>
-          <button class="emoji-btn" title="Angry" onclick="insertEmoji('😡')">😡</button>
-          <button class="emoji-btn" title="Sleepy" onclick="insertEmoji('😴')">😴</button>
-          <button class="emoji-btn" title="Sick" onclick="insertEmoji('🤒')">🤒</button>
-          <button class="emoji-btn" title="100" onclick="insertEmoji('💯')">💯</button>
-          <button class="emoji-btn" title="Fire" onclick="insertEmoji('🔥')">🔥</button>
-          <button class="emoji-btn" title="Sparkles" onclick="insertEmoji('✨')">✨</button>
-          <button class="emoji-btn" title="Heart" onclick="insertEmoji('❤️')">❤️</button>
-          <button class="emoji-btn" title="Orange heart" onclick="insertEmoji('🧡')">🧡</button>
-          <button class="emoji-btn" title="Yellow heart" onclick="insertEmoji('💛')">💛</button>
-          <button class="emoji-btn" title="Green heart" onclick="insertEmoji('💚')">💚</button>
-          <button class="emoji-btn" title="Blue heart" onclick="insertEmoji('💙')">💙</button>
-          <button class="emoji-btn" title="Broken heart" onclick="insertEmoji('💔')">💔</button>
-          <button class="emoji-btn" title="Thumbs up" onclick="insertEmoji('👍')">👍</button>
-          <button class="emoji-btn" title="Thumbs down" onclick="insertEmoji('👎')">👎</button>
-          <button class="emoji-btn" title="Clapping" onclick="insertEmoji('👏')">👏</button>
-          <button class="emoji-btn" title="Wave" onclick="insertEmoji('👋')">👋</button>
-          <button class="emoji-btn" title="OK hand" onclick="insertEmoji('👌')">👌</button>
-          <button class="emoji-btn" title="Victory" onclick="insertEmoji('✌️')">✌️</button>
-          <button class="emoji-btn" title="Muscle" onclick="insertEmoji('💪')">💪</button>
-          <button class="emoji-btn" title="Pray" onclick="insertEmoji('🙏')">🙏</button>
-          <button class="emoji-btn" title="Eyes" onclick="insertEmoji('👀')">👀</button>
-          <button class="emoji-btn" title="Raising hand" onclick="insertEmoji('🙋')">🙋</button>
-          <button class="emoji-btn" title="Trophy" onclick="insertEmoji('🏆')">🏆</button>
-          <button class="emoji-btn" title="Gift" onclick="insertEmoji('🎁')">🎁</button>
-          <button class="emoji-btn" title="Cake" onclick="insertEmoji('🎂')">🎂</button>
-          <button class="emoji-btn" title="Music note" onclick="insertEmoji('🎵')">🎵</button>
-          <button class="emoji-btn" title="Pizza" onclick="insertEmoji('🍕')">🍕</button>
-          <button class="emoji-btn" title="Coffee" onclick="insertEmoji('☕')">☕</button>
-          <button class="emoji-btn" title="Rainbow" onclick="insertEmoji('🌈')">🌈</button>
-          <button class="emoji-btn" title="Sun" onclick="insertEmoji('☀️')">☀️</button>
-          <button class="emoji-btn" title="Moon" onclick="insertEmoji('🌙')">🌙</button>
-          <button class="emoji-btn" title="Star" onclick="insertEmoji('⭐')">⭐</button>
-          <button class="emoji-btn" title="Rocket" onclick="insertEmoji('🚀')">🚀</button>
-          <button class="emoji-btn" title="Cat" onclick="insertEmoji('😺')">😺</button>
-          <button class="emoji-btn" title="Dog" onclick="insertEmoji('🐶')">🐶</button>
-        </div>
-        <div id="room-image-url-popover" class="media-url-popover hidden">
-          <input
-            id="room-image-url-input"
-            type="text"
-            placeholder="Paste an image/GIF URL…"
-            autocomplete="off"
-            maxlength="1000"
-          />
-          <button id="btn-room-image-url-clear" class="media-url-clear" type="button" title="Cancel image URL">✕</button>
-        </div>
-        <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
-        <button class="btn-emoji" id="btn-image-url" type="button" title="Share image/GIF by URL">🖼️</button>
-        <button class="btn-emoji" id="btn-voice-note" title="Voice note">🎙️</button>
-        <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500"
-               onkeydown="if(event.key==='Enter') sendMessage()"/>
-        <button class="btn-send" onclick="sendMessage()">Send</button>
-        <button class="btn-sm" id="btn-clear-my-messages" type="button" title="Delete my messages permanently for everyone">Clear My Messages</button>
-      </div>
-      <div id="guest-notice-bar" class="guest-notice-bar hidden" aria-live="polite">
-        👤 You are viewing as a guest.
-        You can send up to 2 messages per minute in text rooms.
-        <a href="index.html">Register</a>
-        for full features.
-      </div>
-    </div>
-    <div class="right-col">
-      <div class="pvt-users-bar" id="pvt-users-bar">
-        <span class="pvt-bar-label">💬 PVT:</span>
-        <span class="pvt-placeholder" id="pvt-placeholder">No private chats</span>
-      </div>
-      <div class="sidebar-title">👥 Online Users</div>
-      <ul id="user-list" class="user-list"></ul>
-    </div>
+  <span class="logo-small">💬 ChatCorner</span>
+  <div class="topbar-center" id="current-room-name">Select a Room</div>
+  <div class="topbar-right">
+    <span id="user-badge" class="user-badge"></span>
+    <button class="btn-sm" id="btn-edit-avatar" onclick="openAvatarUpload()" title="Update avatar" style="display:none">🖼️</button>
+    <button class="btn-sm" onclick="logout()">Logout</button>
   </div>
-  <div id="audio-elements"></div>
+</header>
+
+<div class="layout">
+
+  <!-- COL 1: CAM -->
+  <div class="cam-area" id="cam-area">
+    <span id="cam-area-placeholder" style="text-align:center;font-size:0.7rem;opacity:0.35;padding:8px;margin-top:1.5rem">📷<br>Click 📷 to view a cam</span>
+  </div>
+
+  <!-- COL 2: ROOMS -->
+  <div class="sidebar left" id="rooms-sidebar">
+    <div class="sidebar-title">🏠 Rooms</div>
+    <ul id="room-list" class="room-list"></ul>
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-title">🎤 Voice Rooms</div>
+    <ul id="voice-room-list" class="room-list"></ul>
+  </div>
+
+  <!-- COL 3: CENTER -->
+  <div class="chat-main">
+
+    <div class="rooms-bar" id="rooms-horizontal"></div>
+
+    <div class="chat-theme-bar" id="chat-theme-bar">
+      <span class="chat-theme-label">🎨 Theme:</span>
+      <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" title="Nebula" onclick="setTheme('nebula')"></button>
+      <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" title="Ember 🔥" onclick="setTheme('ember')"></button>
+      <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" title="Arctic ❄️" onclick="setTheme('arctic')"></button>
+      <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" title="Matrix" onclick="setTheme('matrix')"></button>
+      <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" title="Rose 🌸" onclick="setTheme('rose')"></button>
+      <span id="chat-theme-name" class="chat-theme-label" style="margin-left:4px;opacity:0.6"></span>
+    </div>
+
+    <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
+
+    <div class="minimized-cams-bar" id="minimized-cams-bar"></div>
+
+    <div class="audio-bar hidden" id="audio-bar">
+      <span id="audio-status"></span>
+      <canvas class="voice-visualizer hidden" id="voice-visualizer" width="60" height="24" aria-hidden="true"></canvas>
+      <div class="peers-list" id="peers-list"></div>
+      <button class="btn-audio hidden" id="btn-join-voice" onclick="joinVoice()">🎤 Join Voice</button>
+      <button class="btn-audio red hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
+    </div>
+
+    <div class="input-row" id="chat-input-row" style="position:relative">
+      <div id="emoji-picker" class="emoji-picker hidden"></div>
+      <div id="room-image-url-popover" class="room-image-url-popover hidden">
+        <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
+        <button id="btn-room-image-url-clear" class="btn-sm" title="Clear">✕</button>
+      </div>
+      <button class="btn-emoji" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
+      <button class="btn-emoji" id="btn-image-url" title="Share image">🖼️</button>
+      <button class="btn-voice-note" id="btn-voice-note" onclick="toggleRoomVoiceNote()" title="Voice note" style="display:none">🎙️</button>
+      <span class="voice-note-timer" id="voice-note-timer" style="display:none"></span>
+      <input id="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off"/>
+      <button class="btn-send" onclick="sendMessage()">Send</button>
+      <button class="btn-sm" onclick="clearMyMessages()" style="white-space:nowrap;flex-shrink:0">Clear My Messages</button>
+    </div>
+
+    <div id="guest-notice-bar" class="guest-notice-bar" style="display:none">
+      👤 Guest mode — <a href="index.html">Sign in</a> for full access
+    </div>
+
+  </div><!-- end .chat-main -->
+
+  <!-- COL 4: PVT USERS -->
+  <div class="sidebar pvt" id="pvt-sidebar">
+    <div class="sidebar-title">💌 My PVT</div>
+    <ul class="user-list" id="pvt-user-list"></ul>
+  </div>
+
+  <!-- COL 5: ROOM USERS -->
+  <div class="sidebar right" id="users-sidebar">
+    <div class="sidebar-title">👥 Online</div>
+    <ul class="user-list" id="user-list"></ul>
+  </div>
+
+</div><!-- end .layout -->
+
+<div id="audio-elements"></div>
   <div id="pm-root" class="pm-root"></div>
   <div id="floating-camera-window" class="floating-camera hidden" aria-live="polite">
     <div id="floating-camera-header" class="floating-camera-header">
