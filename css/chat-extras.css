@@ -267,3 +267,217 @@ body.guest-mode .emoji-bar { display: none; }
   border-color: rgba(245,158,11,.5);
   color: #fcd34d;
 }
+
+/* ══ FEATURE 2 — VPN Block Overlay ═══════════════════════════════ */
+.vpn-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vpn-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.4rem 2rem;
+  max-width: 400px;
+  width: 90vw;
+  text-align: center;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+}
+
+.vpn-modal-icon { font-size: 3rem; margin-bottom: 0.8rem; }
+
+.vpn-modal h2 {
+  color: var(--text);
+  font-size: 1.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.vpn-modal p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.4rem;
+}
+
+/* ══ FEATURE 1 — Hover Profile Card ══════════════════════════════ */
+.profile-card {
+  position: fixed;
+  z-index: 2000;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem;
+  width: 230px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.48);
+  animation: pcFadeIn 0.15s ease-out;
+  pointer-events: auto;
+}
+
+@keyframes pcFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.pc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.55rem;
+}
+
+.pc-avatar-init {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.pc-avatar-img {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.pc-info { flex: 1; min-width: 0; }
+
+.pc-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.pc-role {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.18rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pc-join, .pc-ip {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.28rem;
+}
+
+.pc-ip { word-break: break-all; }
+
+.pc-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.pc-ban-btn, .pc-vip-btn {
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: inherit;
+  border: 1px solid;
+  transition: background 0.15s;
+}
+
+.pc-ban-btn {
+  border-color: rgba(248,113,113,0.45);
+  background: rgba(248,113,113,0.1);
+  color: var(--red);
+}
+.pc-ban-btn:hover { background: rgba(248,113,113,0.24); }
+
+.pc-vip-btn {
+  border-color: rgba(251,191,36,0.45);
+  background: rgba(251,191,36,0.1);
+  color: #fbbf24;
+}
+.pc-vip-btn:hover { background: rgba(251,191,36,0.24); }
+
+/* ══ FEATURE 4 — Role Badges in User List ════════════════════════ */
+.role-badge {
+  font-size: 0.78rem;
+  flex-shrink: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ══ FEATURE 3 — Avatar Upload Modal ════════════════════════════ */
+.avatar-upload-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-upload-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.4rem 1.6rem;
+  width: min(360px, 90vw);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+.avatar-upload-box h3 {
+  color: var(--text);
+  font-size: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.avatar-upload-preview {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.8rem;
+  min-height: 104px;
+}
+
+#avatar-preview {
+  width: 100px; height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+}
+
+.avatar-upload-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.avatar-upload-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+  justify-content: flex-end;
+}
+
+/* Avatar image inside chat avatar circle */
+.avatar img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}

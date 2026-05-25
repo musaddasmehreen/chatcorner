@@ -10,6 +10,35 @@
 </head>
 <body class="chat-page">
 
+  <!-- ── VPN Block Overlay ───────────────────────────────────────────────────── -->
+  <div id="vpn-overlay" class="vpn-overlay hidden" role="alertdialog" aria-modal="true" aria-label="VPN Detected">
+    <div class="vpn-modal">
+      <div class="vpn-modal-icon">🛡️</div>
+      <h2>VPN Detected</h2>
+      <p>Please disable your VPN to enter the chatroom.</p>
+      <button class="btn-primary" onclick="location.reload()">I've Disabled My VPN — Retry</button>
+    </div>
+  </div>
+  <!-- ────────────────────────────────────────────────────────────────────────── -->
+
+  <!-- ── Avatar Upload Modal ─────────────────────────────────────────────────── -->
+  <div id="avatar-upload-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Update Avatar">
+    <div class="avatar-upload-box">
+      <h3>🖼️ Update Avatar</h3>
+      <div class="avatar-upload-preview">
+        <img id="avatar-preview" alt="Avatar preview" class="hidden"/>
+        <span class="avatar-upload-hint" id="avatar-upload-hint">Select an image to preview your avatar.</span>
+      </div>
+      <canvas id="avatar-canvas" width="100" height="100" style="display:none" aria-hidden="true"></canvas>
+      <input type="file" id="avatar-file-input" accept="image/*" onchange="onAvatarFileSelect(event)"/>
+      <div class="avatar-upload-actions">
+        <button class="btn-sm" onclick="closeAvatarUpload()">Cancel</button>
+        <button class="btn-primary" id="btn-save-avatar" onclick="saveAvatar()" disabled>Save</button>
+      </div>
+    </div>
+  </div>
+  <!-- ────────────────────────────────────────────────────────────────────────── -->
+
   <!-- ── Permissions Banner ──────────────────────────────────────────────────── -->
   <div id="permissions-banner" class="perms-banner" style="display:none">
     <div class="perms-left">
@@ -39,6 +68,7 @@
     <div class="topbar-center" id="current-room-name">Select a Room</div>
     <div class="topbar-right">
       <span id="user-badge" class="user-badge"></span>
+      <button class="btn-sm" id="btn-edit-avatar" onclick="openAvatarUpload()" title="Update avatar" style="display:none">🖼️</button>
       <button class="btn-sm" onclick="logout()">Logout</button>
     </div>
   </header>
