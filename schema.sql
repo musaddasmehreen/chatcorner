@@ -114,19 +114,6 @@ SELECT cron.schedule(
 -- View job run history
 -- SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
 
--- Alternative: If pg_cron is unavailable, use application-level cleanup
--- (commented out for reference)
-/*
-CREATE OR REPLACE FUNCTION cleanup_old_messages()
-RETURNS void AS $$
-BEGIN
-    DELETE FROM public.messages 
-    WHERE created_at < NOW() - INTERVAL '3 days';
-    RAISE NOTICE 'Cleaned up old messages';
-END;
-$$ LANGUAGE plpgsql;
-*/
-
 -- =====================================================================
 -- ADDITIONAL HELPER FUNCTIONS (Optional)
 -- =====================================================================
@@ -134,14 +121,20 @@ $$ LANGUAGE plpgsql;
 -- Function to get active user count per room (for analytics)
 CREATE OR REPLACE FUNCTION get_room_user_count(room_name TEXT)
 RETURNS INT AS $$
-SELECT COUNT(*) FROM public.active_users WHERE room_id = room_name;
-$$ LANGUAGE SQL;
+BEGIN
+    RETURN (SELECT COUNT(*) FROM public.active_users WHERE room_id = room_name::TEXT);
+END;
+$$ LANGUAGE plpgsql;
 
 -- Function to get message count per room (for UI display)
 CREATE OR REPLACE FUNCTION get_room_message_count(room_name TEXT)
 RETURNS INT AS $$
-SELECT COUNT(*) FROM public.messages WHERE room_id = room_name AND created_at > NOW() - INTERVAL '1 day';
-$$ LANGUAGE SQL;
+BEGIN
+    RETURN (SELECT COUNT(*) FROM public.messages 
+            WHERE room_id = room_name::TEXT 
+            AND created_at > NOW() - INTERVAL '1 day');
+END;
+$$ LANGUAGE plpgsql;
 
 -- Function to remove inactive users (older than 10 minutes)
 CREATE OR REPLACE FUNCTION remove_inactive_users()
