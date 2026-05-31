@@ -4,6 +4,7 @@
 ═══════════════════════════════════════════════════════════════ */
 const THEMES      = ['nebula','ember','arctic','matrix','rose'];
 const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arctic \u2744\ufe0f', matrix:'Matrix', rose:'Rose \ud83c\udf38' };
+const GUEST_VOICE_LIMIT = 1;
 
 (function initTheme() {
   const saved = localStorage.getItem('cc-theme') || 'nebula';
@@ -128,6 +129,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   currentProfile = prof;
+  const localAvatar = localStorage.getItem('cc-avatar-' + currentUser.id);
+  if (localAvatar) currentProfile.avatar_url = localAvatar;
   if (currentProfile?.is_banned) {
     const expiresAt = currentProfile.ban_expires_at ? new Date(currentProfile.ban_expires_at).getTime() : null;
     if (expiresAt && expiresAt <= Date.now()) {
@@ -829,9 +832,9 @@ function updateComposerState() {
       imageBtn.title = '';
     }
     if (voiceBtn) {
-      voiceBtn.classList.remove('hidden');
-      voiceBtn.disabled = true;
-      voiceBtn.title = '🔒 Voice notes are for registered users only';
+      voiceBtn.style.display = '';
+      voiceBtn.disabled = false;
+      voiceBtn.title = '🎙️ Send a voice note (1 free for guests)';
     }
     if (joinVoiceBtn) {
       joinVoiceBtn.title = '🔒 Register to join voice';
@@ -860,7 +863,7 @@ function updateComposerState() {
     imageBtn.title = '';
   }
   if (voiceBtn) {
-    voiceBtn.classList.remove('hidden');
+    voiceBtn.style.display = '';
     voiceBtn.disabled = isLocked;
     voiceBtn.title = '';
   }
@@ -1113,8 +1116,11 @@ function getVoiceNoteStartErrorMessage(error) {
 
 async function sendVoiceNote() {
   if (!isRegisteredUser()) {
-    appendSystemMessage('🔒 Voice notes are for registered users only.');
-    return;
+    const usedCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10);
+    if (usedCount >= GUEST_VOICE_LIMIT) {
+      showRegisterForVoice();
+      return;
+    }
   }
   if (currentRoom?.is_locked) {
     appendSystemMessage('This room is locked by admin. Voice notes are disabled.');
@@ -1179,6 +1185,12 @@ async function sendVoiceNote() {
         });
         if (error) {
           appendSystemMessage('Could not send voice note. Please try again.');
+        } else if (!isRegisteredUser()) {
+          const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
+          localStorage.setItem('cc-guest-voice-used', String(newCount));
+          if (newCount >= GUEST_VOICE_LIMIT) {
+            setTimeout(() => showRegisterForVoice(), 800);
+          }
         }
       } catch (_) {
         appendSystemMessage('Could not send voice note. Please try again.');
@@ -1199,6 +1211,21 @@ async function sendVoiceNote() {
   } finally {
     roomVoiceNoteStarting = false;
   }
+}
+
+function showRegisterForVoice() {
+  const existing = document.getElementById('register-for-voice-popup');
+  if (existing) { existing.remove(); }
+  const popup = document.createElement('div');
+  popup.id = 'register-for-voice-popup';
+  popup.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--surface);color:var(--text);border:1px solid var(--border,#444);border-radius:12px;padding:16px 20px;max-width:320px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.4);text-align:center;';
+  popup.innerHTML = `
+    <p style="margin:0 0 12px;font-size:15px;">🎙️ You've used your 1 free voice note!<br>Register your nick to send unlimited voice notes.</p>
+    <div style="display:flex;gap:8px;justify-content:center;">
+      <a href="index.html" style="background:var(--accent,#7c3aed);color:#fff;padding:7px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Register Now</a>
+      <button onclick="document.getElementById('register-for-voice-popup')?.remove()" style="background:var(--surface2,#333);color:var(--text);border:none;padding:7px 14px;border-radius:8px;cursor:pointer;">Close</button>
+    </div>`;
+  document.body.appendChild(popup);
 }
 
 function removeMessageNodeById(messageId) {
@@ -1675,28 +1702,16 @@ async function saveAvatar() {
   const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
   if (!dataUrl || dataUrl === 'data:,') return;
   setAvatarUploadError('');
-
   const saveBtn = document.getElementById('btn-save-avatar');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-
-  const { error } = await sbClient.from('profiles')
-    .update({ avatar_url: dataUrl })
-    .eq('id', currentUser.id);
-
-  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
-
-  if (error) {
-    const rawMessage = String(error.message || '');
-    const lower = rawMessage.toLowerCase();
-    if (lower.includes("'avatar_url'") && lower.includes('schema cache')) {
-      setAvatarUploadError('❌ Image avatars are not supported yet. Contact admin.');
-      return;
-    }
+  try {
+    localStorage.setItem('cc-avatar-' + currentUser.id, dataUrl);
+    currentProfile.avatar_url = dataUrl;
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    closeAvatarUpload();
+    appendSystemMessage('✅ Avatar updated!');
+  } catch (_) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     setAvatarUploadError('❌ Could not save avatar. Please try again.');
-    return;
   }
-
-  currentProfile.avatar_url = dataUrl;
-  closeAvatarUpload();
-  appendSystemMessage('✅ Avatar updated!');
 }
