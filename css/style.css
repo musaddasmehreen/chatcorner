@@ -671,6 +671,7 @@ body {
   min-width: 0;
   background: var(--bg);
   transition: background 0.25s;
+  position: relative;
 }
 
 /* ── Messages ── */

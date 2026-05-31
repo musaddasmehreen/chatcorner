@@ -107,6 +107,8 @@ const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
+const activeCamViewers = new Set(); // userIds currently viewing a cam
+const typingUsers = new Map();      // userId → { userId, username }
 const QUICK_BAN_OPTIONS = {
   '1h': 1,
   '24h': 24,
@@ -131,6 +133,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   currentProfile = prof;
   const localAvatar = localStorage.getItem('cc-avatar-' + currentUser.id);
   if (localAvatar) currentProfile.avatar_url = localAvatar;
+
+  if (!currentProfile.is_registered && !sessionStorage.getItem('cc-nick-prompt-shown')) {
+    sessionStorage.setItem('cc-nick-prompt-shown', '1');
+    setTimeout(() => showChatToast(`👋 Chatting as ${currentProfile.username} — Register for a custom nick & full access!`, 'info', 6000), 1500);
+  }
+
   if (currentProfile?.is_banned) {
     const expiresAt = currentProfile.ban_expires_at ? new Date(currentProfile.ban_expires_at).getTime() : null;
     if (expiresAt && expiresAt <= Date.now()) {
@@ -169,7 +177,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     isMod: !!currentProfile.is_mod,
     isOwner: !!currentProfile.is_owner,
     isVip: !!currentProfile.is_vip,
-    cameraOn: false
+    cameraOn: false,
+    viewingCam: false
   };
   document.getElementById('user-badge').textContent = currentProfile.username + (currentProfile.is_registered ? ' \u2713' : ' \ud83d\udc64');
   if (currentProfile.is_registered) {
@@ -194,6 +203,41 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
   document.getElementById('btn-clear-my-messages')?.addEventListener('click', clearMyMessagesFromScreen);
+
+  // Character counter for message input
+  document.getElementById('msg-input')?.addEventListener('input', () => {
+    const len = document.getElementById('msg-input').value.length;
+    const counter = document.getElementById('msg-char-counter');
+    if (counter) {
+      counter.textContent = `${len}/500`;
+      counter.style.color = len > 450 ? 'var(--red, #ef4444)' : 'var(--muted)';
+    }
+  });
+
+  // Scroll-to-bottom button visibility
+  document.getElementById('messages')?.addEventListener('scroll', () => {
+    const el = document.getElementById('messages');
+    const btn = document.getElementById('btn-scroll-bottom');
+    if (!btn) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    btn.classList.toggle('hidden', atBottom);
+  });
+
+  // Typing indicator broadcast
+  let _typingTimeout = null;
+  let _isTyping = false;
+  document.getElementById('msg-input')?.addEventListener('input', () => {
+    if (!presenceChannel || !currentProfile?.username) return;
+    if (!_isTyping) {
+      _isTyping = true;
+      presenceChannel.send({ type: 'broadcast', event: 'typing', payload: { username: currentProfile.username, userId: currentUser.id } }).catch(() => {});
+    }
+    clearTimeout(_typingTimeout);
+    _typingTimeout = setTimeout(() => {
+      _isTyping = false;
+      presenceChannel.send({ type: 'broadcast', event: 'typing-stop', payload: { userId: currentUser.id } }).catch(() => {});
+    }, 1500);
+  });
 
   // Re-apply saved theme now that DOM is ready (syncs dots)
   applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
@@ -383,6 +427,23 @@ async function enterRoom(room) {
       });
       scheduleRenderUserList();
     })
+    .on('broadcast', { event: 'cam-view' }, ({ payload }) => {
+      if (payload?.target === currentUser?.id) {
+        showChatToast(`👁️ ${escHtml(payload.viewerName || 'Someone')} is viewing your camera`, 'info', 4000);
+      }
+    })
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      if (payload?.userId === currentUser?.id) return;
+      typingUsers.set(payload.userId, payload);
+      if (!typingUsers._t) typingUsers._t = {};
+      clearTimeout(typingUsers._t[payload.userId]);
+      typingUsers._t[payload.userId] = setTimeout(() => { typingUsers.delete(payload.userId); updateTypingIndicator(); }, 3000);
+      updateTypingIndicator();
+    })
+    .on('broadcast', { event: 'typing-stop' }, ({ payload }) => {
+      typingUsers.delete(payload?.userId);
+      updateTypingIndicator();
+    })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await presenceChannel.track(presenceBaseData);
@@ -542,11 +603,13 @@ function renderUserList() {
     const showModeration = canModerate && u.userId !== currentUser?.id && viewerLevel > targetLevel;
     const roleBadge = getRoleBadgeHtml(u);
     const vipBadge  = u.isVip ? '<span class="role-badge vip" title="VIP">⭐</span>' : '';
+    const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
       ${roleBadge}${vipBadge}
       <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : ''}>${escHtml(u.username)}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
+      ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
       ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick for 30 minutes">\u26a1</button>` : ''}
       ${showModeration ? `<button type="button" class="user-mod-btn ban" data-user-id="${u.userId}" title="Ban user">\ud83d\udeab</button>` : ''}
@@ -609,6 +672,57 @@ function renderUserList() {
 function scrollToBottom() {
   const el = document.getElementById('messages');
   el.scrollTop = el.scrollHeight;
+}
+
+/* ── Typing indicator ── */
+function updateTypingIndicator() {
+  let el = document.getElementById('typing-indicator');
+  const others = [...typingUsers.values()].filter(u => u.userId !== currentUser?.id);
+  if (!others.length) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'typing-indicator';
+    el.className = 'typing-indicator';
+    document.getElementById('messages')?.after(el);
+  }
+  const names = others.slice(0, 3).map(u => escHtml(u.username)).join(', ');
+  el.textContent = `✏️ ${names} ${others.length === 1 ? 'is' : 'are'} typing…`;
+}
+
+/* ── Cam view broadcasting ── */
+async function broadcastCamView(targetUserId) {
+  if (!presenceChannel || !currentUser?.id || !currentProfile) return;
+  try {
+    await presenceChannel.send({
+      type: 'broadcast',
+      event: 'cam-view',
+      payload: { viewer: currentUser.id, viewerName: currentProfile.username, target: targetUserId }
+    });
+  } catch (_) {}
+}
+
+function markSelfAsViewer(on) {
+  if (!currentUser?.id) return;
+  if (on) activeCamViewers.add(currentUser.id);
+  else activeCamViewers.delete(currentUser.id);
+  scheduleRenderUserList();
+  if (presenceChannel) {
+    presenceBaseData.viewingCam = !!on;
+    presenceChannel.track(presenceBaseData).catch(() => {});
+  }
+}
+
+/* ── Join Voice Quick (from input bar button) ── */
+function joinVoiceQuick() {
+  if (!currentRoom?.is_audio_enabled) {
+    showChatToast('This room does not support voice chat.', 'warning');
+    return;
+  }
+  if (typeof inVoice !== 'undefined' && inVoice) {
+    if (typeof leaveVoice === 'function') leaveVoice();
+  } else {
+    if (typeof joinVoice === 'function') joinVoice();
+  }
 }
 
 /* ── Cam Area: show a user's camera stream inside #cam-area ── */
@@ -802,6 +916,7 @@ function updateComposerState() {
   const emojiBtn = document.getElementById('btn-emoji');
   const imageBtn = document.getElementById('btn-image-url');
   const voiceBtn = document.getElementById('btn-voice-note');
+  const joinVoiceQuickBtn = document.getElementById('btn-join-voice-quick');
   const guestNoticeBar = document.getElementById('guest-notice-bar');
   const joinVoiceBtn = document.getElementById('btn-join-voice');
   const isGuest = !isRegisteredUser();
@@ -836,6 +951,11 @@ function updateComposerState() {
       voiceBtn.disabled = false;
       voiceBtn.title = '🎙️ Send a voice note (1 free for guests)';
     }
+    if (joinVoiceQuickBtn) {
+      joinVoiceQuickBtn.style.display = '';
+      joinVoiceQuickBtn.disabled = false;
+      joinVoiceQuickBtn.title = 'Join Voice Chat';
+    }
     if (joinVoiceBtn) {
       joinVoiceBtn.title = '🔒 Register to join voice';
     }
@@ -866,6 +986,11 @@ function updateComposerState() {
     voiceBtn.style.display = '';
     voiceBtn.disabled = isLocked;
     voiceBtn.title = '';
+  }
+  if (joinVoiceQuickBtn) {
+    joinVoiceQuickBtn.style.display = '';
+    joinVoiceQuickBtn.disabled = isLocked;
+    joinVoiceQuickBtn.title = 'Join Voice Chat';
   }
 }
 

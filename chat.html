@@ -114,6 +114,9 @@
         <!-- Messages -->
         <div class="messages" id="messages" role="log" aria-live="polite"></div>
 
+        <!-- Scroll to bottom button -->
+        <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom">↓ New messages</button>
+
         <!-- Minimized cams bar -->
         <div class="mini-cams-bar" id="minimized-cams-bar"></div>
       </main>
@@ -143,11 +146,13 @@
         </div>
         <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
         <button class="input-btn" id="btn-image-url" title="Image/GIF">🖼️</button>
-        <button class="input-btn" id="btn-voice-note" onclick="toggleRoomVoiceNote()" title="Voice note" style="display:none">🎙️</button>
+        <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote()" title="Voice note (🎙️ send a voice message)">🎙️</button>
+        <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick()" title="Join Voice Chat">🔊</button>
         <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
       </div>
       <div class="input-strip-center">
         <input id="msg-input" class="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off"/>
+        <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap">0/500</span>
       </div>
       <div class="input-strip-right">
         <button class="btn-send" id="btn-send" onclick="sendMessage()">Send</button>
