@@ -7,7 +7,7 @@
 // =====================================================================
 
 // ⚠️ PASTE YOUR SUPABASE ANON KEY HERE ⚠️
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplZmNxcm5oYWVvdW56ZG1qc2NjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTU0NDIsImV4cCI6MjA5NDg3MTQ0Mn0.M5IBB6TNXZVWgxZbG5E7v9D_N8IMvGn6lrd8ohwUiBY";
 
 const SUPABASE_URL = "https://zefcqrnhaeounzdmjscc.supabase.co";
 const FREEIMAGE_API_KEY = "6d207e02198a847aa98d0a2a901485a5";
