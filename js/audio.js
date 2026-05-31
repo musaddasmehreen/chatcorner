@@ -737,6 +737,8 @@ function openFloatingCamera(peerId, username) {
   title.textContent = `📷 ${username || getUsernameById(peerId)}`;
   video.srcObject = stream;
   floatingWindow.classList.remove('hidden');
+  if (typeof broadcastCamView === 'function') broadcastCamView(peerId);
+  if (typeof markSelfAsViewer === 'function') markSelfAsViewer(true);
 }
 
 function closeFloatingCamera() {
@@ -745,4 +747,5 @@ function closeFloatingCamera() {
   if (video) video.srcObject = null;
   if (floatingWindow) floatingWindow.classList.add('hidden');
   floatingCameraPeerId = null;
+  if (typeof markSelfAsViewer === 'function') markSelfAsViewer(false);
 }

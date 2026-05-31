@@ -695,3 +695,40 @@ body.guest-mode .emoji-bar { display: none; }
     margin-right: 0.55rem;
   }
 }
+
+/* ── Scroll-to-bottom button ── */
+.btn-scroll-bottom {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  z-index: 10;
+  opacity: 0.9;
+  transition: opacity 0.2s;
+  pointer-events: all;
+}
+.btn-scroll-bottom:hover { opacity: 1; }
+.btn-scroll-bottom.hidden { display: none; }
+
+/* ── Typing indicator ── */
+.typing-indicator {
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding: 0.2rem 1rem;
+  font-style: italic;
+  animation: fadeIn 0.2s ease;
+}
+
+/* ── Viewer eye badge ── */
+.viewer-eye {
+  font-size: 0.78rem;
+  opacity: 0.85;
+  cursor: default;
+}
