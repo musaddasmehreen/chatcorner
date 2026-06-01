@@ -23,6 +23,10 @@ ChatCorner is a realtime chat application built with JavaScript, HTML, and CSS.
 2. Open `index.html` in your browser (or serve the project with any static file server).
 3. Start chatting in ChatCorner.
 
+## Terabox Backup Deployment
+
+Terabox backup setup instructions are documented in [`TERABOX_SETUP.md`](./TERABOX_SETUP.md).
+
 ## Topics
 
 Recommended repository topics: `chat`, `javascript`, `html`, `css`, `realtime`.
