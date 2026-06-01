@@ -1,5 +1,4 @@
 // TERABOX BACKUP MODULE - Optimized for ChatCorner
-const TERABOX_CREDS = btoa('chatroomcorner01@gmail.com:Hussain@#12');
 const BACKUP_PROXY = 'https://chatcorner-proxy.onrender.com';
 const BACKUP_INTERVAL = 12 * 60 * 60 * 1000;
 const RETENTION_3M = 3 * 30 * 24 * 60 * 60 * 1000;
@@ -49,8 +48,7 @@ async function getTeraboxAuth() {
   if (cachedAuth && cachedAuth.exp > Date.now()) return cachedAuth;
   
   const res = await fetch(`${BACKUP_PROXY}/auth`, {
-    method: 'POST',
-    headers: { 'Authorization': `Basic ${TERABOX_CREDS}` }
+    method: 'POST'
   });
   
   cachedAuth = await res.json();
@@ -108,9 +106,9 @@ async function backupUserData(auth) {
 
 // Process queued media (images/video/voice)
 async function processMediaQueue(auth) {
-  for (const item of backupQueue) {
+  for (const item of [...backupQueue]) {
     try {
-      const blob = await fetch(item.url).then(r => r.blob());
+      const blob = item.blob || await fetch(item.url).then(r => r.blob());
       await uploadBlobTerabox(auth, item.path, blob);
       backupQueue.splice(backupQueue.indexOf(item), 1);
     } catch (e) {

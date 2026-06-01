@@ -97,12 +97,20 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- UPDATED CLEANUP JOB: Backup first, then delete old media (3 months)
-SELECT cron.unschedule('backup-and-cleanup');
+DO $$
+BEGIN
+    PERFORM cron.unschedule('backup-and-cleanup');
+    PERFORM cron.unschedule('terabox-backup-cleanup');
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END;
+$$;
 
 SELECT cron.schedule(
     'terabox-backup-cleanup',
     '0 0,12 * * *',  -- Every 12 hours at 00:00 and 12:00 UTC
     $$
+    DO $cron$
     BEGIN
         PERFORM backup_old_messages();
         -- Delete only GIFs, videos, voices older than 3 months (keep images & usernames forever)
@@ -113,6 +121,7 @@ SELECT cron.schedule(
         
         RAISE NOTICE 'Scheduled backup triggered';
     END;
+    $cron$;
     $$
 );
 
