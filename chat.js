@@ -7,7 +7,7 @@
 // =====================================================================
 
 // ⚠️ PASTE YOUR SUPABASE ANON KEY HERE ⚠️
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplZmNxcm5oYWVvdW56ZG1qc2NjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTU0NDIsImV4cCI6MjA5NDg3MTQ0Mn0.M5IBB6TNXZVWgxZbG5E7v9D_N8IMvGn6lrd8ohwUiBY";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplZmNxcm5oYWVvdW56ZG1qc2NjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTU0NDIsImV4cCI6MjA5NDg3MTQ0Mn0.M5IB[...]";
 
 const SUPABASE_URL = "https://zefcqrnhaeounzdmjscc.supabase.co";
 const FREEIMAGE_API_KEY = "6d207e02198a847aa98d0a2a901485a5";
@@ -27,6 +27,10 @@ let cameraEnabled = false;
 let userLocalStream = null;
 let peerConnection = null;
 let activeConnections = new Map(); // Maps peer ID -> connection object
+let voiceNoteRecorder = null;
+let voiceNoteStream = null;
+let voiceNoteChunks = [];
+let isRecordingVoiceNote = false;
 
 // =====================================================================
 // BLOCK 1: SUPABASE INITIALIZATION & WEBSOCKET SETUP
@@ -103,6 +107,42 @@ async function sendMessageToSupabase(messageText, avatarUrl) {
     } catch (error) {
         console.error("[DATABASE ERROR]", error);
         showNotification("Failed to send message", "error");
+        return false;
+    }
+}
+
+async function sendVoiceNoteToSupabase(dataUrl) {
+    if (!dataUrl) {
+        showNotification("Voice note data missing", "error");
+        return false;
+    }
+
+    try {
+        console.log("[DATABASE] Sending voice note to Supabase...");
+
+        const { data, error } = await supabase
+            .from("messages")
+            .insert([
+                {
+                    room_id: currentRoom,
+                    username: currentUsername,
+                    message_text: "[Voice Note]",
+                    voice_url: dataUrl,
+                    avatar_url: currentAvatarUrl,
+                    created_at: new Date().toISOString()
+                }
+            ])
+            .select();
+
+        if (error) {
+            throw error;
+        }
+
+        console.log("[DATABASE] Voice note inserted successfully:", data);
+        return true;
+    } catch (error) {
+        console.error("[DATABASE ERROR]", error);
+        showNotification("Failed to send voice note", "error");
         return false;
     }
 }
@@ -536,7 +576,7 @@ function removeVideoStream(peerId) {
 
     if (videoWrapper) {
         videoWrapper.remove();
-        console.log("[VIDEO DISPLAY] Removed stream for peer:', peerId);
+        console.log("[VIDEO DISPLAY] Removed stream for peer:", peerId);
     }
 
     // Show placeholder if no more streams
@@ -547,15 +587,15 @@ function removeVideoStream(peerId) {
 
 function setupDataConnection(conn) {
     conn.on("open", () => {
-        console.log("[DATA] Data connection opened with:', conn.peer);
+        console.log("[DATA] Data connection opened with:", conn.peer);
     });
 
     conn.on("data", (data) => {
-        console.log("[DATA] Received data from', conn.peer, ":", data);
+        console.log("[DATA] Received data from", conn.peer, ":", data);
     });
 
     conn.on("close", () => {
-        console.log("[DATA] Data connection closed with:', conn.peer);
+        console.log("[DATA] Data connection closed with:", conn.peer);
     });
 }
 
@@ -584,16 +624,24 @@ function displayMessage(messageData) {
                 <span class="font-semibold text-blue-300 text-sm">${messageData.username}</span>
                 <span class="text-xs text-gray-500">${timestamp}</span>
             </div>
-            <p class="text-gray-200 text-sm break-words mt-1">${escapeHtml(messageData.message_text)}</p>
+            <p class="text-gray-200 text-sm break-words mt-1">${escapeHtml(messageData.message_text || "")}</p>
         </div>
     `;
+
+    // If voice note, add audio player
+    if (messageData.voice_url) {
+        const audioDiv = document.createElement("div");
+        audioDiv.className = "mt-2";
+        audioDiv.innerHTML = `<audio controls style="width:100%;max-width:300px"><source src="${messageData.voice_url}" type="audio/webm"></audio>`;
+        messageDiv.appendChild(audioDiv);
+    }
 
     chatWindow.appendChild(messageDiv);
 
     // Auto-scroll to bottom
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
-    console.log("[UI] Message displayed from', messageData.username);
+    console.log("[UI] Message displayed from", messageData.username);
 }
 
 function escapeHtml(unsafe) {
@@ -697,6 +745,109 @@ function setupMediaTogles() {
     });
 }
 
+function setupVoiceNoteButton() {
+    const voiceNoteBtn = document.getElementById("voiceNoteBtn");
+    if (!voiceNoteBtn) return;
+
+    voiceNoteBtn.addEventListener("click", async () => {
+        if (isRecordingVoiceNote) {
+            stopVoiceNoteRecording();
+        } else {
+            startVoiceNoteRecording();
+        }
+    });
+}
+
+async function startVoiceNoteRecording() {
+    try {
+        console.log("[VOICE NOTE] Starting voice note recording...");
+        voiceNoteStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        voiceNoteChunks = [];
+        isRecordingVoiceNote = true;
+
+        voiceNoteRecorder = new MediaRecorder(voiceNoteStream);
+
+        voiceNoteRecorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) {
+                voiceNoteChunks.push(event.data);
+            }
+        };
+
+        voiceNoteRecorder.onstop = async () => {
+            isRecordingVoiceNote = false;
+            updateVoiceNoteButtonUI();
+
+            if (voiceNoteChunks.length === 0) {
+                console.log("[VOICE NOTE] Recording cancelled");
+                return;
+            }
+
+            try {
+                const blob = new Blob(voiceNoteChunks, { type: "audio/webm" });
+                const dataUrl = await blobToDataUrl(blob);
+                
+                const success = await sendVoiceNoteToSupabase(dataUrl);
+                if (success) {
+                    showNotification("🎙️ Voice note sent!", "success");
+                }
+            } catch (error) {
+                console.error("[VOICE NOTE ERROR]", error);
+                showNotification("Failed to send voice note", "error");
+            }
+
+            voiceNoteChunks = [];
+            stopVoiceNoteStream();
+        };
+
+        voiceNoteRecorder.start();
+        updateVoiceNoteButtonUI();
+        showNotification("🎙️ Recording... Click to stop", "info");
+    } catch (error) {
+        console.error("[VOICE NOTE ERROR]", error);
+        showNotification("Failed to start voice recording: " + error.message, "error");
+        isRecordingVoiceNote = false;
+        updateVoiceNoteButtonUI();
+    }
+}
+
+function stopVoiceNoteRecording() {
+    if (voiceNoteRecorder && voiceNoteRecorder.state === "recording") {
+        voiceNoteRecorder.stop();
+        stopVoiceNoteStream();
+    }
+}
+
+function stopVoiceNoteStream() {
+    if (voiceNoteStream) {
+        voiceNoteStream.getTracks().forEach((track) => {
+            track.stop();
+        });
+        voiceNoteStream = null;
+    }
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+function updateVoiceNoteButtonUI() {
+    const voiceNoteBtn = document.getElementById("voiceNoteBtn");
+    if (!voiceNoteBtn) return;
+
+    if (isRecordingVoiceNote) {
+        voiceNoteBtn.textContent = "⏹️ Stop";
+        voiceNoteBtn.style.background = "rgba(255, 100, 100, 0.3)";
+    } else {
+        voiceNoteBtn.textContent = "🎙️ Voice Note";
+        voiceNoteBtn.style.background = "";
+    }
+}
+
 function stopLocalStream() {
     if (userLocalStream) {
         userLocalStream.getTracks().forEach((track) => {
@@ -776,6 +927,7 @@ async function initializeApplication() {
         setupAvatarModal();
         setupMessageInput();
         setupMediaTogles();
+        setupVoiceNoteButton();
         setupChatroomSwitching();
 
         // Initialize Supabase connection
