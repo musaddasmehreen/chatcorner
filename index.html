@@ -176,6 +176,86 @@
         .character-counter.danger {
             color: #ff6b6b;
         }
+
+        /* Private Users Tab Bar */
+        .private-users-tab-bar {
+            display: flex;
+            gap: 4px;
+            padding: 8px 12px;
+            background: rgba(15, 12, 41, 0.6);
+            border-bottom: 1px solid rgba(100, 150, 255, 0.2);
+            overflow-x: auto;
+            min-height: 44px;
+        }
+
+        .private-user-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(48, 43, 99, 0.5);
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .private-user-tab:hover {
+            background: rgba(48, 43, 99, 0.7);
+            border-color: rgba(100, 150, 255, 0.5);
+        }
+
+        .private-user-tab.active {
+            background: rgba(100, 150, 255, 0.3);
+            border-color: rgba(100, 150, 255, 0.6);
+        }
+
+        .private-user-tab-name {
+            font-size: 13px;
+            color: #ccc;
+        }
+
+        .private-user-tab.active .private-user-tab-name {
+            color: #64b4ff;
+            font-weight: 600;
+        }
+
+        .private-user-close-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            background: transparent;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0;
+            transition: color 0.2s ease;
+        }
+
+        .private-user-close-btn:hover {
+            color: #ff6b6b;
+        }
+
+        .unread-indicator {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            background: #ff3333;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
     </style>
 </head>
 
@@ -194,6 +274,9 @@
             </button>
         </div>
     </header>
+
+    <!-- Private Users Tab Bar (for private chats) -->
+    <div id="privateUsersTabBar" class="private-users-tab-bar hidden"></div>
 
     <!-- Main Container -->
     <div class="max-w-7xl mx-auto px-6 py-6 h-screen overflow-hidden flex flex-col">
