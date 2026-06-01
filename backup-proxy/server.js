@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const dotenv = require('dotenv');
 const basicAuth = require('express-basic-auth');
+const rateLimit = require('express-rate-limit');
 const { wrapper } = require('axios-cookiejar-support');
 const { CookieJar } = require('tough-cookie');
 
@@ -46,6 +47,14 @@ function requireValidToken(req, res, next) {
   return next();
 }
 
+const authRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many auth attempts, try again later.' }
+});
+
 async function loginToTerabox() {
   if (!TERABOX_EMAIL || !TERABOX_PASS) {
     throw new Error('Missing TERABOX_EMAIL or TERABOX_PASS');
@@ -72,7 +81,7 @@ async function loginToTerabox() {
 }
 
 // Auth endpoint
-app.post('/auth', async (req, res) => {
+app.post('/auth', authRateLimit, async (req, res) => {
   try {
     if (tokenCache && tokenCache.exp > Date.now()) return res.json(tokenCache);
     await loginToTerabox();
