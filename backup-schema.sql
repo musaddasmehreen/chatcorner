@@ -158,14 +158,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Schedule every 12 hours at 00:00 and 12:00 UTC
-SELECT cron.unschedule('terabox-backup-cleanup')
-WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'terabox-backup-cleanup');
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'terabox-backup-cleanup') THEN
+        PERFORM cron.unschedule('terabox-backup-cleanup');
+    END IF;
 
-SELECT cron.schedule(
-    'terabox-backup-cleanup',
-    '0 0,12 * * *',
-    $$ SELECT public.run_backup_cleanup(); $$
-);
+    PERFORM cron.schedule(
+        'terabox-backup-cleanup',
+        '0 0,12 * * *',
+        $$ SELECT public.run_backup_cleanup(); $$
+    );
+END;
+$$;
 
 -- =====================================================================
 -- END OF BACKUP SCHEMA

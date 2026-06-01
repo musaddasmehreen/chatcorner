@@ -16,6 +16,8 @@ Directory: `/tmp/workspace/musaddasmehreen/chatcorner/backup-proxy`
 - `TERABOX_EMAIL`
 - `TERABOX_PASS`
 - `BACKUP_PROXY_API_KEY`
+- `TERABOX_UPSTREAM_URL` (recommended production adapter endpoint)
+- `ENABLE_PROXY_MOCK` (`true` for local smoke tests only)
 - `PORT` (optional, default `5000`)
 
 ### Start command

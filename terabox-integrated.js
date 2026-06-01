@@ -3,6 +3,8 @@ const TERABOX_BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const TERABOX_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const TERABOX_MAX_BATCH_SIZE = 5000;
 const TERABOX_MAX_RETRIES = 3;
+const TERABOX_QUEUE_BATCH_SIZE = 25;
+const TERABOX_QUEUE_INTERVAL_MS = 30 * 1000;
 
 const teraboxState = {
   initialized: false,
@@ -145,18 +147,23 @@ async function uploadJsonToTerabox(token, path, content) {
 }
 
 async function uploadBlobToTerabox(token, path, blob) {
-  const buffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
+  const binary = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result || '';
+      const value = String(result);
+      const base64 = value.includes(',') ? value.split(',')[1] : '';
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to encode media blob'));
+    reader.readAsDataURL(blob);
+  });
 
   return callProxy(
     '/upload-blob',
     {
       path,
-      blob: btoa(binary),
+      blob: binary,
       size: blob.size,
       mimeType: blob.type || 'application/octet-stream'
     },
@@ -261,7 +268,19 @@ async function cleanupRetention(token) {
 
 async function processQueueItem(token, item) {
   try {
-    const blob = item.blob || (item.url ? await fetch(item.url).then((r) => r.blob()) : null);
+    let blob = item.blob || null;
+    if (!blob && item.url) {
+      try {
+        const response = await fetch(item.url);
+        if (!response.ok) {
+          throw new Error(`Source fetch failed (${response.status})`);
+        }
+        blob = await response.blob();
+      } catch (error) {
+        throw new Error(`Queue item ${item.id} fetch failed for ${item.path}: ${error.message}`);
+      }
+    }
+
     if (!blob) throw new Error('No media blob available for backup item');
 
     await uploadBlobToTerabox(token, item.path, blob);
@@ -310,12 +329,12 @@ async function processMediaQueue() {
     const auth = await getTeraboxAuth();
     let processed = 0;
 
-    while (teraboxState.queue.length && processed < 25) {
+    while (teraboxState.queue.length && processed < TERABOX_QUEUE_BATCH_SIZE) {
       const item = teraboxState.queue.shift();
       if (!item) break;
       if (item.nextAttemptAt > Date.now()) {
         teraboxState.queue.push(item);
-        break;
+        continue;
       }
 
       await processQueueItem(auth.token, item);
@@ -435,6 +454,7 @@ function captureWebRTCForBackup(stream, username) {
     trackError('RECORDER_STREAM', event.error || event);
   });
 
+  // Record in 60-second chunks to keep memory usage predictable and uploads granular.
   recorder.start(60 * 1000);
 
   const stopRecorder = () => {
@@ -465,9 +485,10 @@ async function initTeraboxBackup(options = {}) {
     teraboxState.timers.interval = setInterval(performBackupCycle, TERABOX_BACKUP_INTERVAL_MS);
   }, firstDelay);
 
-  teraboxState.timers.queue = setInterval(processMediaQueue, 30 * 1000);
+  teraboxState.timers.queue = setInterval(processMediaQueue, TERABOX_QUEUE_INTERVAL_MS);
 
-  // Non-blocking startup cycle to prime auth cache and detect errors early
+  // Non-blocking startup cycle primes auth cache and surfaces config issues immediately
+  // instead of waiting until the first 00:00/12:00 UTC scheduled run.
   Promise.resolve().then(() => performBackupCycle());
 
   console.log('[TERABOX] Backup integration initialized');

@@ -11,6 +11,8 @@ const PORT = Number(process.env.PORT || 5000);
 const TERABOX_EMAIL = process.env.TERABOX_EMAIL || '';
 const TERABOX_PASS = process.env.TERABOX_PASS || '';
 const PROXY_API_KEY = process.env.BACKUP_PROXY_API_KEY || '';
+const TERABOX_UPSTREAM_URL = process.env.TERABOX_UPSTREAM_URL || '';
+const ENABLE_PROXY_MOCK = process.env.ENABLE_PROXY_MOCK === 'true';
 const AUTH_TTL_MS = 12 * 60 * 60 * 1000;
 
 const tokenCache = {
@@ -76,8 +78,26 @@ function issueToken() {
 }
 
 async function uploadToTerabox(payload) {
-  // Placeholder for Terabox web upload integration.
-  // Keep a consistent response contract for frontend queue processing.
+  if (TERABOX_UPSTREAM_URL) {
+    const response = await fetch(`${TERABOX_UPSTREAM_URL}/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || 'Terabox upstream upload failed');
+    }
+
+    return result;
+  }
+
+  if (!ENABLE_PROXY_MOCK) {
+    throw new Error('Terabox upload integration is not configured. Set TERABOX_UPSTREAM_URL or ENABLE_PROXY_MOCK=true.');
+  }
+
+  // Mock mode is only for smoke-testing in development environments.
   return {
     success: true,
     path: payload.path,
@@ -87,6 +107,26 @@ async function uploadToTerabox(payload) {
 }
 
 async function deleteFromTerabox(path) {
+  if (TERABOX_UPSTREAM_URL) {
+    const response = await fetch(`${TERABOX_UPSTREAM_URL}/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || 'Terabox upstream delete failed');
+    }
+
+    return result;
+  }
+
+  if (!ENABLE_PROXY_MOCK) {
+    throw new Error('Terabox delete integration is not configured. Set TERABOX_UPSTREAM_URL or ENABLE_PROXY_MOCK=true.');
+  }
+
+  // Mock mode is only for smoke-testing in development environments.
   return {
     success: true,
     deleted: path,
