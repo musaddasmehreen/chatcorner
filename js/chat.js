@@ -103,6 +103,7 @@ let roomVoiceNoteRoomId = null;
 let discardRoomVoiceNoteOnStop = false;
 let oldestMessageTimestamp = null;
 let isLoadingOlderMessages = false;
+let cachedRooms = [];
 const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
@@ -271,6 +272,7 @@ async function loadRooms() {
   try {
     const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
     if (error || !rooms?.length) return;
+    cachedRooms = rooms;
     const textList = document.getElementById('room-list');
     if (textList) textList.innerHTML = '';
     rooms.forEach(room => {
@@ -284,7 +286,26 @@ async function loadRooms() {
     });
     renderRoomsTopbar(rooms);
     enterRoom(rooms[0]);
+    setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
+}
+
+async function refreshRoomCounts() {
+  try {
+    const { data: rooms } = await sbClient.from('rooms').select('id,user_count').order('name');
+    if (!rooms) return;
+    rooms.forEach(r => {
+      const tab = document.querySelector(`.room-tab[data-room-id="${r.id}"]`);
+      const badge = tab?.querySelector('.room-count-badge');
+      if (badge && r.user_count != null) badge.textContent = r.user_count;
+    });
+  } catch(e) {}
+}
+
+function updateRoomTabCount(roomId, count) {
+  const tab = document.querySelector(`.room-tab[data-room-id="${roomId}"]`);
+  const badge = tab?.querySelector('.room-count-badge');
+  if (badge) badge.textContent = count;
 }
 
 // Render rooms as pill tabs in the center top bar
@@ -296,10 +317,10 @@ function renderRoomsTopbar(rooms) {
     const tab = document.createElement('button');
     tab.className = 'room-tab' + (currentRoom && currentRoom.id === room.id ? ' active' : '');
     tab.dataset.roomId = room.id;
-    tab.textContent = (room.type === 'voice' || room.is_audio_enabled ? '🎤 ' : '💬 ') + room.name;
-    tab.title = room.user_count != null
-      ? `${room.name} — ${room.user_count} users — click to join`
-      : `${room.name} — click to join`;
+    const label = (room.type === 'voice' || room.is_audio_enabled ? '🎤 ' : '💬 ') + room.name;
+    const count = room.user_count ?? 0;
+    tab.innerHTML = `${label} <span class="room-count-badge" aria-label="${count} users online">${count}</span>`;
+    tab.title = `${room.name} — ${count} users — click to join`;
     tab.onclick = () => enterRoom(room);
     bar.appendChild(tab);
   });
@@ -417,6 +438,7 @@ async function enterRoom(room) {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
       }));
+      updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
       scheduleRenderUserList();
     })
     .on('presence', { event: 'join' }, ({ newPresences }) => {
@@ -424,6 +446,7 @@ async function enterRoom(room) {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
       });
+      updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
       scheduleRenderUserList();
     })
     .on('presence', { event: 'leave' }, ({ leftPresences }) => {
@@ -431,6 +454,7 @@ async function enterRoom(room) {
         delete onlineUsers[u.userId];
         delete cameraStates[u.userId];
       });
+      updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
       scheduleRenderUserList();
     })
     .on('broadcast', { event: 'cam-view' }, ({ payload }) => {
