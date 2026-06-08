@@ -101,6 +101,8 @@ let roomVoiceNoteChunks = [];
 let roomVoiceNoteStarting = false;
 let roomVoiceNoteRoomId = null;
 let discardRoomVoiceNoteOnStop = false;
+let oldestMessageTimestamp = null;
+let isLoadingOlderMessages = false;
 const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
@@ -155,17 +157,17 @@ window.addEventListener('DOMContentLoaded', async () => {
       const banUntilText = currentProfile.ban_expires_at
         ? ` until ${new Date(currentProfile.ban_expires_at).toLocaleString()}`
         : ' permanently';
-      alert(`Your account is banned${banUntilText}.`);
+      showBlockedOverlay(`⛔ Your account is banned${banUntilText}.`);
       await sbClient.auth.signOut();
-      window.location.href = 'index.html';
+      setTimeout(() => { window.location.href = 'index.html'; }, 2500);
       return;
     }
   }
   if (isKickActive(currentProfile)) {
     const until = new Date(currentProfile.kicked_until).toLocaleString();
-    alert(`You have been kicked. Please wait until ${until}.`);
+    showBlockedOverlay(`⚡ You have been kicked. Please wait until ${until}.`);
     await sbClient.auth.signOut();
-    window.location.href = 'index.html';
+    setTimeout(() => { window.location.href = 'index.html'; }, 2500);
     return;
   }
   presenceBaseData = {
@@ -363,6 +365,10 @@ async function enterRoom(room) {
     .eq('room_id', room.id)
     .order('created_at', { ascending: true })
     .limit(50);
+
+  oldestMessageTimestamp = messages?.length ? messages[0].created_at : null;
+  const loadMoreBtn = document.getElementById('btn-load-older');
+  if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !messages || messages.length < 50);
 
   // Batch-append for performance
   if (messages?.length) {
@@ -672,6 +678,98 @@ function renderUserList() {
 function scrollToBottom() {
   const el = document.getElementById('messages');
   el.scrollTop = el.scrollHeight;
+}
+
+/* ── Load Older Messages (pagination) ── */
+async function loadOlderMessages() {
+  if (isLoadingOlderMessages || !currentRoom || !oldestMessageTimestamp) return;
+  isLoadingOlderMessages = true;
+  const btn = document.getElementById('btn-load-older');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+
+  const { data: older } = await sbClient
+    .from('messages')
+    .select('*')
+    .eq('room_id', currentRoom.id)
+    .lt('created_at', oldestMessageTimestamp)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  isLoadingOlderMessages = false;
+  if (btn) { btn.disabled = false; btn.textContent = '⬆ Load older messages'; }
+
+  if (!older?.length) {
+    if (btn) { btn.classList.add('hidden'); btn.textContent = 'No more messages'; }
+    return;
+  }
+
+  const container = document.getElementById('messages');
+  const prevScrollHeight = container.scrollHeight;
+  const frag = document.createDocumentFragment();
+
+  [...older].reverse().forEach(m => {
+    const node = buildMessageNode(m);
+    if (node) frag.appendChild(node);
+  });
+  container.insertBefore(frag, container.firstChild);
+  container.scrollTop = container.scrollHeight - prevScrollHeight;
+
+  oldestMessageTimestamp = older[older.length - 1].created_at;
+  if (older.length < 50 && btn) btn.classList.add('hidden');
+}
+
+/* ── Message Search ── */
+function searchMessages(query) {
+  const q = (query || '').trim().toLowerCase();
+  const rows = document.getElementById('messages')?.querySelectorAll('.msg-row');
+  let matchCount = 0;
+  rows?.forEach(row => {
+    if (!q) {
+      row.classList.remove('search-hidden', 'search-match');
+      return;
+    }
+    const text = (row.querySelector('.msg-text')?.textContent || '').toLowerCase();
+    const user = (row.querySelector('.msg-username')?.textContent || '').toLowerCase();
+    if (text.includes(q) || user.includes(q)) {
+      row.classList.remove('search-hidden');
+      row.classList.add('search-match');
+      matchCount++;
+    } else {
+      row.classList.add('search-hidden');
+      row.classList.remove('search-match');
+    }
+  });
+  const counter = document.getElementById('search-count');
+  if (counter) counter.textContent = q ? `${matchCount} result${matchCount !== 1 ? 's' : ''}` : '';
+}
+
+function clearSearch() {
+  const input = document.getElementById('search-input');
+  if (input) { input.value = ''; searchMessages(''); }
+  const counter = document.getElementById('search-count');
+  if (counter) counter.textContent = '';
+}
+
+/* ── Blocked overlay (replaces alert for ban/kick) ── */
+function showBlockedOverlay(message) {
+  let overlay = document.getElementById('cc-blocked-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'cc-blocked-overlay';
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.92)',
+      'display:flex', 'align-items:center', 'justify-content:center',
+      'flex-direction:column', 'gap:18px', 'color:#dde3f0',
+      'font-size:1.1rem', 'text-align:center', 'padding:32px',
+      'z-index:99999', 'backdrop-filter:blur(6px)'
+    ].join(';');
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `
+    <div style="font-size:3.5rem">🚫</div>
+    <div style="font-size:1.15rem;font-weight:600;max-width:380px">${escHtml(message)}</div>
+    <div style="color:#7e8eaa;font-size:0.85rem">Signing you out and redirecting…</div>
+  `;
 }
 
 /* ── Typing indicator ── */

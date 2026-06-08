@@ -221,8 +221,20 @@ async function guestLogin() {
   const { data, error } = await sbClient.auth.signInAnonymously();
 
   if (error) {
-    alert('Guest login failed: ' + error.message);
-    if (btn) btn.textContent = 'Guest';
+    if (btn) {
+      btn.textContent = 'Failed — Retry';
+      btn.title = error.message;
+      setTimeout(() => { btn.textContent = 'Guest'; btn.title = ''; }, 4000);
+    }
+    let errEl = document.getElementById('guest-error-msg');
+    if (!errEl) {
+      errEl = document.createElement('p');
+      errEl.id = 'guest-error-msg';
+      errEl.style.cssText = 'color:#f87171;font-size:0.82rem;text-align:center;margin-top:8px';
+      btn?.closest('form, .auth-form, .tab-content, div')?.appendChild(errEl);
+    }
+    errEl.textContent = 'Guest login failed: ' + error.message;
+    setTimeout(() => { if (errEl) errEl.textContent = ''; }, 5000);
     return;
   }
 

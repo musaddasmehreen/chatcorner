@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>💬 ChatCorner - Real-Time Chatroom</title>
+    <link rel="manifest" href="/manifest.json"/>
+    <meta name="theme-color" content="#8b6ded"/>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         * {
@@ -269,7 +271,7 @@
                 </h1>
                 <span class="text-xs text-gray-500">Real-time Decoupled Architecture</span>
             </div>
-            <button id="avatarBtn" class="btn-nebula flex items-center gap-2">
+            <button id="avatarBtn" class="btn-nebula flex items-center gap-2" aria-label="Update your avatar">
                 🖼️ Update Avatar
             </button>
         </div>
@@ -388,6 +390,11 @@
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <!-- Chat Application Logic -->
     <script src="chat.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
 </body>
 
 </html>

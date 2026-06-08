@@ -1,0 +1,20 @@
+{
+  "name": "ChatCorner",
+  "short_name": "ChatCorner",
+  "description": "Real-time decentralized chat with voice, video, and private messaging",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#12121f",
+  "theme_color": "#8b6ded",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["social", "communication"],
+  "lang": "en"
+}

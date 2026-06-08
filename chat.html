@@ -4,6 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ChatCorner – Rooms</title>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#8b6ded"/>
   <link rel="stylesheet" href="css/style.css"/>
   <link rel="stylesheet" href="css/chat-extras.css"/>
   <link rel="stylesheet" href="css/resizable-layout.css"/>
@@ -68,10 +70,23 @@
     <header class="topbar">
       <div class="topbar-logo">💬 ChatCorner</div>
       <div class="topbar-room" id="current-room-name">Select a Room</div>
+      <div class="topbar-search" id="topbar-search">
+        <input
+          type="search"
+          id="search-input"
+          class="search-input"
+          placeholder="🔍 Search messages…"
+          aria-label="Search messages in this room"
+          autocomplete="off"
+          oninput="searchMessages(this.value)"
+        />
+        <span id="search-count" class="search-count" aria-live="polite"></span>
+        <button class="search-clear-btn" onclick="clearSearch()" title="Clear search" aria-label="Clear search">✕</button>
+      </div>
       <div class="topbar-actions">
-        <span id="user-badge" class="user-badge"></span>
-        <button class="topbar-btn" id="btn-edit-avatar" onclick="openAvatarUpload()" style="display:none">🖼️</button>
-        <button class="topbar-btn" onclick="logout()">Logout</button>
+        <span id="user-badge" class="user-badge" aria-label="Current user"></span>
+        <button class="topbar-btn" id="btn-edit-avatar" onclick="openAvatarUpload()" style="display:none" aria-label="Update avatar">🖼️</button>
+        <button class="topbar-btn" onclick="logout()" aria-label="Log out">Logout</button>
       </div>
     </header>
 
@@ -111,8 +126,13 @@
         <!-- Rooms top bar -->
         <div class="rooms-topbar" id="rooms-topbar"></div>
 
+        <!-- Load older messages button -->
+        <button id="btn-load-older" class="btn-load-older hidden" onclick="loadOlderMessages()" aria-label="Load older messages">
+          ⬆ Load older messages
+        </button>
+
         <!-- Messages -->
-        <div class="messages" id="messages" role="log" aria-live="polite"></div>
+        <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
 
         <!-- Scroll to bottom button -->
         <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom">↓ New messages</button>
@@ -144,19 +164,19 @@
           <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
           <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
         </div>
-        <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji">😊</button>
-        <button class="input-btn" id="btn-image-url" title="Image/GIF">🖼️</button>
-        <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote()" title="Voice note (🎙️ send a voice message)">🎙️</button>
-        <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick()" title="Join Voice Chat">🔊</button>
+        <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
+        <button class="input-btn" id="btn-image-url" title="Share image or GIF" aria-label="Share image or GIF">🖼️</button>
+        <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote()" title="Send a voice note" aria-label="Record and send voice note">🎙️</button>
+        <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick()" title="Join Voice Chat" aria-label="Join voice chat">🔊</button>
         <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
       </div>
       <div class="input-strip-center">
-        <input id="msg-input" class="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off"/>
-        <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap">0/500</span>
+        <input id="msg-input" class="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off" aria-label="Message input"/>
+        <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap" aria-live="polite" aria-label="Character count">0/500</span>
       </div>
       <div class="input-strip-right">
-        <button class="btn-send" id="btn-send" onclick="sendMessage()">Send</button>
-        <button class="btn-clear-msgs" id="btn-clear-my-messages" onclick="clearMyMessages()">Clear My Messages</button>
+        <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
+        <button class="btn-clear-msgs" id="btn-clear-my-messages" onclick="clearMyMessages()" aria-label="Clear your messages from view">Clear My Messages</button>
       </div>
     </div>
 
@@ -194,5 +214,10 @@
   <script src="js/pm.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/resizable-layout.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
 </body>
 </html>
