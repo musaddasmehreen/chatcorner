@@ -268,6 +268,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   await loadRooms();
 });
 
+let _roomCountInterval = null;
+
 async function loadRooms() {
   try {
     const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
@@ -286,7 +288,7 @@ async function loadRooms() {
     });
     renderRoomsTopbar(rooms);
     enterRoom(rooms[0]);
-    setInterval(refreshRoomCounts, 60000);
+    if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
 }
 
@@ -317,10 +319,15 @@ function renderRoomsTopbar(rooms) {
     const tab = document.createElement('button');
     tab.className = 'room-tab' + (currentRoom && currentRoom.id === room.id ? ' active' : '');
     tab.dataset.roomId = room.id;
-    const label = (room.type === 'voice' || room.is_audio_enabled ? '🎤 ' : '💬 ') + room.name;
     const count = room.user_count ?? 0;
-    tab.innerHTML = `${label} <span class="room-count-badge" aria-label="${count} users online">${count}</span>`;
-    tab.title = `${room.name} — ${count} users — click to join`;
+    const icon = (room.type === 'voice' || room.is_audio_enabled) ? '🎤 ' : '💬 ';
+    tab.textContent = icon + room.name + ' ';
+    const badge = document.createElement('span');
+    badge.className = 'room-count-badge';
+    badge.setAttribute('aria-label', count + ' users online');
+    badge.textContent = count;
+    tab.appendChild(badge);
+    tab.title = room.name + ' — ' + count + ' users — click to join';
     tab.onclick = () => enterRoom(room);
     bar.appendChild(tab);
   });
