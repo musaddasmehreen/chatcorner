@@ -3,63 +3,108 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <title>ChatCorner Admin Dashboard</title>
   <link rel="stylesheet" href="css/admin.css" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
+  <style>
+    .security-banner { background: rgba(0, 255, 0, 0.1); border: 1px solid #00ff00; padding: 12px; margin: 10px 0; border-radius: 4px; font-size: 12px; color: #00ff00; }
+    .session-info { position: fixed; bottom: 10px; right: 10px; background: rgba(0, 0, 0, 0.8); padding: 10px; border-radius: 4px; font-size: 10px; color: #00ff00; max-width: 200px; z-index: 10000; }
+  </style>
 </head>
 <body class="admin-page">
-  <!-- Auth guard: redirect non-admins immediately before any content renders -->
+  <!-- Security Validation Guard -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/security.js"></script>
+  <script src="js/admin-security.js"></script>
   <script src="js/config.js"></script>
   <script>
-    (async function guardAdmin() {
-      const { data: { session } } = await sbClient.auth.getSession();
-      if (!session?.user) {
-        window.location.replace('adminup.html');
+    // Comprehensive security validation BEFORE rendering
+    (async function securityGate() {
+      // Check session validity first
+      if (!window.adminSecurityManager.validateAdminSession()) {
         document.documentElement.style.display = 'none';
+        window.location.replace('adminup.html?denied=1');
         return;
       }
+
+      // Check for device fingerprint match
+      const anomaly = await window.securityManager.detectAnomalousActivity();
+      if (anomaly.deviceMismatch) {
+        window.securityManager.logSecurityEvent('ADMIN_DEVICE_MISMATCH', anomaly);
+        // Allow but log - could be legitimate (new browser/device)
+      }
+
+      // Check Supabase auth
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session?.user) {
+        document.documentElement.style.display = 'none';
+        window.location.replace('adminup.html');
+        return;
+      }
+
+      // Verify admin status
       const { data: profile } = await sbClient
         .from('profiles')
-        .select('is_admin')
+        .select('is_admin,username,email')
         .eq('id', session.user.id)
         .maybeSingle();
+
       if (!profile?.is_admin) {
         await sbClient.auth.signOut();
-        window.location.replace('adminup.html?denied=1');
+        window.adminSecurityManager.endAdminSession('ADMIN_FLAG_REVOKED');
         document.documentElement.style.display = 'none';
+        window.location.replace('adminup.html?denied=1');
+        return;
       }
+
+      // Log admin access
+      window.securityManager.logSecurityEvent('ADMIN_PANEL_ACCESSED', {
+        username: profile.username || profile.email,
+        timestamp: new Date().toISOString()
+      });
+
+      // Display admin name in banner
+      document.getElementById('admin-name').textContent = profile.username || profile.email || 'Admin';
     })();
   </script>
+
   <div class="admin-shell">
     <aside class="admin-sidebar" id="admin-sidebar">
       <div class="brand">🛡️ ChatCorner Admin</div>
       <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar on mobile">☰ Menu</button>
       <nav id="nav-list" class="nav-list">
-        <button class="nav-btn active" data-panel="overview" title="See platform-wide live stats">📊 Overview</button>
-        <button class="nav-btn" data-panel="rooms" title="Create, edit, lock and delete chat rooms">💬 Room Manager</button>
-        <button class="nav-btn" data-panel="logs" title="Read and moderate room message history">📜 Chat Logs</button>
-        <button class="nav-btn" data-panel="users" title="Manage users, ban/unban and admin roles">👥 User Manager</button>
-        <button class="nav-btn" data-panel="banned" title="Review and manage banned users">🚫 Banned Users</button>
-        <button class="nav-btn" data-panel="broadcast" title="Send system messages globally or per room">📣 Broadcast</button>
-        <button class="nav-btn" data-panel="settings" title="Control app behavior and limits">⚙️ Settings</button>
-        <button class="nav-btn" data-panel="analytics" title="See engagement trends and activity">📈 Analytics</button>
+        <button class="nav-btn active" data-panel="overview" data-admin-action="view-overview" title="See platform-wide live stats">📊 Overview</button>
+        <button class="nav-btn" data-panel="rooms" data-admin-action="manage-rooms" title="Create, edit, lock and delete chat rooms">💬 Room Manager</button>
+        <button class="nav-btn" data-panel="logs" data-admin-action="view-logs" title="Read and moderate room message history">📜 Chat Logs</button>
+        <button class="nav-btn" data-panel="users" data-admin-action="manage-users" title="Manage users, ban/unban and admin roles">👥 User Manager</button>
+        <button class="nav-btn" data-panel="banned" data-admin-action="manage-bans" title="Review and manage banned users">🚫 Banned Users</button>
+        <button class="nav-btn" data-panel="broadcast" data-admin-action="send-broadcast" title="Send system messages globally or per room">📣 Broadcast</button>
+        <button class="nav-btn" data-panel="settings" data-admin-action="edit-settings" title="Control app behavior and limits">⚙️ Settings</button>
+        <button class="nav-btn" data-panel="analytics" data-admin-action="view-analytics" title="See engagement trends and activity">📈 Analytics</button>
       </nav>
     </aside>
 
     <main class="admin-main">
       <header class="admin-topbar">
-        <div class="topbar-title">Admin Dashboard</div>
+        <div class="topbar-title">Admin Dashboard 🔐</div>
         <div class="topbar-right">
           <span id="admin-name" class="admin-name">Admin</span>
-          <button class="btn danger" id="admin-logout" title="Log out from admin dashboard">Logout</button>
+          <button class="btn danger" id="admin-logout" title="Log out from admin dashboard" data-admin-action="logout">Logout</button>
         </div>
       </header>
+
+      <div class="security-banner">
+        🛡️ Enterprise Security Active | Session monitoring enabled | All actions logged
+      </div>
 
       <section id="panel-overview" class="panel active">
         <div class="panel-head">
           <h2>📊 Overview / Stats</h2>
-          <button class="btn" id="refresh-stats">Refresh Stats</button>
+          <button class="btn" id="refresh-stats" data-admin-action="refresh-stats">Refresh Stats</button>
         </div>
         <div class="stats-grid" id="stats-grid"></div>
       </section>
@@ -67,7 +112,7 @@
       <section id="panel-rooms" class="panel">
         <div class="panel-head">
           <h2>💬 Room Manager</h2>
-          <button class="btn" id="btn-create-room" title="Open room creation form">+ Create New Room</button>
+          <button class="btn" id="btn-create-room" data-admin-action="create-room" title="Open room creation form">+ Create New Room</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -92,9 +137,9 @@
           <div class="inline-row">
             <select id="logs-room-select" title="Choose a room to view its messages"></select>
             <input id="logs-search" type="text" placeholder="Search by keyword or username" />
-            <button class="btn" id="logs-search-btn">Search</button>
-            <button class="btn" id="export-csv-btn" title="Download current room log as CSV">Export CSV</button>
-            <button class="btn danger" id="logs-clear-room-btn" title="Delete all messages in selected room">Clear All Messages</button>
+            <button class="btn" id="logs-search-btn" data-admin-action="search-logs">Search</button>
+            <button class="btn" id="export-csv-btn" data-admin-action="export-logs" title="Download current room log as CSV">Export CSV</button>
+            <button class="btn danger" id="logs-clear-room-btn" data-admin-action="clear-logs" title="Delete all messages in selected room">Clear All Messages</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -127,7 +172,7 @@
               <option value="admins">Admins</option>
               <option value="mods">Mods</option>
             </select>
-            <button class="btn" id="users-apply">Apply</button>
+            <button class="btn" id="users-apply" data-admin-action="filter-users">Apply</button>
           </div>
         </div>
         <div class="bulk-bar">
@@ -137,7 +182,7 @@
             <option value="ban">Ban selected</option>
             <option value="delete">Delete selected accounts</option>
           </select>
-          <button class="btn" id="bulk-run">Run</button>
+          <button class="btn" id="bulk-run" data-admin-action="bulk-action">Run</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -175,7 +220,7 @@
             <option value="168">7d</option>
             <option value="720">30d</option>
           </select>
-          <button class="btn danger" type="submit">Ban User</button>
+          <button class="btn danger" type="submit" data-admin-action="ban-user">Ban User</button>
         </form>
 
         <div class="table-wrap">
@@ -214,7 +259,7 @@
           <label>Preview</label>
           <div id="broadcast-preview" class="preview">Your message preview will appear here.</div>
 
-          <button class="btn" id="send-broadcast">Send Broadcast</button>
+          <button class="btn" id="send-broadcast" data-admin-action="broadcast">Send Broadcast</button>
         </div>
 
         <div class="card">
@@ -239,14 +284,14 @@
           <label for="set-welcome">Welcome message</label>
           <textarea id="set-welcome" rows="3" placeholder="Welcome to ChatCorner!"></textarea>
 
-          <button class="btn" id="save-settings">Save Settings</button>
+          <button class="btn" id="save-settings" data-admin-action="save-settings">Save Settings</button>
         </div>
       </section>
 
       <section id="panel-analytics" class="panel">
         <div class="panel-head">
           <h2>📈 Analytics</h2>
-          <button class="btn" id="refresh-analytics">Refresh Analytics</button>
+          <button class="btn" id="refresh-analytics" data-admin-action="refresh-analytics">Refresh Analytics</button>
         </div>
 
         <div class="analytics-grid">
@@ -281,7 +326,7 @@
       </select>
       <textarea id="room-description" rows="3" placeholder="Room description (optional)"></textarea>
       <div class="inline-row">
-        <button class="btn" id="create-room-confirm">Create</button>
+        <button class="btn" id="create-room-confirm" data-admin-action="confirm-create-room">Create</button>
         <button class="btn ghost" id="close-room-modal">Cancel</button>
       </div>
     </div>
@@ -289,9 +334,49 @@
 
   <div id="loading-overlay" class="loading-overlay hidden">Loading…</div>
   <div id="toast-wrap" class="toast-wrap"></div>
+  <div id="session-info" class="session-info hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/admin.js"></script>
+
+  <script>
+    // Session monitoring and display
+    setInterval(() => {
+      const summary = window.adminSecurityManager.getSessionSummary();
+      if (summary) {
+        const sessionEl = document.getElementById('session-info');
+        sessionEl.classList.remove('hidden');
+        sessionEl.innerHTML = `
+          ✓ Session active<br>
+          ${Math.floor(summary.lastActivity / 1000)}s idle<br>
+          Actions: ${summary.activityCount}
+        `;
+      }
+    }, 5000);
+
+    // Logout handler
+    document.getElementById('admin-logout').addEventListener('click', async () => {
+      window.adminSecurityManager.endAdminSession('USER_LOGOUT');
+      await sbClient.auth.signOut();
+      window.location.href = 'adminup.html';
+    });
+
+    // Detect intrusions/anomalies
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        window.securityManager.logSecurityEvent('ADMIN_SAVE_SHORTCUT_BLOCKED', {});
+      }
+    });
+
+    // Warn on suspicious activity
+    setInterval(() => {
+      const suspicion = window.adminSecurityManager.detectSuspiciousActivity();
+      if (suspicion.suspicious) {
+        window.securityManager.logSecurityEvent('SUSPICIOUS_ADMIN_ACTIVITY_DETECTED', suspicion);
+      }
+    }, 10000);
+  </script>
 </body>
 </html>
