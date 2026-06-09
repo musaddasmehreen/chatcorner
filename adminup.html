@@ -16,11 +16,14 @@
     .lockout-msg { color: #ff0000; font-weight: bold; padding: 12px; background: rgba(255, 0, 0, 0.1); border-radius: 4px; margin: 10px 0; }
     .twofa-container { margin-top: 20px; padding: 15px; background: rgba(0, 255, 0, 0.05); border: 1px solid #00ff00; border-radius: 4px; }
     .twofa-input { font-size: 20px; letter-spacing: 8px; text-align: center; width: 100%; padding: 12px; font-family: monospace; }
+    .security-question-container { margin-top: 20px; padding: 15px; background: rgba(0, 150, 255, 0.05); border: 1px solid #0096ff; border-radius: 4px; }
+    .security-question-input { width: 100%; padding: 12px; margin-top: 8px; }
     .device-info { font-size: 11px; color: #aaa; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333; }
     .attempt-counter { color: #ff9900; font-size: 12px; margin-top: 8px; }
     .success-state { color: #00ff00; }
     .error-state { color: #ff0000; }
     .hidden { display: none !important; }
+    .question-hint { font-size: 11px; color: #0096ff; margin-top: 5px; font-style: italic; }
   </style>
 </head>
 <body class="auth-page admin-auth-page">
@@ -56,6 +59,26 @@
       <div id="admin-login-msg" class="msg"></div>
       <div id="attempt-info" class="attempt-counter"></div>
       <div id="lockout-warning" class="lockout-msg hidden"></div>
+    </form>
+
+    <!-- Security Question Form (Hidden Initially) -->
+    <form id="security-question-form" class="auth-form hidden" onsubmit="event.preventDefault(); verifySecurityQuestion();">
+      <div class="security-question-container">
+        <label class="field-label">Security Verification</label>
+        <p id="question-text" style="font-size: 14px; color: #fff; margin: 12px 0;">Loading question...</p>
+        <input 
+          type="text" 
+          id="security-answer" 
+          class="security-question-input" 
+          placeholder="Enter your answer" 
+          required 
+          spellcheck="false"
+        />
+        <p class="question-hint" id="question-hint"></p>
+        <button class="btn-primary" type="submit">Verify Answer</button>
+        <button class="btn ghost" type="button" onclick="cancelSecurityQuestion()">Back</button>
+      </div>
+      <div id="security-question-msg" class="msg"></div>
     </form>
 
     <!-- 2FA Form (Hidden Initially) -->
@@ -103,15 +126,20 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/security.js"></script>
   <script src="js/admin-security.js"></script>
+  <script src="js/security-questions.js"></script>
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
 
   <script>
     let currentUsername = '';
+    let currentUserId = '';
     let currentAdminSession = null;
+    let currentSecurityQuestion = null;
 
     const loginMsgEl = document.getElementById('admin-login-msg');
     const loginForm = document.getElementById('admin-login-form');
+    const securityQuestionForm = document.getElementById('security-question-form');
+    const securityQuestionMsgEl = document.getElementById('security-question-msg');
     const twofaForm = document.getElementById('twofa-form');
     const twofaMsgEl = document.getElementById('twofa-msg');
     const attemptInfoEl = document.getElementById('attempt-info');
@@ -125,7 +153,16 @@
       updateSecurityDisplay();
       checkIfAlreadyLoggedIn();
       setupInputValidation();
+      checkHoneypotExpired();
     });
+
+    // Check if coming from expired honeypot
+    function checkHoneypotExpired() {
+      if (new URLSearchParams(window.location.search).get('honeypot_expired') === '1') {
+        setLoginMsg('⚠️ Previous session expired. Please log in again.', 'error');
+        window.history.replaceState({}, document.title, 'adminup.html');
+      }
+    }
 
     // Display security information
     async function updateSecurityDisplay() {
@@ -208,7 +245,6 @@
           .maybeSingle();
 
         if (lookupErr || !profile) {
-          // Generic error (prevent user enumeration)
           window.adminSecurityManager.recordLoginAttempt(username, false, { reason: 'USERNAME_NOT_FOUND' });
           updateAttemptInfo(username);
           setLoginMsg(window.securityManager.getGenericErrorMessage(), 'error');
@@ -254,25 +290,10 @@
           return;
         }
 
-        // Create session
-        const fp = await window.securityManager.generateDeviceFingerprint();
-        currentAdminSession = window.adminSecurityManager.createAdminSession(data.user.id, fp.hash);
-
-        // Check if 2FA is enabled
-        if (profile.has_2fa_enabled && profile.two_fa_secret) {
-          window.adminSecurityManager.recordLoginAttempt(username, false, { reason: 'PENDING_2FA' });
-          showTwoFAForm();
-          loginBtn.disabled = false;
-          return;
-        }
-
-        // Success - no 2FA required
-        window.adminSecurityManager.recordLoginAttempt(username, true);
-        setLoginMsg('Access granted! Redirecting…', 'success');
-        
-        setTimeout(() => {
-          window.location.href = 'admin.html';
-        }, 500);
+        // Password correct - now show security question
+        currentUserId = data.user.id;
+        showSecurityQuestion(username);
+        loginBtn.disabled = false;
 
       } catch (err) {
         window.securityManager.logSecurityEvent('LOGIN_EXCEPTION', { error: err.message });
@@ -281,24 +302,105 @@
       }
     }
 
+    // Show security question form
+    function showSecurityQuestion(username) {
+      currentSecurityQuestion = window.securityQuestionsManager.getRandomQuestion();
+      
+      document.getElementById('question-text').textContent = currentSecurityQuestion.question;
+      document.getElementById('question-hint').textContent = `Hint: ${currentSecurityQuestion.hint}`;
+      document.getElementById('security-answer').value = '';
+      
+      loginForm.classList.add('hidden');
+      securityQuestionForm.classList.remove('hidden');
+      setLoginMsg('');
+      
+      document.getElementById('security-answer').focus();
+    }
+
+    // Verify security question answer
+    async function verifySecurityQuestion() {
+      const answer = document.getElementById('security-answer').value.trim();
+      const verifyBtn = document.querySelector('#security-question-form button[type="submit"]');
+
+      if (!answer) {
+        securityQuestionMsgEl.textContent = 'Please enter an answer.';
+        securityQuestionMsgEl.className = 'msg error';
+        return;
+      }
+
+      verifyBtn.disabled = true;
+      securityQuestionMsgEl.textContent = 'Verifying...';
+      securityQuestionMsgEl.className = 'msg';
+
+      try {
+        const isCorrect = window.securityQuestionsManager.verifyAnswer(currentSecurityQuestion.key, answer);
+
+        if (!isCorrect) {
+          const wrongCount = window.securityQuestionsManager.recordWrongAnswer(currentUsername, currentSecurityQuestion.key);
+          const remaining = window.securityQuestionsManager.maxWrongAnswers - wrongCount;
+
+          if (remaining > 0) {
+            securityQuestionMsgEl.textContent = `❌ Incorrect. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`;
+            securityQuestionMsgEl.className = 'msg error';
+            document.getElementById('security-answer').value = '';
+            verifyBtn.disabled = false;
+          } else {
+            // Failed security question - redirect to honeypot
+            securityQuestionMsgEl.textContent = '❌ Too many incorrect answers. Session redirected.';
+            securityQuestionMsgEl.className = 'msg error';
+            
+            setTimeout(() => {
+              window.securityQuestionsManager.createHoneypotSession(currentUsername);
+              window.location.href = 'honeypot-admin.html';
+            }, 1500);
+          }
+          return;
+        }
+
+        // Security question correct - proceed
+        window.adminSecurityManager.recordLoginAttempt(currentUsername, false, { reason: 'PENDING_2FA_OR_SUCCESS' });
+        securityQuestionMsgEl.textContent = '✅ Verified! Proceeding...';
+        securityQuestionMsgEl.className = 'msg success';
+        
+        // Create real session
+        const fp = await window.securityManager.generateDeviceFingerprint();
+        currentAdminSession = window.adminSecurityManager.createAdminSession(currentUserId, fp.hash);
+
+        window.adminSecurityManager.recordLoginAttempt(currentUsername, true);
+        
+        setTimeout(() => {
+          window.location.href = 'admin.html';
+        }, 500);
+
+      } catch (err) {
+        window.securityManager.logSecurityEvent('SECURITY_QUESTION_EXCEPTION', { error: err.message });
+        securityQuestionMsgEl.textContent = window.securityManager.getGenericErrorMessage();
+        securityQuestionMsgEl.className = 'msg error';
+        verifyBtn.disabled = false;
+      }
+    }
+
+    // Cancel security question
+    function cancelSecurityQuestion() {
+      securityQuestionForm.classList.add('hidden');
+      loginForm.classList.remove('hidden');
+      document.getElementById('security-answer').value = '';
+      securityQuestionMsgEl.textContent = '';
+      document.getElementById('admin-login-btn').disabled = false;
+    }
+
     // Verify 2FA code
     async function verifyTwoFA() {
       const code = document.getElementById('twofa-code').value;
       const verifyBtn = document.querySelector('#twofa-form button[type="submit"]');
 
-      if (code.length !== 6) {
-        twofaMsgEl.textContent = 'Enter a 6-digit code';
-        twofaMsgEl.className = 'msg error';
-        return;
-      }
+      if (code.length !== 6) return;
 
       verifyBtn.disabled = true;
       twofaMsgEl.textContent = 'Verifying code…';
       twofaMsgEl.className = 'msg';
 
       try {
-        // In production, retrieve the secret from database and verify
-        // For now, we'll accept any valid 6-digit code with verification
         const isValid = window.adminSecurityManager.verify2FACode('test_secret', code);
 
         if (!isValid) {
@@ -309,7 +411,6 @@
           return;
         }
 
-        // 2FA verified - proceed to admin panel
         window.adminSecurityManager.recordLoginAttempt(currentUsername, true, { '2fa': 'verified' });
         twofaMsgEl.textContent = 'Code verified! Redirecting…';
         twofaMsgEl.className = 'msg success';
@@ -324,14 +425,6 @@
         twofaMsgEl.className = 'msg error';
         verifyBtn.disabled = false;
       }
-    }
-
-    // Show 2FA form
-    function showTwoFAForm() {
-      loginForm.classList.add('hidden');
-      twofaForm.classList.remove('hidden');
-      setLoginMsg('');
-      document.getElementById('twofa-code').focus();
     }
 
     // Cancel 2FA
@@ -372,9 +465,6 @@
     if (new URLSearchParams(window.location.search).get('denied') === '1') {
       setLoginMsg('❌ Access Denied. Admin credentials required.', 'error');
       window.securityManager.logSecurityEvent('UNAUTHORIZED_ADMIN_ACCESS', {});
-    }
-    if (new URLSearchParams(window.location.search).get('setup') === 'disabled') {
-      setLoginMsg('Admin setup is disabled. Contact system administrator.', 'error');
     }
 
     // Monitor for intrusion attempts
