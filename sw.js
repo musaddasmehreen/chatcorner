@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chatcorner-v1';
+const CACHE_NAME = 'chatcorner-v2';
 
 const STATIC_ASSETS = [
   '/',
@@ -6,8 +6,10 @@ const STATIC_ASSETS = [
   '/chat.html',
   '/css/style.css',
   '/css/chat-extras.css',
+  '/css/responsive.css',
   '/css/resizable-layout.css',
   '/js/config.js',
+  '/js/security-utils.js',
   '/js/auth.js',
   '/js/chat.js',
   '/js/pm.js',

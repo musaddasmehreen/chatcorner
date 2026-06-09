@@ -2,15 +2,26 @@ function showTab(tab) {
   document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(tab + '-tab').classList.add('active');
-  event.currentTarget.classList.add('active');
+  (document.activeElement?.classList?.contains('tab-btn') ? document.activeElement : null)?.classList.add('active');
 }
 
 async function loginUser() {
   const loginId  = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const msg      = document.getElementById('login-msg');
+  const csrfToken = document.getElementById('login-csrf')?.value;
+  const honeypot = document.getElementById('login-honeypot')?.value;
 
   if (!loginId || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
+  if (window.ChatSecurity?.isBotTrapped(honeypot)) { showMsg(msg, 'Request blocked.', 'error'); return; }
+  const mutationGuard = window.ChatSecurity?.validateMutationCsrf(csrfToken);
+  if (mutationGuard && !mutationGuard.valid) { showMsg(msg, mutationGuard.message, 'error'); return; }
+  const loginLock = window.ChatSecurity?.getLoginLock(loginId);
+  if (loginLock?.locked) {
+    const waitSeconds = Math.ceil(loginLock.retryAfterMs / 1000);
+    showMsg(msg, `Too many login attempts. Try again in ${waitSeconds}s.`, 'error');
+    return;
+  }
 
   showMsg(msg, 'Logging in…', '');
 
@@ -56,6 +67,7 @@ async function loginUser() {
   const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
 
   if (error) {
+    window.ChatSecurity?.recordLoginAttempt(loginId, false);
     if (error.message.includes('Email not confirmed')) {
       showMsg(msg, '📧 Please confirm your email first, then try logging in again.', 'error');
     } else if (error.message.includes('Invalid login credentials')) {
@@ -65,6 +77,9 @@ async function loginUser() {
     }
     return;
   }
+  window.ChatSecurity?.recordLoginAttempt(loginId, true);
+  window.ChatSecurity?.initSessionState();
+  window.ChatSecurity?.touchSession();
 
   // After a successful login we are authenticated — safe to read/write profiles.
   const { data: existingProf } = await sbClient
@@ -133,9 +148,17 @@ async function registerUser() {
   const password = document.getElementById('reg-password').value;
   const msg      = document.getElementById('reg-msg');
   const btn      = document.querySelector('#register-tab .btn-primary');
+  const csrfToken = document.getElementById('register-csrf')?.value;
+  const honeypot = document.getElementById('register-honeypot')?.value;
 
   if (!username || !email || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
-  if (password.length < 6)  { showMsg(msg, 'Password must be at least 6 characters.', 'error'); return; }
+  if (window.ChatSecurity?.isBotTrapped(honeypot)) { showMsg(msg, 'Request blocked.', 'error'); return; }
+  const mutationGuard = window.ChatSecurity?.validateMutationCsrf(csrfToken);
+  if (mutationGuard && !mutationGuard.valid) { showMsg(msg, mutationGuard.message, 'error'); return; }
+  const passwordValidation = window.ChatSecurity?.validatePassword(password);
+  if (passwordValidation && !passwordValidation.valid) {
+    showMsg(msg, passwordValidation.message, 'error'); return;
+  }
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
     showMsg(msg, 'Username: letters, numbers, _ only (3–20 chars).', 'error'); return;
   }
@@ -216,6 +239,12 @@ async function registerUser() {
 
 async function guestLogin() {
   const btn = document.querySelector('.tab-btn:last-child');
+  const msg = document.getElementById('guest-msg');
+  const csrfToken = document.getElementById('guest-csrf')?.value;
+  const honeypot = document.getElementById('guest-honeypot')?.value;
+  if (window.ChatSecurity?.isBotTrapped(honeypot)) { showMsg(msg, 'Request blocked.', 'error'); return; }
+  const mutationGuard = window.ChatSecurity?.validateMutationCsrf(csrfToken);
+  if (mutationGuard && !mutationGuard.valid) { showMsg(msg, mutationGuard.message, 'error'); return; }
   if (btn) btn.textContent = 'Joining…';
 
   const { data, error } = await sbClient.auth.signInAnonymously();
@@ -251,6 +280,8 @@ async function guestLogin() {
 }
 
 async function logout() {
+  window.ChatSecurity?.clearSecuritySession();
+  sessionStorage.removeItem('cc-pm-session');
   await sbClient.auth.signOut();
   window.location.href = 'index.html';
 }
@@ -291,6 +322,9 @@ if (window.location.pathname.endsWith('index.html') || window.location.pathname 
   }
 
   sbClient.auth.getSession().then(({ data }) => {
-    if (data.session) window.location.href = 'chat.html';
+    if (data.session) {
+      window.ChatSecurity?.initSessionState();
+      window.location.href = 'chat.html';
+    }
   });
 }

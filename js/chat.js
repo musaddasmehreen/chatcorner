@@ -93,6 +93,8 @@ let cameraStates   = {};
 let presenceBaseData = {};
 const GUEST_TEXT_RATE_LIMIT_COUNT = 2;
 const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const GLOBAL_MESSAGE_MAX_LENGTH = 500;
+const ALLOWED_MESSAGE_TYPES = new Set(['text', 'image', 'voice']);
 const guestMessageTimesByRoom = new Map();
 let guestRateToastTimer = null;
 let roomVoiceNoteRecorder = null;
@@ -120,6 +122,11 @@ const QUICK_BAN_OPTIONS = {
 };
 
 window.addEventListener('DOMContentLoaded', async () => {
+  if (window.ChatSecurity?.isSessionExpired()) {
+    await sbClient.auth.signOut();
+    window.location.href = 'index.html';
+    return;
+  }
   const { data: { session } } = await sbClient.auth.getSession();
   if (!session) { window.location.href = 'index.html'; return; }
 
@@ -190,6 +197,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   document.getElementById('audio-bar').classList.remove('hidden');
+  document.getElementById('sidebar-toggle-btn')?.addEventListener('click', () => {
+    document.body.classList.toggle('mobile-sidebars-open');
+  });
   applyGuestModeUI();
   document.getElementById('btn-image-url')?.addEventListener('click', toggleRoomImageUrlInput);
   document.getElementById('btn-room-image-url-clear')?.addEventListener('click', (event) => {
@@ -315,22 +325,10 @@ function renderRoomsTopbar(rooms) {
   const bar = document.getElementById('rooms-topbar');
   if (!bar) return;
   bar.innerHTML = '';
-  rooms.forEach(room => {
-    const tab = document.createElement('button');
-    tab.className = 'room-tab' + (currentRoom && currentRoom.id === room.id ? ' active' : '');
-    tab.dataset.roomId = room.id;
-    const count = room.user_count ?? 0;
-    const icon = (room.type === 'voice' || room.is_audio_enabled) ? '🎤 ' : '💬 ';
-    tab.textContent = icon + room.name + ' ';
-    const badge = document.createElement('span');
-    badge.className = 'room-count-badge';
-    badge.setAttribute('aria-label', count + ' users online');
-    badge.textContent = count;
-    tab.appendChild(badge);
-    tab.title = room.name + ' — ' + count + ' users — click to join';
-    tab.onclick = () => enterRoom(room);
-    bar.appendChild(tab);
-  });
+  const placeholder = document.createElement('div');
+  placeholder.className = 'msg-system';
+  placeholder.textContent = 'Open a private chat to see tabs here';
+  bar.appendChild(placeholder);
 }
 
 async function enterRoom(room) {
@@ -352,8 +350,6 @@ async function enterRoom(room) {
   cameraStates = {};
 
   // Update active tab in topbar
-  document.querySelectorAll('.room-tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.roomId === String(currentRoom.id)));
   // Update active item in left sidebar room list
   document.querySelectorAll('#room-list li').forEach(li =>
     li.classList.toggle('active', li.dataset.roomId === String(currentRoom.id)));
@@ -503,6 +499,11 @@ async function sendMessage() {
   const imagePopover = document.getElementById('room-image-url-popover');
   const isSendingImage = !imagePopover?.classList.contains('hidden') && !!rawImageUrl;
   if (!text && !isSendingImage) return;
+  const csrfCheck = window.ChatSecurity?.validateMutationCsrf(sessionStorage.getItem('cc_csrf_token'));
+  if (csrfCheck && !csrfCheck.valid) {
+    appendSystemMessage(csrfCheck.message);
+    return;
+  }
   if (!currentRoom) {
     appendSystemMessage('No room selected. Please wait for rooms to load...');
     return;
@@ -516,6 +517,11 @@ async function sendMessage() {
     document.getElementById('room-image-url-input')?.focus();
     return;
   }
+  const messageRate = window.ChatSecurity?.checkMessageRate(currentUser?.id);
+  if (messageRate && !messageRate.allowed) {
+    showChatToast(`Rate limit reached. Try again in ${Math.ceil(messageRate.retryAfterMs / 1000)}s.`, 'warning');
+    return;
+  }
   if (!isRegisteredUser() && !currentRoom?.is_audio_enabled) {
     const waitMs = getGuestMessageWaitMs(currentRoom.id);
     if (waitMs > 0) {
@@ -525,14 +531,36 @@ async function sendMessage() {
   }
 
   if (!isSendingImage) input.value = '';
-
-  const { error } = await sbClient.from('messages').insert({
-    room_id:  currentRoom.id,
-    user_id:  currentUser.id,
+  const messageType = isSendingImage ? 'image' : 'text';
+  if (!ALLOWED_MESSAGE_TYPES.has(messageType)) {
+    appendSystemMessage('Invalid message type.');
+    return;
+  }
+  const validatedText = messageType === 'text'
+    ? (window.ChatSecurity?.validateMessage(text) || { valid: text.length <= GLOBAL_MESSAGE_MAX_LENGTH, sanitized: text })
+    : { valid: true, sanitized: imageUrl };
+  if (!validatedText.valid) {
+    appendSystemMessage(validatedText.message || 'Message rejected.');
+    return;
+  }
+  const content = messageType === 'text' ? validatedText.sanitized : imageUrl;
+  if (String(content || '').length > GLOBAL_MESSAGE_MAX_LENGTH && messageType === 'text') {
+    appendSystemMessage('Message must be 500 characters or less.');
+    return;
+  }
+  const payload = {
+    room_id: currentRoom.id,
+    user_id: currentUser.id,
     username: currentProfile.username,
-    content:  isSendingImage ? imageUrl : text,
-    type:     isSendingImage ? 'image' : 'text'
-  });
+    content,
+    type: messageType
+  };
+  const signature = await window.ChatSecurity?.signRequest(payload);
+  if (window.ChatSecurity && !(await window.ChatSecurity.verifySignature(payload, signature))) {
+    appendSystemMessage('Request verification failed.');
+    return;
+  }
+  const { error } = await sbClient.from('messages').insert(payload);
   if (error) {
     appendSystemMessage(isSendingImage ? 'Could not share image. Please try again.' : 'Could not send message. Please try again.');
     return;
@@ -1897,6 +1925,14 @@ function setAvatarUploadError(message) {
 
 function onAvatarFileSelect(event) {
   const file = event.target.files?.[0];
+  const fileValidation = window.ChatSecurity?.validateFileUpload(file, {
+    maxBytes: 2 * 1024 * 1024,
+    allowedMime: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  });
+  if (!fileValidation?.valid) {
+    setAvatarUploadError(`❌ ${fileValidation?.message || 'Please choose a valid image file.'}`);
+    return;
+  }
   if (!file || !file.type.startsWith('image/')) {
     setAvatarUploadError('❌ Please choose a valid image file.');
     return;

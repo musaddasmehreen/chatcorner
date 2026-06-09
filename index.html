@@ -1,400 +1,94 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💬 ChatCorner - Real-Time Chatroom</title>
-    <link rel="manifest" href="/manifest.json"/>
-    <meta name="theme-color" content="#8b6ded"/>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #e0e0e0;
-        }
-
-        .nebula-glow {
-            background: rgba(100, 150, 255, 0.1);
-            border: 1px solid rgba(100, 150, 255, 0.3);
-            box-shadow: 0 0 20px rgba(100, 150, 255, 0.15);
-        }
-
-        .nebula-dark {
-            background: rgba(15, 12, 41, 0.8);
-            backdrop-filter: blur(10px);
-        }
-
-        .nebula-card {
-            background: linear-gradient(135deg, rgba(48, 43, 99, 0.6) 0%, rgba(36, 36, 62, 0.6) 100%);
-            border: 1px solid rgba(100, 150, 255, 0.2);
-            border-radius: 12px;
-        }
-
-        .chat-message {
-            animation: slideIn 0.3s ease-out;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .active-user-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            background: rgba(100, 200, 150, 0.2);
-            border: 1px solid rgba(100, 200, 150, 0.4);
-            border-radius: 20px;
-            font-size: 12px;
-            margin: 4px;
-        }
-
-        .video-stream {
-            width: 150px;
-            height: 120px;
-            background: linear-gradient(135deg, rgba(50, 50, 100, 0.8) 0%, rgba(20, 20, 40, 0.8) 100%);
-            border: 2px solid rgba(100, 150, 255, 0.3);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #888;
-            font-size: 12px;
-            overflow: hidden;
-        }
-
-        #chatWindow {
-            height: 500px;
-            overflow-y: auto;
-        }
-
-        #chatWindow::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        #chatWindow::-webkit-scrollbar-track {
-            background: rgba(100, 150, 255, 0.05);
-        }
-
-        #chatWindow::-webkit-scrollbar-thumb {
-            background: rgba(100, 150, 255, 0.3);
-            border-radius: 3px;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
-        }
-
-        .modal.active {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-content {
-            background: linear-gradient(135deg, rgba(48, 43, 99, 0.95) 0%, rgba(36, 36, 62, 0.95) 100%);
-            border: 2px solid rgba(100, 150, 255, 0.4);
-            padding: 30px;
-            border-radius: 16px;
-            max-width: 400px;
-            width: 90%;
-            box-shadow: 0 8px 32px rgba(100, 150, 255, 0.2);
-        }
-
-        .btn-nebula {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-        }
-
-        .btn-nebula:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-nebula:active {
-            transform: translateY(0);
-        }
-
-        .btn-secondary {
-            background: rgba(100, 150, 255, 0.2);
-            color: #64b4ff;
-            padding: 10px 16px;
-            border: 1px solid rgba(100, 150, 255, 0.4);
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 14px;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(100, 150, 255, 0.3);
-            border-color: rgba(100, 150, 255, 0.6);
-        }
-
-        .toggle-button.active {
-            background: rgba(100, 200, 150, 0.4);
-            border-color: rgba(100, 200, 150, 0.6);
-        }
-
-        .character-counter {
-            font-size: 12px;
-            color: #888;
-            margin-top: 4px;
-        }
-
-        .character-counter.warning {
-            color: #ffa500;
-        }
-
-        .character-counter.danger {
-            color: #ff6b6b;
-        }
-
-        /* Private Users Tab Bar */
-        .private-users-tab-bar {
-            display: flex;
-            gap: 4px;
-            padding: 8px 12px;
-            background: rgba(15, 12, 41, 0.6);
-            border-bottom: 1px solid rgba(100, 150, 255, 0.2);
-            overflow-x: auto;
-            min-height: 44px;
-        }
-
-        .private-user-tab {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            background: rgba(48, 43, 99, 0.5);
-            border: 1px solid rgba(100, 150, 255, 0.3);
-            border-radius: 6px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-
-        .private-user-tab:hover {
-            background: rgba(48, 43, 99, 0.7);
-            border-color: rgba(100, 150, 255, 0.5);
-        }
-
-        .private-user-tab.active {
-            background: rgba(100, 150, 255, 0.3);
-            border-color: rgba(100, 150, 255, 0.6);
-        }
-
-        .private-user-tab-name {
-            font-size: 13px;
-            color: #ccc;
-        }
-
-        .private-user-tab.active .private-user-tab-name {
-            color: #64b4ff;
-            font-weight: 600;
-        }
-
-        .private-user-close-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 16px;
-            height: 16px;
-            background: transparent;
-            border: none;
-            color: #888;
-            cursor: pointer;
-            font-size: 14px;
-            padding: 0;
-            transition: color 0.2s ease;
-        }
-
-        .private-user-close-btn:hover {
-            color: #ff6b6b;
-        }
-
-        .unread-indicator {
-            position: absolute;
-            top: 4px;
-            right: 4px;
-            width: 8px;
-            height: 8px;
-            background: #ff3333;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-    </style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5"/>
+  <title>ChatCorner — Sign In</title>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#8b6ded"/>
+  <meta http-equiv="X-Frame-Options" content="DENY"/>
+  <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.ipapi.is; media-src 'self' blob: data:;"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/responsive.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
+<body class="auth-page">
+  <div class="bg-animation" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
 
-<body>
-    <!-- Header Banner -->
-    <header class="nebula-dark border-b border-blue-500 border-opacity-30 sticky top-0 z-100">
-        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                    💬 ChatCorner
-                </h1>
-                <span class="text-xs text-gray-500">Real-time Decoupled Architecture</span>
-            </div>
-            <button id="avatarBtn" class="btn-nebula flex items-center gap-2" aria-label="Update your avatar">
-                🖼️ Update Avatar
-            </button>
-        </div>
-    </header>
-
-    <!-- Private Users Tab Bar (for private chats) -->
-    <div id="privateUsersTabBar" class="private-users-tab-bar hidden"></div>
-
-    <!-- Main Container -->
-    <div class="max-w-7xl mx-auto px-6 py-6 h-screen overflow-hidden flex flex-col">
-        <div class="flex gap-6 flex-1 overflow-hidden">
-            <!-- Left Sidebar - Chatrooms & Active Users -->
-            <aside class="w-64 flex flex-col gap-6 overflow-hidden">
-                <!-- Chatrooms Section -->
-                <div class="nebula-card p-4">
-                    <h2 class="text-sm font-semibold text-blue-300 mb-3 uppercase tracking-wider">Chatrooms</h2>
-                    <nav class="space-y-2">
-                        <button id="roomGeneral" class="w-full text-left px-3 py-2 rounded-lg bg-blue-500 bg-opacity-30 border border-blue-400 border-opacity-50 text-blue-200 hover:bg-opacity-40 transition">
-                            # General
-                        </button>
-                        <button id="roomLounge" class="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-400 hover:bg-opacity-20 text-gray-300 hover:text-blue-200 transition">
-                            # Lounge
-                        </button>
-                    </nav>
-                </div>
-
-                <!-- Active Users Section -->
-                <div class="nebula-card p-4 flex-1 overflow-hidden flex flex-col">
-                    <h2 class="text-sm font-semibold text-green-300 mb-3 uppercase tracking-wider">Active Users</h2>
-                    <div id="usersInRoomContainer" class="flex-1 overflow-y-auto space-y-2">
-                        <div class="text-xs text-gray-500 italic">Waiting for users...</div>
-                    </div>
-                </div>
-
-                <!-- Media Streams Grid -->
-                <div class="nebula-card p-4">
-                    <h2 class="text-sm font-semibold text-purple-300 mb-3 uppercase tracking-wider">Video Streams</h2>
-                    <div id="mediaStreamsContainer" class="flex flex-wrap gap-2 justify-center">
-                        <div class="video-stream">
-                            <span>No streams</span>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- Center Column - Chat Window -->
-            <div class="flex-1 flex flex-col gap-4 overflow-hidden">
-                <!-- Chat Feed -->
-                <div class="nebula-card p-6 flex-1 overflow-hidden flex flex-col">
-                    <div id="chatWindow" class="flex-1 overflow-y-auto space-y-3 pr-2">
-                        <div class="text-center text-gray-500 text-sm italic mt-8">
-                            Welcome to ChatCorner! Messages will appear here...
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Message Input Footer -->
-                <div class="nebula-card p-4">
-                    <textarea
-                        id="messageInput"
-                        class="w-full bg-gray-900 bg-opacity-50 text-white placeholder-gray-500 rounded-lg p-3 border border-blue-400 border-opacity-30 focus:border-opacity-60 focus:outline-none resize-none"
-                        placeholder="Type a message here... (max 500 characters)"
-                        rows="3"
-                    ></textarea>
-                    <div class="flex justify-between items-center mt-3">
-                        <div class="flex gap-2">
-                            <button id="voiceToggle" class="btn-secondary toggle-button flex items-center gap-2" title="Toggle Voice">
-                                🎤 Voice
-                            </button>
-                            <button id="cameraToggle" class="btn-secondary toggle-button flex items-center gap-2" title="Toggle Camera">
-                                📹 Camera
-                            </button>
-                            <button id="voiceNoteBtn" class="btn-secondary flex items-center gap-2" title="Send Voice Note">
-                                🎙️ Voice Note
-                            </button>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span id="charCounter" class="character-counter">0/500</span>
-                            <button id="sendBtn" class="btn-nebula">
-                                Send
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <main class="auth-container" aria-label="Authentication">
+    <div class="logo-area">
+      <h1 class="logo">💬 ChatCorner</h1>
+      <p class="tagline">Secure nebula chat, optimized for mobile and desktop.</p>
     </div>
 
-    <!-- Avatar Upload Modal -->
-    <div id="avatarModal" class="modal">
-        <div class="modal-content">
-            <h2 class="text-xl font-bold text-blue-300 mb-4">Update Your Avatar</h2>
-            <input
-                type="file"
-                id="avatarInput"
-                accept="image/*"
-                class="w-full p-2 bg-gray-900 bg-opacity-50 border border-blue-400 border-opacity-30 rounded-lg text-white cursor-pointer mb-4"
-            />
-            <div id="avatarPreview" class="w-20 h-20 mx-auto mb-4 rounded-lg border-2 border-blue-400 border-opacity-30 flex items-center justify-center bg-gray-900 bg-opacity-50 overflow-hidden">
-                <span class="text-sm text-gray-500">Preview</span>
-            </div>
-            <div class="flex gap-3 justify-end">
-                <button id="cancelAvatarBtn" class="btn-secondary">
-                    Cancel
-                </button>
-                <button id="saveAvatarBtn" class="btn-nebula">
-                    Save Avatar
-                </button>
-            </div>
-        </div>
+    <div class="tab-switcher" role="tablist" aria-label="Authentication tabs">
+      <button class="tab-btn active" type="button" onclick="showTab('login')" role="tab" aria-controls="login-tab">Login</button>
+      <button class="tab-btn" type="button" onclick="showTab('register')" role="tab" aria-controls="register-tab">Register</button>
+      <button class="tab-btn" type="button" onclick="showTab('guest')" role="tab" aria-controls="guest-tab">Guest</button>
     </div>
 
-    <!-- Supabase Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- PeerJS Client -->
-    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    <!-- Chat Application Logic -->
-    <script src="chat.js"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-      }
-    </script>
+    <section id="login-tab" class="auth-form active" role="tabpanel">
+      <input id="login-email" type="text" inputmode="email" autocomplete="username" placeholder="Username or email" aria-label="Username or email"/>
+      <input id="login-password" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password"/>
+      <input id="login-csrf" type="hidden" data-csrf-token="true"/>
+      <input id="login-honeypot" type="text" autocomplete="off" tabindex="-1" aria-hidden="true" class="honeypot-input"/>
+      <button class="btn-primary" type="button" onclick="loginUser()">Sign In</button>
+      <div id="login-msg" class="msg" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="register-tab" class="auth-form" role="tabpanel">
+      <input id="reg-username" type="text" autocomplete="username" maxlength="20" placeholder="Username (3-20 chars)" aria-label="Username"/>
+      <input id="reg-email" type="email" inputmode="email" autocomplete="email" placeholder="Email address" aria-label="Email address"/>
+      <input id="reg-password" type="password" autocomplete="new-password" placeholder="Password (8+ chars, upper/lower/number/symbol)" aria-label="Password"/>
+      <input id="register-csrf" type="hidden" data-csrf-token="true"/>
+      <input id="register-honeypot" type="text" autocomplete="off" tabindex="-1" aria-hidden="true" class="honeypot-input"/>
+      <button class="btn-primary" type="button" onclick="registerUser()">Create Account</button>
+      <div id="reg-msg" class="msg" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="guest-tab" class="auth-form" role="tabpanel">
+      <p class="note">Guest mode is read-only limited and has slower send limits.</p>
+      <input id="guest-csrf" type="hidden" data-csrf-token="true"/>
+      <input id="guest-honeypot" type="text" autocomplete="off" tabindex="-1" aria-hidden="true" class="honeypot-input"/>
+      <button class="btn-primary" type="button" onclick="guestLogin()">Continue as Guest</button>
+      <div id="guest-msg" class="msg" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <div class="theme-switcher-fixed" aria-label="Theme switcher">
+    <button class="theme-dot active" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
+    <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember"></button>
+    <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic"></button>
+    <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" onclick="setTheme('matrix')" title="Matrix"></button>
+    <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose"></button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/security-utils.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    const THEMES = ['nebula','ember','arctic','matrix','rose'];
+    function setTheme(name) {
+      if (!THEMES.includes(name)) return;
+      localStorage.setItem('cc-theme', name);
+      applyTheme(name);
+    }
+    function applyTheme(name) {
+      document.documentElement.setAttribute('data-theme', name);
+      document.querySelectorAll('.theme-dot').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === name);
+      });
+    }
+    applyTheme(localStorage.getItem('cc-theme') || 'nebula');
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
 </body>
-
 </html>
