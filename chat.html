@@ -2,13 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5"/>
   <title>ChatCorner – Rooms</title>
   <link rel="manifest" href="/manifest.json"/>
   <meta name="theme-color" content="#8b6ded"/>
+  <meta http-equiv="X-Frame-Options" content="DENY"/>
+  <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co https://api.ipapi.is; media-src 'self' blob: data: https:;"/>
   <link rel="stylesheet" href="css/style.css"/>
   <link rel="stylesheet" href="css/chat-extras.css"/>
   <link rel="stylesheet" href="css/resizable-layout.css"/>
+  <link rel="stylesheet" href="css/responsive.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
 <body class="chat-page">
@@ -69,7 +73,8 @@
     <!-- TOPBAR -->
     <header class="topbar">
       <div class="topbar-logo">💬 ChatCorner</div>
-      <div class="topbar-room" id="current-room-name">Select a Room</div>
+      <button class="topbar-btn" id="sidebar-toggle-btn" type="button" aria-label="Toggle sidebars">☰</button>
+      <div class="topbar-room" id="current-room-name">Private chats</div>
       <div class="topbar-search" id="topbar-search">
         <input
           type="search"
@@ -208,6 +213,7 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
+  <script src="js/security-utils.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/permissions.js"></script>
   <script src="js/chat.js"></script>

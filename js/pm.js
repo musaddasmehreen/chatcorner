@@ -7,32 +7,116 @@ const pmCallState = {};
 let pmChannel = null;
 let pmTableAvailable = null;
 let pmAudioCtx = null;
+const pmUnreadUsers = new Set();
+let activePmUserId = null;
 
 // Track open private chat users for pvt-users-bar
 const pvtOpenUsers = new Map(); // userId -> username
 
+function persistPmSession() {
+  const state = {
+    openUsers: Array.from(pvtOpenUsers.entries()),
+    unreadUsers: Array.from(pmUnreadUsers.values()),
+    activePmUserId,
+    textHistory: pmTextHistory
+  };
+  sessionStorage.setItem('cc-pm-session', JSON.stringify(state));
+}
+
+function restorePmSessionState() {
+  const state = (() => {
+    try { return JSON.parse(sessionStorage.getItem('cc-pm-session') || '{}'); }
+    catch (_) { return {}; }
+  })();
+
+  Object.entries(state?.textHistory || {}).forEach(([userId, history]) => {
+    pmTextHistory[userId] = Array.isArray(history) ? history : [];
+  });
+
+  const openUsers = Array.isArray(state?.openUsers) ? state.openUsers : [];
+  openUsers.forEach(([userId, username]) => {
+    if (!userId || !username) return;
+    pvtOpenUsers.set(userId, username);
+  });
+  (Array.isArray(state?.unreadUsers) ? state.unreadUsers : []).forEach((userId) => pmUnreadUsers.add(userId));
+  activePmUserId = state?.activePmUserId || null;
+}
+
 function renderPvtBar() {
   const bar = document.getElementById('pm-user-list') || document.getElementById('pvt-users-bar');
-  if (!bar) return;
-  bar.innerHTML = '';
+  const topbar = document.getElementById('rooms-topbar');
+  if (bar) bar.innerHTML = '';
+  if (topbar) topbar.innerHTML = '';
   if (pvtOpenUsers.size === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'pvt-placeholder';
-    empty.id = 'pvt-placeholder';
-    empty.textContent = 'No private chats';
-    bar.appendChild(empty);
+    if (bar) {
+      const empty = document.createElement('li');
+      empty.className = 'pvt-placeholder';
+      empty.id = 'pvt-placeholder';
+      empty.textContent = 'No private chats';
+      bar.appendChild(empty);
+    }
+    if (topbar) {
+      const emptyTop = document.createElement('div');
+      emptyTop.className = 'msg-system';
+      emptyTop.textContent = 'Open a private chat to see tabs here';
+      topbar.appendChild(emptyTop);
+    }
     return;
   }
   pvtOpenUsers.forEach((username, userId) => {
-    const item = document.createElement('li');
-    item.textContent = username;
-    item.onclick = () => openPrivateChat(userId, username);
-    bar.appendChild(item);
+    if (bar) {
+      const item = document.createElement('li');
+      item.textContent = username;
+      item.onclick = () => openPrivateChat(userId, username);
+      bar.appendChild(item);
+    }
+    if (topbar) {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = `pm-tab${activePmUserId === userId ? ' active' : ''}`;
+      tab.setAttribute('aria-label', `Open private chat with ${username}`);
+      tab.innerHTML = `<span>${escHtml(username)}</span>`;
+      if (pmUnreadUsers.has(userId)) {
+        const unread = document.createElement('span');
+        unread.className = 'pm-tab-unread';
+        unread.setAttribute('aria-label', 'Unread messages');
+        tab.appendChild(unread);
+      }
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'pm-tab-close';
+      closeBtn.textContent = '✕';
+      closeBtn.setAttribute('aria-label', `Close private chat with ${username}`);
+      closeBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        closePrivateChat(userId);
+      });
+      tab.appendChild(closeBtn);
+      tab.onclick = () => openPrivateChat(userId, username);
+      topbar.appendChild(tab);
+    }
   });
+  persistPmSession();
+}
+
+function setActivePmUser(userId) {
+  activePmUserId = userId || null;
+  if (userId) pmUnreadUsers.delete(userId);
+  renderPvtBar();
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  restorePmSessionState();
   setTimeout(() => { ensurePmRealtime(); }, 600);
+  const restoreTimer = setInterval(async () => {
+    if (!currentUser?.id || !currentProfile) return;
+    clearInterval(restoreTimer);
+    const openUsers = Array.from(pvtOpenUsers.entries());
+    for (const [userId, username] of openUsers) {
+      await openPrivateChat(userId, username);
+    }
+    if (activePmUserId && pvtOpenUsers.has(activePmUserId)) setActivePmUser(activePmUserId);
+  }, 400);
 });
 
 document.addEventListener('click', (event) => {
@@ -79,6 +163,7 @@ async function openPrivateChat(userId, username) {
 
   if (pmWindows[userId]) {
     focusPmWindow(userId);
+    setActivePmUser(userId);
     return;
   }
 
@@ -179,6 +264,7 @@ async function openPrivateChat(userId, username) {
   renderPmTextHistory(userId);
   updatePmCallUi(userId);
   positionPmWindows();
+  setActivePmUser(userId);
 
   if (pmTableAvailable !== false) {
     await loadPmHistoryFromDb(userId);
@@ -190,6 +276,7 @@ function focusPmWindow(userId) {
   if (!item) return;
   item.el.classList.add('pulse');
   setTimeout(() => item.el.classList.remove('pulse'), 250);
+  setActivePmUser(userId);
 }
 
 function closePrivateChat(userId) {
@@ -207,7 +294,10 @@ function closePrivateChat(userId) {
   win.el.remove();
   delete pmWindows[userId];
   delete pmCallState[userId];
+  delete pmTextHistory[userId];
   pvtOpenUsers.delete(userId);
+  pmUnreadUsers.delete(userId);
+  if (activePmUserId === userId) activePmUserId = null;
   renderPvtBar();
   positionPmWindows();
 }
@@ -259,6 +349,18 @@ async function sendPrivateText(userId) {
     alert('🔒 Register to send private messages.');
     return;
   }
+  const csrfCheck = window.ChatSecurity?.validateMutationCsrf(sessionStorage.getItem('cc_csrf_token'));
+  if (csrfCheck && !csrfCheck.valid) {
+    if (typeof showChatToast === 'function') showChatToast(csrfCheck.message, 'warning');
+    return;
+  }
+  const messageRate = window.ChatSecurity?.checkMessageRate(currentUser?.id);
+  if (messageRate && !messageRate.allowed) {
+    if (typeof showChatToast === 'function') {
+      showChatToast(`Rate limit reached. Try again in ${Math.ceil(messageRate.retryAfterMs / 1000)}s.`, 'warning');
+    }
+    return;
+  }
   const input = getPmInput(userId);
   if (!input) return;
   const text = input.value.trim();
@@ -269,6 +371,11 @@ async function sendPrivateText(userId) {
   if (isSendingImage && !imageUrl) {
     if (typeof showChatToast === 'function') showChatToast('Enter a valid http(s) image/GIF URL.', 'warning');
     getPmImageInput(userId)?.focus();
+    return;
+  }
+  const validated = !isSendingImage ? window.ChatSecurity?.validateMessage(text) : { valid: true, sanitized: imageUrl };
+  if (validated && !validated.valid) {
+    if (typeof showChatToast === 'function') showChatToast(validated.message || 'Invalid message.', 'warning');
     return;
   }
 
@@ -282,9 +389,15 @@ async function sendPrivateText(userId) {
 
   if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
   pmTextHistory[userId].push(message);
+  persistPmSession();
 
-  await persistPmToDb(userId, isSendingImage ? imageUrl : text, isSendingImage ? 'image' : 'text');
-  await sendPmBroadcast(isSendingImage ? { to: userId, type: 'image', imageUrl } : { to: userId, type: 'text', text });
+  const dbContent = isSendingImage ? imageUrl : (validated?.sanitized || text);
+  const outboundPayload = isSendingImage
+    ? { to: userId, type: 'image', imageUrl }
+    : { to: userId, type: 'text', text: dbContent };
+
+  await persistPmToDb(userId, dbContent, isSendingImage ? 'image' : 'text');
+  await sendPmBroadcast(outboundPayload);
   if (isSendingImage) {
     closePmImageInput(userId);
     if (typeof showChatToast === 'function') showChatToast('Image/GIF sent in private message.', 'success');
@@ -295,6 +408,12 @@ async function handleIncomingPm(payload) {
   if (!currentProfile?.is_registered) return;
   const fromUserId = payload.from;
   if (!fromUserId) return;
+  if (window.ChatSecurity) {
+    const payloadCopy = { ...payload };
+    delete payloadCopy.signature;
+    const verified = await window.ChatSecurity.verifySignature(payloadCopy, payload.signature);
+    if (!verified) return;
+  }
 
   const username = payload.username || getUsernameById(fromUserId);
   await openPrivateChat(fromUserId, username);
@@ -304,6 +423,9 @@ async function handleIncomingPm(payload) {
     const url = URL.createObjectURL(blob);
     appendPmVoiceMessage(fromUserId, { from: fromUserId, audioUrl: url }, false);
     trackPmVoiceUrl(fromUserId, url);
+    if (activePmUserId !== fromUserId || document.visibilityState !== 'visible') pmUnreadUsers.add(fromUserId);
+    persistPmSession();
+    renderPvtBar();
     playPmNotification(fromUserId);
     return;
   }
@@ -314,6 +436,9 @@ async function handleIncomingPm(payload) {
     appendPmHistoryMessage(fromUserId, message, false);
     if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
     pmTextHistory[fromUserId].push(message);
+    if (activePmUserId !== fromUserId || document.visibilityState !== 'visible') pmUnreadUsers.add(fromUserId);
+    persistPmSession();
+    renderPvtBar();
     playPmNotification(fromUserId);
     return;
   }
@@ -325,6 +450,9 @@ async function handleIncomingPm(payload) {
 
     if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
     pmTextHistory[fromUserId].push(message);
+    if (activePmUserId !== fromUserId || document.visibilityState !== 'visible') pmUnreadUsers.add(fromUserId);
+    persistPmSession();
+    renderPvtBar();
     playPmNotification(fromUserId);
   }
 }
@@ -773,14 +901,19 @@ function cleanupPmVoiceUrls(userId) {
 
 async function sendPmBroadcast(payload) {
   if (!pmChannel || !currentUser?.id) return;
+  const broadcastPayload = {
+    ...payload,
+    from: currentUser.id,
+    username: currentProfile?.username,
+    createdAt: new Date().toISOString()
+  };
+  const signature = await window.ChatSecurity?.signRequest(broadcastPayload);
   await pmChannel.send({
     type: 'broadcast',
     event: 'private-message',
     payload: {
-      ...payload,
-      from: currentUser.id,
-      username: currentProfile?.username,
-      createdAt: new Date().toISOString()
+      ...broadcastPayload,
+      signature
     }
   });
 }
