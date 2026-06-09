@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#8b6ded"/>
   <meta http-equiv="X-Frame-Options" content="DENY"/>
   <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.ipapi.is; media-src 'self' blob: data:;"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.ipapi.is; media-src 'self' blob: data:;"/>
   <link rel="stylesheet" href="css/style.css"/>
   <link rel="stylesheet" href="css/responsive.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
@@ -25,9 +25,9 @@
     </div>
 
     <div class="tab-switcher" role="tablist" aria-label="Authentication tabs">
-      <button class="tab-btn active" type="button" onclick="showTab('login')" role="tab" aria-controls="login-tab">Login</button>
-      <button class="tab-btn" type="button" onclick="showTab('register')" role="tab" aria-controls="register-tab">Register</button>
-      <button class="tab-btn" type="button" onclick="showTab('guest')" role="tab" aria-controls="guest-tab">Guest</button>
+      <button class="tab-btn active" type="button" onclick="showTab('login', event)" role="tab" aria-controls="login-tab">Login</button>
+      <button class="tab-btn" type="button" onclick="showTab('register', event)" role="tab" aria-controls="register-tab">Register</button>
+      <button class="tab-btn" type="button" onclick="showTab('guest', event)" role="tab" aria-controls="guest-tab">Guest</button>
     </div>
 
     <section id="login-tab" class="auth-form active" role="tabpanel">

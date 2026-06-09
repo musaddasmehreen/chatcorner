@@ -14,7 +14,12 @@
 
   function randomToken() {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-    return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    if (window.crypto?.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   }
 
   function safeParse(value, fallback) {

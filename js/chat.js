@@ -537,7 +537,7 @@ async function sendMessage() {
     return;
   }
   const validatedText = messageType === 'text'
-    ? (window.ChatSecurity?.validateMessage(text) || { valid: text.length <= GLOBAL_MESSAGE_MAX_LENGTH, sanitized: text })
+    ? (window.ChatSecurity?.validateMessage(text) || { valid: text.length <= GLOBAL_MESSAGE_MAX_LENGTH, sanitized: String(text || '').replace(/[\u0000-\u001f\u007f]/g, '').trim() })
     : { valid: true, sanitized: imageUrl };
   if (!validatedText.valid) {
     appendSystemMessage(validatedText.message || 'Message rejected.');

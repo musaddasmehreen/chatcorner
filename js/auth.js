@@ -1,8 +1,8 @@
-function showTab(tab) {
+function showTab(tab, evt) {
   document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(tab + '-tab').classList.add('active');
-  (document.activeElement?.classList?.contains('tab-btn') ? document.activeElement : null)?.classList.add('active');
+  evt?.currentTarget?.classList?.add('active');
 }
 
 async function loginUser() {
