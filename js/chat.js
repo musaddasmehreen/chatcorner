@@ -107,6 +107,8 @@ let cachedRooms = [];
 const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
+const AUTH_ENTRY_PAGE_URL = 'login.html';
+let guestCleanupPromise = null;
 
 async function getActiveChatSession() {
   const { data: { session } } = await sbClient.auth.getSession();
@@ -121,6 +123,130 @@ async function getActiveChatSession() {
 
   return data.session || null;
 }
+
+function isGuestProfile(profile = currentProfile) {
+  return !!profile && profile.is_registered === false;
+}
+
+function clearGuestLocalState(userId = currentUser?.id) {
+  if (!userId) return;
+  delete onlineUsers[userId];
+  delete cameraStates[userId];
+  scheduleRenderUserList();
+  document.querySelectorAll(`#messages .msg-row[data-user-id="${CSS.escape(userId)}"]`).forEach(node => node.remove());
+  localStorage.removeItem(`cc-avatar-${userId}`);
+  localStorage.removeItem('cc-guest-voice-used');
+  sessionStorage.removeItem('cc-nick-prompt-shown');
+}
+
+async function purgeGuestDataWithClient(userId) {
+  const tasks = [
+    sbClient.from('messages').delete().eq('user_id', userId),
+    sbClient.from('profiles').delete().eq('id', userId)
+  ];
+
+  tasks.push(
+    sbClient.from('private_messages').delete().or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+  );
+
+  tasks.push(
+    sbClient.from('active_users').delete().eq('username', currentProfile?.username || '')
+  );
+
+  const results = await Promise.allSettled(tasks);
+  results.forEach(result => {
+    if (result.status === 'fulfilled' && result.value?.error) {
+      console.warn('Guest cleanup warning:', result.value.error.message);
+    } else if (result.status === 'rejected') {
+      console.warn('Guest cleanup warning:', result.reason);
+    }
+  });
+}
+
+async function purgeGuestDataWithKeepalive(userId) {
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (!session?.access_token) return;
+
+  const headers = {
+    apikey: SUPABASE_ANON,
+    Authorization: `Bearer ${session.access_token}`,
+    Prefer: 'return=minimal'
+  };
+
+  const deleteRequests = [
+    (() => {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/messages`);
+      url.searchParams.set('user_id', `eq.${userId}`);
+      return fetch(url, { method: 'DELETE', headers, keepalive: true });
+    })(),
+    (() => {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/profiles`);
+      url.searchParams.set('id', `eq.${userId}`);
+      return fetch(url, { method: 'DELETE', headers, keepalive: true });
+    })(),
+    (() => {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/private_messages`);
+      url.searchParams.set('or', `(sender_id.eq.${userId},recipient_id.eq.${userId})`);
+      return fetch(url, { method: 'DELETE', headers, keepalive: true });
+    })(),
+    (() => {
+      const username = currentProfile?.username || '';
+      if (!username) return Promise.resolve();
+      const url = new URL(`${SUPABASE_URL}/rest/v1/active_users`);
+      url.searchParams.set('username', `eq.${username}`);
+      return fetch(url, { method: 'DELETE', headers, keepalive: true });
+    })()
+  ];
+
+  await Promise.allSettled(deleteRequests);
+}
+
+async function cleanupGuestSession({ keepalive = false } = {}) {
+  if (!currentUser?.id || !isGuestProfile()) return;
+  if (guestCleanupPromise) return guestCleanupPromise;
+
+  const userId = currentUser.id;
+  clearGuestLocalState(userId);
+
+  guestCleanupPromise = (async () => {
+    if (keepalive) {
+      await purgeGuestDataWithKeepalive(userId);
+      return;
+    }
+    await purgeGuestDataWithClient(userId);
+  })().finally(() => {
+    guestCleanupPromise = null;
+  });
+
+  return guestCleanupPromise;
+}
+
+async function prepareForLogout() {
+  try {
+    if (typeof leaveVoice === 'function') {
+      await leaveVoice();
+    }
+  } catch (_) {}
+
+  try {
+    if (currentRoom?.id && presenceChannel) {
+      await presenceChannel.untrack();
+    }
+  } catch (_) {}
+
+  if (isGuestProfile()) {
+    await cleanupGuestSession();
+  } else {
+    sessionStorage.removeItem('cc-nick-prompt-shown');
+  }
+}
+
+window.prepareForLogout = prepareForLogout;
+
+window.addEventListener('pagehide', () => {
+  if (!isGuestProfile()) return;
+  void cleanupGuestSession({ keepalive: true });
+});
 
 // Debounce handle for renderUserList
 let _renderTimer = null;
@@ -1484,8 +1610,9 @@ function showRegisterForVoice() {
   popup.id = 'register-for-voice-popup';
   popup.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--surface);color:var(--text);border:1px solid var(--border,#444);border-radius:12px;padding:16px 20px;max-width:320px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.4);text-align:center;';
   popup.innerHTML = `
-    <p style="margin:0 0 12px;font-size:15px;">🎙️ You've used your 1 free voice note!<br>Guest mode stays live here, but extra voice features remain limited.</p>
+    <p style="margin:0 0 12px;font-size:15px;">🎙️ You've used your 1 free voice note!<br>Sign in or register for a permanent account and unlimited voice notes.</p>
     <div style="display:flex;gap:8px;justify-content:center;">
+      <a href="${AUTH_ENTRY_PAGE_URL}" style="background:var(--accent,#7c3aed);color:#fff;padding:7px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Login</a>
       <button onclick="document.getElementById('register-for-voice-popup')?.remove()" style="background:var(--surface2,#333);color:var(--text);border:none;padding:7px 14px;border-radius:8px;cursor:pointer;">Close</button>
     </div>`;
   document.body.appendChild(popup);

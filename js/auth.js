@@ -1,3 +1,5 @@
+const LOGIN_PAGE_URL = 'login.html';
+
 function showTab(tab) {
   document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -251,8 +253,16 @@ async function guestLogin() {
 }
 
 async function logout() {
+  try {
+    if (typeof window.prepareForLogout === 'function') {
+      await window.prepareForLogout();
+    }
+  } catch (error) {
+    console.warn('Pre-logout cleanup failed:', error);
+  }
+
   await sbClient.auth.signOut();
-  window.location.href = 'index.html';
+  window.location.href = LOGIN_PAGE_URL;
 }
 
 function showMsg(el, text, type) {
@@ -265,7 +275,10 @@ function randomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-if (window.location.pathname.endsWith('index.html') || window.location.pathname === '/') {
+const currentPage = window.location.pathname.split('/').pop() || '';
+const isLoginPage = currentPage === 'login.html';
+
+if (isLoginPage) {
   // Re-apply cooldown state on page load (e.g. after a page refresh)
   const cooldownLeft = getRegCooldownRemaining();
   if (cooldownLeft > 0) {
