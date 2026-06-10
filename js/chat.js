@@ -5,6 +5,36 @@
 const THEMES      = ['nebula','ember','arctic','matrix','rose'];
 const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arctic \u2744\ufe0f', matrix:'Matrix', rose:'Rose \ud83c\udf38' };
 const GUEST_VOICE_LIMIT = 1;
+const EMOJI_GROUPS = [
+  {
+    label: 'Live',
+    items: [
+      { emoji: '😊', title: 'Happy', live: 'live-bounce' },
+      { emoji: '😍', title: 'Love', live: 'live-pulse' },
+      { emoji: '😂', title: 'Laugh', live: 'live-wiggle' },
+      { emoji: '😮', title: 'Wow', live: 'live-pop' },
+      { emoji: '🥳', title: 'Party', live: 'live-spin' },
+      { emoji: '😢', title: 'Sad', live: 'live-sway' },
+      { emoji: '😡', title: 'Angry', live: 'live-shake' }
+    ]
+  },
+  {
+    label: 'Faces',
+    items: ['😀','😁','😄','😅','🤣','🙂','😉','😎','🤩','😘','🤗','🤔','🥲','😭','😴','🤯','🥶','🥵','🙄','🤐','🤪','😇','🤠','🥹']
+  },
+  {
+    label: 'Hearts',
+    items: ['❤️','💖','💗','💓','💞','💕','💘','💝','🫶','💙','💚','💛','🧡','💜','🖤','🤍']
+  },
+  {
+    label: 'Hands',
+    items: ['👍','👎','👏','🙌','🫡','🙏','🤝','👋','✌️','🤞','👌','💪','🫶','👀']
+  },
+  {
+    label: 'Fun',
+    items: ['🔥','✨','🌈','⭐','⚡','🎉','🎊','🎈','🎵','🎶','💯','💥','🌸','🍕','☕','🎮']
+  }
+];
 
 (function initTheme() {
   const saved = localStorage.getItem('cc-theme') || 'nebula';
@@ -54,6 +84,31 @@ function toggleEmojiPicker(event) {
 function closeEmojiPicker() {
   const picker = document.getElementById('emoji-picker');
   if (picker) picker.classList.add('hidden');
+}
+
+function renderEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  if (!picker) return;
+  picker.innerHTML = '';
+
+  EMOJI_GROUPS.forEach(group => {
+    const header = document.createElement('div');
+    header.className = 'emoji-group-label';
+    header.textContent = group.label;
+    picker.appendChild(header);
+
+    group.items.forEach(item => {
+      const config = typeof item === 'string' ? { emoji: item, title: item } : item;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'emoji-btn' + (config.live ? ` ${config.live}` : '');
+      btn.textContent = config.emoji;
+      btn.title = config.title || config.emoji;
+      btn.setAttribute('aria-label', config.title || config.emoji);
+      btn.onclick = () => insertEmoji(config.emoji);
+      picker.appendChild(btn);
+    });
+  });
 }
 
 function toggleRoomImageUrlInput(event) {
@@ -388,6 +443,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Re-apply saved theme now that DOM is ready (syncs dots)
   applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
+  renderEmojiPicker();
 
   document.addEventListener('click', (event) => {
     const picker = document.getElementById('emoji-picker');
