@@ -34,7 +34,7 @@ const server = http.createServer((req, res) => {
   }
 
   let urlPath = req.url.split('?')[0];
-  if (urlPath === '/') urlPath = '/index.html';
+  if (urlPath === '/') urlPath = '/chat.html';
 
   const filePath = path.join(__dirname, urlPath);
 
@@ -46,8 +46,8 @@ const server = http.createServer((req, res) => {
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
-      const indexPath = path.join(__dirname, 'index.html');
-      fs.readFile(indexPath, (err2, data) => {
+      const chatPath = path.join(__dirname, 'chat.html');
+      fs.readFile(chatPath, (err2, data) => {
         if (err2) {
           res.writeHead(404);
           res.end('Not found');

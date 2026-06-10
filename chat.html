@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ChatCorner – Rooms</title>
-  <link rel="manifest" href="/manifest.json"/>
+  <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#8b6ded"/>
   <link rel="stylesheet" href="css/style.css"/>
   <link rel="stylesheet" href="css/chat-extras.css"/>
@@ -192,7 +192,7 @@
 
     <!-- Guest notice -->
     <div id="guest-notice-bar" class="guest-bar" style="display:none">
-      👤 Guest mode — <a href="index.html">Sign in</a> for full access
+      👤 Guest mode — the live chat interface stays here
     </div>
 
   </div><!-- end .page-shell -->
@@ -216,7 +216,7 @@
   <script src="js/resizable-layout.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
     }
   </script>
 </body>

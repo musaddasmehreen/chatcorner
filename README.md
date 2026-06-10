@@ -20,7 +20,7 @@ ChatCorner is a realtime chat application built with JavaScript, HTML, and CSS.
 ## How to Run
 
 1. Clone this repository.
-2. Open `index.html` in your browser (or serve the project with any static file server).
+2. Open `chat.html` in your browser (or serve the project with any static file server).
 3. Start chatting in ChatCorner.
 
 ## Topics

@@ -1,19 +1,30 @@
-const CACHE_NAME = 'chatcorner-v1';
+const CACHE_NAME = 'chatcorner-v3';
 
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/chat.html',
-  '/css/style.css',
-  '/css/chat-extras.css',
-  '/css/resizable-layout.css',
-  '/js/config.js',
-  '/js/auth.js',
-  '/js/chat.js',
-  '/js/pm.js',
-  '/js/audio.js',
-  '/manifest.json'
+  './',
+  './chat.html',
+  './css/style.css',
+  './css/chat-extras.css',
+  './css/resizable-layout.css',
+  './js/config.js',
+  './js/auth.js',
+  './js/chat.js',
+  './js/pm.js',
+  './js/audio.js',
+  './manifest.json'
 ];
+
+function getScopedBasePath() {
+  return new URL(self.registration.scope).pathname.replace(/\/$/, '');
+}
+
+function isChatEntryPath(pathname) {
+  const basePath = getScopedBasePath();
+  return pathname === basePath ||
+    pathname === `${basePath}/` ||
+    pathname === `${basePath}/index.html` ||
+    pathname === `${basePath}/chat.html`;
+}
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -39,10 +50,24 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+  const chatEntryUrl = new URL('./chat.html', self.registration.scope);
 
   if (event.request.method !== 'GET') return;
   if (url.origin !== location.origin) return;
   if (url.pathname.startsWith('/rest/') || url.pathname.includes('supabase')) return;
+
+  if (event.request.mode === 'navigate' && isChatEntryPath(url.pathname)) {
+    event.respondWith(
+      fetch(chatEntryUrl.href, { cache: 'no-store' }).then(response => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(chatEntryUrl.href, clone));
+        }
+        return response;
+      }).catch(() => caches.match(chatEntryUrl.href))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then(cached => {

@@ -108,6 +108,20 @@ const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
 
+async function getActiveChatSession() {
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (session) return session;
+
+  const { data, error } = await sbClient.auth.signInAnonymously();
+  if (error) {
+    console.error('Anonymous sign-in failed:', error);
+    appendSystemMessage('Could not start guest mode. Please refresh and try again.');
+    return null;
+  }
+
+  return data.session || null;
+}
+
 // Debounce handle for renderUserList
 let _renderTimer = null;
 const activeCamViewers = new Set(); // userIds currently viewing a cam
@@ -120,8 +134,8 @@ const QUICK_BAN_OPTIONS = {
 };
 
 window.addEventListener('DOMContentLoaded', async () => {
-  const { data: { session } } = await sbClient.auth.getSession();
-  if (!session) { window.location.href = 'index.html'; return; }
+  const session = await getActiveChatSession();
+  if (!session) return;
 
   currentUser = session.user;
 
@@ -159,16 +173,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         ? ` until ${new Date(currentProfile.ban_expires_at).toLocaleString()}`
         : ' permanently';
       showBlockedOverlay(`⛔ Your account is banned${banUntilText}.`);
-      await sbClient.auth.signOut();
-      setTimeout(() => { window.location.href = 'index.html'; }, 2500);
       return;
     }
   }
   if (isKickActive(currentProfile)) {
     const until = new Date(currentProfile.kicked_until).toLocaleString();
     showBlockedOverlay(`⚡ You have been kicked. Please wait until ${until}.`);
-    await sbClient.auth.signOut();
-    setTimeout(() => { window.location.href = 'index.html'; }, 2500);
     return;
   }
   presenceBaseData = {
@@ -1474,9 +1484,8 @@ function showRegisterForVoice() {
   popup.id = 'register-for-voice-popup';
   popup.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--surface);color:var(--text);border:1px solid var(--border,#444);border-radius:12px;padding:16px 20px;max-width:320px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.4);text-align:center;';
   popup.innerHTML = `
-    <p style="margin:0 0 12px;font-size:15px;">🎙️ You've used your 1 free voice note!<br>Register your nick to send unlimited voice notes.</p>
+    <p style="margin:0 0 12px;font-size:15px;">🎙️ You've used your 1 free voice note!<br>Guest mode stays live here, but extra voice features remain limited.</p>
     <div style="display:flex;gap:8px;justify-content:center;">
-      <a href="index.html" style="background:var(--accent,#7c3aed);color:#fff;padding:7px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Register Now</a>
       <button onclick="document.getElementById('register-for-voice-popup')?.remove()" style="background:var(--surface2,#333);color:var(--text);border:none;padding:7px 14px;border-radius:8px;cursor:pointer;">Close</button>
     </div>`;
   document.body.appendChild(popup);
