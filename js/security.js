@@ -199,6 +199,15 @@ class SecurityManager {
         localStorage.removeItem(k);
       }
     });
+    // Also clear any other security-related localStorage items
+    const securityKeys = ['cc_security_', 'chatcorner_', 'session_', 'auth_'];
+    securityKeys.forEach(prefix => {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith(prefix)) {
+          localStorage.removeItem(key);
+        }
+      });
+    });
     sessionStorage.clear();
   }
 

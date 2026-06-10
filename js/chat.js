@@ -114,6 +114,14 @@ async function getActiveChatSession() {
   const { data: { session } } = await sbClient.auth.getSession();
   if (session) return session;
 
+  // Check if we're coming from a logout action
+  const isLogoutFlag = sessionStorage.getItem('cc_logout_flag') === 'true';
+  if (isLogoutFlag) {
+    // Clear the flag and don't create guest session
+    sessionStorage.removeItem('cc_logout_flag');
+    return null;
+  }
+
   const { data, error } = await sbClient.auth.signInAnonymously();
   if (error) {
     console.error('Anonymous sign-in failed:', error);

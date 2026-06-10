@@ -68,6 +68,9 @@ async function loginUser() {
     return;
   }
 
+  // Clear logout flag on successful login
+  sessionStorage.removeItem('cc_logout_flag');
+
   // After a successful login we are authenticated — safe to read/write profiles.
   const { data: existingProf } = await sbClient
     .from('profiles').select('id,email,username').eq('id', data.user.id).maybeSingle();
@@ -207,6 +210,8 @@ async function registerUser() {
 
   // Supabase returns a session immediately when email confirmation is disabled
   if (data.session) {
+    // Clear logout flag on successful registration with immediate session
+    sessionStorage.removeItem('cc_logout_flag');
     showMsg(msg, '✅ Account created! Taking you to chat…', 'success');
     setTimeout(() => { window.location.href = 'chat.html'; }, 1200);
   } else {
@@ -242,6 +247,9 @@ async function guestLogin() {
 
   const guestName = 'Guest_' + Math.random().toString(36).substr(2, 5).toUpperCase();
 
+  // Clear logout flag on successful guest login
+  sessionStorage.removeItem('cc_logout_flag');
+
   await sbClient.from('profiles').upsert({
     id: data.user.id,
     username: guestName,
@@ -255,14 +263,37 @@ async function guestLogin() {
 async function logout() {
   try {
     if (typeof window.prepareForLogout === 'function') {
-      await window.prepareForLogout();
+      void window.prepareForLogout();
     }
   } catch (error) {
     console.warn('Pre-logout cleanup failed:', error);
   }
 
-  await sbClient.auth.signOut();
-  window.location.href = LOGIN_PAGE_URL;
+  // Comprehensive cleanup of all authentication state
+  clearAllAuthState();
+
+  // Force clear Supabase session
+  try {
+    // Clear any cached session data
+    localStorage.removeItem('sb-' + sbClient.supabaseUrl + '-auth-token');
+    sessionStorage.removeItem('sb-' + sbClient.supabaseUrl + '-auth-token');
+    
+    // Sign out from Supabase
+    await sbClient.auth.signOut();
+    
+    // Additional cleanup for Supabase client
+    await sbClient.auth.setSession(null);
+  } catch (error) {
+    console.warn('Error during sign out:', error);
+  }
+  
+  // Set a flag to prevent automatic guest login after logout
+  // Do this AFTER clearAllAuthState() to ensure it persists
+  sessionStorage.setItem('cc_logout_flag', 'true');
+  
+  // Use replace to prevent back button navigation to logged-in state
+  // Add a timestamp to prevent caching issues
+  window.location.replace(LOGIN_PAGE_URL + '?logout=' + Date.now());
 }
 
 function showMsg(el, text, type) {
@@ -275,10 +306,56 @@ function randomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+// Comprehensive authentication state cleanup
+function clearAllAuthState() {
+  // Save the logout flag before clearing sessionStorage
+  const logoutFlag = sessionStorage.getItem('cc_logout_flag');
+  
+  // Clear localStorage items with common auth prefixes
+  const prefixes = [
+    'sb-', 'supabase.', 'cc_', 'chatcorner_', 
+    'auth_', 'session_', 'user_', 'profile_'
+  ];
+  
+  prefixes.forEach(prefix => {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith(prefix)) {
+        localStorage.removeItem(key);
+      }
+    });
+  });
+  
+  // Clear all sessionStorage
+  sessionStorage.clear();
+  
+  // Restore the logout flag if it was set
+  if (logoutFlag === 'true') {
+    sessionStorage.setItem('cc_logout_flag', 'true');
+  }
+  
+  // Clear security data if security manager exists
+  if (window.securityManager && typeof window.securityManager.clearSecurityData === 'function') {
+    window.securityManager.clearSecurityData();
+  }
+  
+  // Clear any cookies that might be set (optional, for completeness)
+  document.cookie.split(';').forEach(cookie => {
+    const eqPos = cookie.indexOf('=');
+    const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+    if (name.includes('auth') || name.includes('session') || name.includes('token')) {
+      document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    }
+  });
+}
+
 const currentPage = window.location.pathname.split('/').pop() || '';
 const isLoginPage = currentPage === 'login.html';
 
 if (isLoginPage) {
+  // Check if we're coming from a logout action
+  const urlParams = new URLSearchParams(window.location.search);
+  const isLogoutRedirect = urlParams.has('logout');
+  
   // Re-apply cooldown state on page load (e.g. after a page refresh)
   const cooldownLeft = getRegCooldownRemaining();
   if (cooldownLeft > 0) {
@@ -303,7 +380,10 @@ if (isLoginPage) {
     });
   }
 
-  sbClient.auth.getSession().then(({ data }) => {
-    if (data.session) window.location.href = 'chat.html';
-  });
+  // Only redirect to chat if we have a session AND we're not coming from logout
+  if (!isLogoutRedirect) {
+    sbClient.auth.getSession().then(({ data }) => {
+      if (data.session) window.location.href = 'chat.html';
+    });
+  }
 }
