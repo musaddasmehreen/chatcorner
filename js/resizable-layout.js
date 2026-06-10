@@ -7,10 +7,12 @@
 
 class ResizableLayout {
   constructor() {
-    this.leftSidebar = document.querySelector('.sidebar.left');
-    this.rightSidebar = document.querySelector('.sidebar.right');
+    this.leftSidebar = document.querySelector('.sidebar-left, .sidebar.left');
+    this.rightSidebar = document.querySelector('.sidebar-right, .sidebar.right');
     this.chatMain = document.querySelector('.chat-main');
     this.layout = document.querySelector('.layout');
+    this.inputLeft = document.querySelector('.input-strip-left');
+    this.inputRight = document.querySelector('.input-strip-right');
 
     // Storage keys for persistence
     this.LEFT_WIDTH_KEY = 'chatcorner_left_sidebar_width';
@@ -53,6 +55,7 @@ class ResizableLayout {
         Math.min(this.MAX_WIDTH, parseInt(savedLeftWidth, 10))
       );
       this.leftSidebar.style.width = `${width}px`;
+      if (this.inputLeft) this.inputLeft.style.width = `${width}px`;
     }
 
     if (savedRightWidth) {
@@ -61,6 +64,7 @@ class ResizableLayout {
         Math.min(this.MAX_WIDTH, parseInt(savedRightWidth, 10))
       );
       this.rightSidebar.style.width = `${width}px`;
+      if (this.inputRight) this.inputRight.style.width = `${width}px`;
     }
   }
 
@@ -157,6 +161,7 @@ class ResizableLayout {
         Math.min(this.MAX_WIDTH, this.startWidth + diff)
       );
       this.leftSidebar.style.width = `${newWidth}px`;
+      if (this.inputLeft) this.inputLeft.style.width = `${newWidth}px`;
     }
 
     if (this.isDraggingRight) {
@@ -165,6 +170,7 @@ class ResizableLayout {
         Math.min(this.MAX_WIDTH, this.startWidth - diff)
       );
       this.rightSidebar.style.width = `${newWidth}px`;
+      if (this.inputRight) this.inputRight.style.width = `${newWidth}px`;
     }
   }
 
@@ -224,6 +230,8 @@ class ResizableLayout {
   resetWidths() {
     this.leftSidebar.style.width = `${this.DEFAULT_LEFT_WIDTH}px`;
     this.rightSidebar.style.width = `${this.DEFAULT_RIGHT_WIDTH}px`;
+    if (this.inputLeft) this.inputLeft.style.width = `${this.DEFAULT_LEFT_WIDTH}px`;
+    if (this.inputRight) this.inputRight.style.width = `${this.DEFAULT_RIGHT_WIDTH}px`;
     localStorage.removeItem(this.LEFT_WIDTH_KEY);
     localStorage.removeItem(this.RIGHT_WIDTH_KEY);
   }
@@ -239,9 +247,11 @@ class ResizableLayout {
 
     if (position === 'left') {
       this.leftSidebar.style.width = `${clampedWidth}px`;
+      if (this.inputLeft) this.inputLeft.style.width = `${clampedWidth}px`;
       localStorage.setItem(this.LEFT_WIDTH_KEY, clampedWidth.toString());
     } else if (position === 'right') {
       this.rightSidebar.style.width = `${clampedWidth}px`;
+      if (this.inputRight) this.inputRight.style.width = `${clampedWidth}px`;
       localStorage.setItem(this.RIGHT_WIDTH_KEY, clampedWidth.toString());
     }
   }

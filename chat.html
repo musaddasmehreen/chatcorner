@@ -123,8 +123,8 @@
 
       <!-- CENTER -->
       <main class="chat-main">
-        <!-- Rooms top bar -->
-        <div class="rooms-topbar" id="rooms-topbar"></div>
+        <!-- Private chats top bar -->
+        <div class="rooms-topbar hidden" id="rooms-topbar" aria-label="Private chats"></div>
 
         <!-- Load older messages button -->
         <button id="btn-load-older" class="btn-load-older hidden" onclick="loadOlderMessages()" aria-label="Load older messages">
@@ -143,13 +143,6 @@
 
       <!-- RIGHT SIDEBAR -->
       <aside class="sidebar sidebar-right" id="sidebar-right">
-        <!-- Private users -->
-        <div class="sidebar-section-label" id="pm-users-section">🔒 PRIVATE USERS</div>
-        <ul class="pm-user-list" id="pm-user-list"></ul>
-
-        <div class="sidebar-sep"></div>
-
-        <!-- Users in room -->
         <div class="sidebar-section-label">👥 USERS IN ROOM</div>
         <ul class="user-list" id="user-list"></ul>
       </aside>

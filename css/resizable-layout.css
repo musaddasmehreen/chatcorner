@@ -88,6 +88,8 @@
 .sidebar-right {
   border-left-width: 0;
   border-radius: 0;
+  width: 170px;
+  min-width: 120px;
 }
 
 /* Section labels */
@@ -235,6 +237,57 @@
   min-height: 42px;
 }
 .rooms-topbar::-webkit-scrollbar { display: none; }
+.private-chat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.28rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.private-chat-tab:hover {
+  background: rgba(var(--accent-rgb),0.1);
+  color: var(--text);
+}
+.private-chat-tab.active {
+  background: rgba(var(--accent-rgb),0.18);
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb),0.4);
+}
+.private-chat-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.private-chat-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.private-chat-tab:hover .private-chat-tab-close,
+.private-chat-tab:focus-visible .private-chat-tab-close,
+.private-chat-tab.active .private-chat-tab-close {
+  opacity: 1;
+}
+.private-chat-tab-close:hover {
+  background: rgba(248,113,113,0.14);
+  color: var(--red);
+}
 .room-tab {
   display: inline-flex;
   align-items: center;
@@ -343,19 +396,14 @@
 }
 
 /* ── RIGHT SIDEBAR: PM users + room users ── */
-.pm-user-list,
 .user-list {
   list-style: none;
   overflow-y: auto;
   padding: 0.2rem 0.5rem 0.4rem;
 }
-.pm-user-list { flex-shrink: 0; max-height: 30%; }
 .user-list { flex: 1; min-height: 0; }
-.pm-user-list::-webkit-scrollbar,
 .user-list::-webkit-scrollbar { width: 3px; }
-.pm-user-list::-webkit-scrollbar-thumb,
 .user-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
-.pm-user-list li,
 .user-list li {
   display: flex;
   align-items: center;
@@ -369,7 +417,6 @@
   margin-bottom: 1px;
   overflow: hidden;
 }
-.pm-user-list li:hover,
 .user-list li:hover { background: rgba(var(--accent-rgb),0.08); }
 
 /* ── AUDIO BAR ── */
@@ -438,8 +485,8 @@
   border-right: 1px solid var(--border);
 }
 .input-strip-right {
-  width: 220px;
-  min-width: 150px;
+  width: 170px;
+  min-width: 120px;
   flex-shrink: 0;
   display: flex;
   align-items: center;

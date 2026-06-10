@@ -449,32 +449,15 @@ async function refreshRoomCounts() {
 }
 
 function updateRoomTabCount(roomId, count) {
-  const tab = document.querySelector(`.room-tab[data-room-id="${roomId}"]`);
-  const badge = tab?.querySelector('.room-count-badge');
-  if (badge) badge.textContent = count;
+  return;
 }
 
-// Render rooms as pill tabs in the center top bar
+// Rooms are shown in the left sidebar only.
 function renderRoomsTopbar(rooms) {
   const bar = document.getElementById('rooms-topbar');
   if (!bar) return;
   bar.innerHTML = '';
-  rooms.forEach(room => {
-    const tab = document.createElement('button');
-    tab.className = 'room-tab' + (currentRoom && currentRoom.id === room.id ? ' active' : '');
-    tab.dataset.roomId = room.id;
-    const count = room.user_count ?? 0;
-    const icon = (room.type === 'voice' || room.is_audio_enabled) ? '🎤 ' : '💬 ';
-    tab.textContent = icon + room.name + ' ';
-    const badge = document.createElement('span');
-    badge.className = 'room-count-badge';
-    badge.setAttribute('aria-label', count + ' users online');
-    badge.textContent = count;
-    tab.appendChild(badge);
-    tab.title = room.name + ' — ' + count + ' users — click to join';
-    tab.onclick = () => enterRoom(room);
-    bar.appendChild(tab);
-  });
+  bar.classList.add('hidden');
 }
 
 async function enterRoom(room) {
