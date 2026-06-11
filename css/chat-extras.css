@@ -486,7 +486,7 @@ body.guest-mode .emoji-bar { display: none; }
   flex-wrap: wrap;
 }
 
-.pc-ban-btn, .pc-vip-btn {
+.pc-ban-btn, .pc-vip-btn, .pc-kick-btn, .pc-ignore-btn {
   padding: 0.28rem 0.6rem;
   border-radius: 999px;
   cursor: pointer;
@@ -503,12 +503,100 @@ body.guest-mode .emoji-bar { display: none; }
 }
 .pc-ban-btn:hover { background: rgba(248,113,113,0.24); }
 
+.pc-kick-btn {
+  border-color: rgba(245,158,11,0.45);
+  background: rgba(245,158,11,0.1);
+  color: #f59e0b;
+}
+.pc-kick-btn:hover { background: rgba(245,158,11,0.24); }
+
 .pc-vip-btn {
   border-color: rgba(251,191,36,0.45);
   background: rgba(251,191,36,0.1);
   color: #fbbf24;
 }
 .pc-vip-btn:hover { background: rgba(251,191,36,0.24); }
+
+.pc-ignore-btn {
+  border-color: rgba(var(--accent-rgb),0.35);
+  background: rgba(var(--accent-rgb),0.08);
+  color: var(--text);
+}
+.pc-ignore-btn:hover { background: rgba(var(--accent-rgb),0.18); }
+
+.chat-action-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(2,6,23,0.58);
+  backdrop-filter: blur(6px);
+}
+
+.chat-action-sheet-panel {
+  width: min(100%, 360px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 16px 44px rgba(0,0,0,0.42);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.chat-action-sheet-title {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.chat-action-sheet-message {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.chat-action-sheet-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.chat-action-btn,
+.chat-action-sheet-cancel {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(var(--accent-rgb),0.08);
+  color: var(--text);
+  padding: 0.7rem 0.85rem;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.chat-action-btn:hover,
+.chat-action-sheet-cancel:hover {
+  background: rgba(var(--accent-rgb),0.16);
+}
+
+.chat-action-btn.primary {
+  border-color: rgba(var(--accent-rgb),0.45);
+  background: rgba(var(--accent-rgb),0.16);
+}
+
+.chat-action-btn.warning {
+  border-color: rgba(245,158,11,0.45);
+  background: rgba(245,158,11,0.12);
+}
+
+.chat-action-btn.danger {
+  border-color: rgba(248,113,113,0.45);
+  background: rgba(248,113,113,0.12);
+  color: #fecaca;
+}
 
 /* ══ FEATURE 4 — Role Badges in User List ════════════════════════ */
 .role-badge {

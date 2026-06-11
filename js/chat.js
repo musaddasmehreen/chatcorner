@@ -143,6 +143,7 @@ let currentProfile = null;
 let currentRoom    = null;
 let messageChannel = null;
 let presenceChannel= null;
+let profileChannel = null;
 let onlineUsers    = {};
 let cameraStates   = {};
 let presenceBaseData = {};
@@ -163,7 +164,9 @@ const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
 const AUTH_ENTRY_PAGE_URL = 'login.html';
+const IGNORED_USERS_STORAGE_KEY = 'cc-ignored-users';
 let guestCleanupPromise = null;
+let ignoredUserIds = loadIgnoredUserIds();
 
 async function getActiveChatSession() {
   const { data: { session } } = await sbClient.auth.getSession();
@@ -315,12 +318,273 @@ window.addEventListener('pagehide', () => {
 let _renderTimer = null;
 const activeCamViewers = new Set(); // userIds currently viewing a cam
 const typingUsers = new Map();      // userId → { userId, username }
-const QUICK_BAN_OPTIONS = {
-  '1h': 1,
-  '24h': 24,
-  '7d': 168,
-  lifetime: null
+const QUICK_KICK_OPTIONS = {
+  '10m': 10,
+  '30m': 30,
+  '1h': 60
 };
+const QUICK_BAN_OPTIONS = {
+  '1d': 24,
+  '3d': 72,
+  '7d': 168,
+  permanent: null
+};
+let lastRosterTouchAt = 0;
+
+function loadIgnoredUserIds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(IGNORED_USERS_STORAGE_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw.filter(Boolean) : []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function persistIgnoredUserIds() {
+  localStorage.setItem(IGNORED_USERS_STORAGE_KEY, JSON.stringify(Array.from(ignoredUserIds)));
+}
+
+function isUserIgnored(userId) {
+  return !!userId && ignoredUserIds.has(userId);
+}
+
+function refreshIgnoredMessageVisibility() {
+  document.querySelectorAll('#messages .msg-row[data-user-id]').forEach((row) => {
+    const shouldHide = isUserIgnored(row.dataset.userId) && row.dataset.userId !== currentUser?.id;
+    row.classList.toggle('hidden', shouldHide);
+  });
+}
+
+function setUserIgnored(userId, ignored) {
+  if (!userId || userId === currentUser?.id) return false;
+  if (ignored) ignoredUserIds.add(userId);
+  else ignoredUserIds.delete(userId);
+  persistIgnoredUserIds();
+  refreshIgnoredMessageVisibility();
+  if (typeof refreshPmIgnoreState === 'function') refreshPmIgnoreState(userId);
+  if (typeof showChatToast === 'function') {
+    showChatToast(ignored ? 'User ignored on this device.' : 'User unignored on this device.', 'info', 2200);
+  }
+  return true;
+}
+
+window.isUserIgnored = isUserIgnored;
+window.setUserIgnored = setUserIgnored;
+
+function getProfileBanUntil(profile) {
+  return profile?.banned_until || profile?.ban_expires_at || null;
+}
+
+function isBanActive(profile) {
+  if (!profile?.is_banned) return false;
+  const banUntil = getProfileBanUntil(profile);
+  if (!banUntil) return true;
+  const expiresAt = new Date(banUntil).getTime();
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+}
+
+async function clearExpiredBan(userId) {
+  if (!userId) return;
+  await sbClient.from('profiles').update({
+    is_banned: false,
+    banned_at: null,
+    banned_by: null,
+    ban_reason: null,
+    ban_expires_at: null
+  }).eq('id', userId);
+}
+
+function updatePresenceBaseFromProfile(profile = currentProfile) {
+  presenceBaseData = {
+    userId: currentUser?.id,
+    username: profile?.username,
+    color: profile?.avatar_color,
+    registered: !!profile?.is_registered,
+    isAdmin: !!profile?.is_admin,
+    isMod: !!profile?.is_mod,
+    isOwner: !!profile?.is_owner,
+    isVip: !!profile?.is_vip,
+    cameraOn: !!presenceBaseData.cameraOn,
+    viewingCam: !!presenceBaseData.viewingCam
+  };
+}
+
+function updateCurrentUserBadge() {
+  const badge = document.getElementById('user-badge');
+  if (badge && currentProfile) {
+    badge.textContent = currentProfile.username + (currentProfile.is_registered ? ' ✓' : ' 👤');
+  }
+}
+
+function disconnectRealtimeChannels() {
+  if (messageChannel) {
+    sbClient.removeChannel(messageChannel);
+    messageChannel = null;
+  }
+  if (presenceChannel) {
+    sbClient.removeChannel(presenceChannel);
+    presenceChannel = null;
+  }
+  if (typeof stopPmRealtime === 'function') stopPmRealtime();
+}
+
+async function enforceCurrentUserModerationState({ refresh = false } = {}) {
+  if (!currentUser?.id) return true;
+
+  let profile = currentProfile;
+  if (refresh) {
+    const { data } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+    if (data) {
+      profile = data;
+      currentProfile = data;
+      updatePresenceBaseFromProfile(data);
+      updateCurrentUserBadge();
+    }
+  }
+
+  if (!profile) return true;
+
+  if (profile.is_banned) {
+    const banUntil = getProfileBanUntil(profile);
+    const expiresAt = banUntil ? new Date(banUntil).getTime() : null;
+    if (expiresAt && expiresAt <= Date.now()) {
+      await clearExpiredBan(currentUser.id);
+      const { data: refreshedProfile } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+      currentProfile = refreshedProfile || currentProfile;
+      updatePresenceBaseFromProfile(currentProfile);
+      updateCurrentUserBadge();
+    } else {
+      disconnectRealtimeChannels();
+      const banUntilText = banUntil ? ` until ${new Date(banUntil).toLocaleString()}` : ' permanently';
+      showBlockedOverlay(`⛔ Your account is banned${banUntilText}.`);
+      return false;
+    }
+  }
+
+  if (isKickActive(currentProfile)) {
+    disconnectRealtimeChannels();
+    const until = new Date(currentProfile.kicked_until).toLocaleString();
+    showBlockedOverlay(`⚡ You have been kicked. Please wait until ${until}.`);
+    return false;
+  }
+
+  return true;
+}
+
+function canProcessIncomingPayload(fromUserId) {
+  if (isBanActive(currentProfile) || isKickActive(currentProfile)) return false;
+  if (fromUserId && fromUserId !== currentUser?.id && isUserIgnored(fromUserId)) return false;
+  return true;
+}
+
+function upsertOnlineUserProfile(profile) {
+  if (!profile?.id) return;
+  if (profile.id === currentUser?.id) {
+    currentProfile = { ...currentProfile, ...profile };
+    updatePresenceBaseFromProfile(currentProfile);
+    updateCurrentUserBadge();
+    if (presenceChannel) presenceChannel.track(presenceBaseData).catch(() => {});
+  }
+  if (onlineUsers[profile.id]) {
+    onlineUsers[profile.id] = {
+      ...onlineUsers[profile.id],
+      username: profile.username || onlineUsers[profile.id].username,
+      registered: !!profile.is_registered,
+      isAdmin: !!profile.is_admin,
+      isMod: !!profile.is_mod,
+      isOwner: !!profile.is_owner,
+      isVip: !!profile.is_vip
+    };
+    scheduleRenderUserList();
+  }
+}
+
+function startProfileRealtimeWatcher() {
+  if (profileChannel || !currentUser?.id) return;
+  profileChannel = sbClient
+    .channel('profiles:watch')
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'profiles'
+    }, async ({ new: profile }) => {
+      if (!profile?.id) return;
+      upsertOnlineUserProfile(profile);
+      if (profile.id === currentUser?.id) {
+        await enforceCurrentUserModerationState();
+      }
+    })
+    .subscribe();
+}
+
+function isMobileRosterInteraction(event) {
+  return event?.type === 'touchstart'
+    || window.matchMedia('(max-width: 768px)').matches
+    || window.matchMedia('(pointer: coarse)').matches;
+}
+
+async function promptUserRosterAction(user, isGuest) {
+  if (isGuest) {
+    appendSystemMessage('🔒 Register to start private chats.');
+    return;
+  }
+  const ignored = isUserIgnored(user.userId);
+  const action = await showActionSheet({
+    title: user.username || 'User',
+    message: 'Choose an action',
+    actions: [
+      { value: 'pm', label: 'Private Message', variant: 'primary' },
+      { value: ignored ? 'unignore' : 'ignore', label: ignored ? 'Unignore' : 'Ignore', variant: ignored ? 'default' : 'danger' }
+    ]
+  });
+  if (action === 'pm' && typeof openPrivateChat === 'function') {
+    openPrivateChat(user.userId, user.username);
+  } else if (action === 'ignore') {
+    setUserIgnored(user.userId, true);
+  } else if (action === 'unignore') {
+    setUserIgnored(user.userId, false);
+  }
+}
+
+function bindRosterInteraction(li, nameBtn, user, isGuest) {
+  const openPm = () => {
+    if (isGuest) {
+      appendSystemMessage('🔒 Register to start private chats.');
+      return;
+    }
+    if (typeof openPrivateChat === 'function') openPrivateChat(user.userId, user.username);
+  };
+
+  li.addEventListener('dblclick', (event) => {
+    if (isMobileRosterInteraction(event)) return;
+    event.preventDefault();
+    openPm();
+  });
+
+  nameBtn?.addEventListener('touchstart', (event) => {
+    lastRosterTouchAt = Date.now();
+    if (!isMobileRosterInteraction(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    promptUserRosterAction(user, isGuest);
+  }, { passive: false });
+
+  nameBtn?.addEventListener('click', (event) => {
+    if (!isMobileRosterInteraction(event)) return;
+    if (Date.now() - lastRosterTouchAt < 650) return;
+    event.preventDefault();
+    event.stopPropagation();
+    promptUserRosterAction(user, isGuest);
+  });
+}
+
+function getSortedOnlineUsers(users = Object.values(onlineUsers)) {
+  return [...users].sort((a, b) => {
+    const levelDiff = getRoleLevel(b) - getRoleLevel(a);
+    if (levelDiff) return levelDiff;
+    return String(a.username || '').localeCompare(String(b.username || ''), undefined, { sensitivity: 'base' });
+  });
+}
 
 window.addEventListener('DOMContentLoaded', async () => {
   const session = await getActiveChatSession();
@@ -339,50 +603,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   currentProfile = prof;
   const localAvatar = localStorage.getItem('cc-avatar-' + currentUser.id);
   if (localAvatar) currentProfile.avatar_url = localAvatar;
+  updatePresenceBaseFromProfile(currentProfile);
+  startProfileRealtimeWatcher();
 
   if (!currentProfile.is_registered && !sessionStorage.getItem('cc-nick-prompt-shown')) {
     sessionStorage.setItem('cc-nick-prompt-shown', '1');
     setTimeout(() => showChatToast(`👋 Chatting as ${currentProfile.username} — Register for a custom nick & full access!`, 'info', 6000), 1500);
   }
 
-  if (currentProfile?.is_banned) {
-    const expiresAt = currentProfile.ban_expires_at ? new Date(currentProfile.ban_expires_at).getTime() : null;
-    if (expiresAt && expiresAt <= Date.now()) {
-      await sbClient.from('profiles').update({
-        is_banned: false,
-        banned_at: null,
-        banned_by: null,
-        ban_reason: null,
-        ban_expires_at: null
-      }).eq('id', currentUser.id);
-      const { data: refreshedProfile } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
-      currentProfile = refreshedProfile || currentProfile;
-    } else {
-      const banUntilText = currentProfile.ban_expires_at
-        ? ` until ${new Date(currentProfile.ban_expires_at).toLocaleString()}`
-        : ' permanently';
-      showBlockedOverlay(`⛔ Your account is banned${banUntilText}.`);
-      return;
-    }
-  }
-  if (isKickActive(currentProfile)) {
-    const until = new Date(currentProfile.kicked_until).toLocaleString();
-    showBlockedOverlay(`⚡ You have been kicked. Please wait until ${until}.`);
+  if (!(await enforceCurrentUserModerationState())) {
     return;
   }
-  presenceBaseData = {
-    userId: currentUser.id,
-    username: currentProfile.username,
-    color: currentProfile.avatar_color,
-    registered: currentProfile.is_registered,
-    isAdmin: !!currentProfile.is_admin,
-    isMod: !!currentProfile.is_mod,
-    isOwner: !!currentProfile.is_owner,
-    isVip: !!currentProfile.is_vip,
-    cameraOn: false,
-    viewingCam: false
-  };
-  document.getElementById('user-badge').textContent = currentProfile.username + (currentProfile.is_registered ? ' \u2713' : ' \ud83d\udc64');
+  updateCurrentUserBadge();
   if (currentProfile.is_registered) {
     const avatarBtn = document.getElementById('btn-edit-avatar');
     if (avatarBtn) avatarBtn.style.display = '';
@@ -517,6 +749,7 @@ function renderRoomsTopbar(rooms) {
 }
 
 async function enterRoom(room) {
+  if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
   if (currentRoom?.id === room.id) return;
   if (roomVoiceNoteRecorder?.state === 'recording') {
     discardRoomVoiceNoteOnStop = true;
@@ -591,6 +824,7 @@ async function enterRoom(room) {
     });
     container.appendChild(frag);
   }
+  refreshIgnoredMessageVisibility();
   scrollToBottom();
 
   messageChannel = sbClient
@@ -599,6 +833,7 @@ async function enterRoom(room) {
       event: 'INSERT', schema: 'public', table: 'messages',
       filter: `room_id=eq.${room.id}`
     }, payload => {
+      if (!canProcessIncomingPayload(payload.new?.user_id)) return;
       appendMessage(payload.new);
       scrollToBottom();
     })
@@ -679,6 +914,7 @@ function applyGuestUI() {
 }
 
 async function sendMessage() {
+  if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   const rawImageUrl = getRoomImageUrlValue();
@@ -728,6 +964,7 @@ async function sendMessage() {
 
 /* Builds a message DOM node without appending it (used for batch & single) */
 function buildMessageNode(msg) {
+  if (msg?.user_id && !canProcessIncomingPayload(msg.user_id)) return null;
   if (msg.type === 'system') {
     return buildSystemMessageNode(msg.content, msg.created_at);
   }
@@ -814,36 +1051,29 @@ function renderUserList() {
   const canModerate = canRunQuickModeration();
   const isGuest = !isRegisteredUser();
   const viewerLevel = getViewerRoleLevel();
+  const sortedUsers = getSortedOnlineUsers();
 
-  Object.values(onlineUsers).forEach(u => {
+  sortedUsers.forEach(u => {
     const li = document.createElement('li');
     li.className = 'user-item';
     li.dataset.userId = u.userId;
     const targetLevel = getRoleLevel(u);
     const showModeration = canModerate && u.userId !== currentUser?.id && viewerLevel > targetLevel;
     const roleBadge = getRoleBadgeHtml(u);
-    const vipBadge  = u.isVip ? '<span class="role-badge vip" title="VIP">⭐</span>' : '';
     const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
-      ${roleBadge}${vipBadge}
-      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : ''}>${escHtml(u.username)}</button>
+      ${roleBadge}
+      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : 'title="Double-click for private message"'}>${escHtml(u.username)}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
-      ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick for 30 minutes">\u26a1</button>` : ''}
+      ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick user">\u26a1</button>` : ''}
       ${showModeration ? `<button type="button" class="user-mod-btn ban" data-user-id="${u.userId}" title="Ban user">\ud83d\udeab</button>` : ''}
     `;
 
-    // FIX 4 — Guests see "Register to DM" instead of opening private chat
     const nameBtn = li.querySelector('.user-name-btn');
-    nameBtn?.addEventListener('click', () => {
-      if (isGuest) {
-        appendSystemMessage('\ud83d\udd12 Register to start private chats.');
-        return;
-      }
-      if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
-    });
+    bindRosterInteraction(li, nameBtn, u, isGuest);
 
     // Feature 1 — Hover profile card
     nameBtn?.addEventListener('mouseenter', () => scheduleProfileCard(u, nameBtn));
@@ -877,7 +1107,7 @@ function renderUserList() {
   if (bar) {
     bar.innerHTML = '';
     const bfrag = document.createDocumentFragment();
-    Object.values(onlineUsers).forEach(u => {
+    sortedUsers.forEach(u => {
       const pill = document.createElement('span');
       pill.className = 'room-user-pill';
       const dot = u.registered ? '🟢' : '👤';
@@ -1193,7 +1423,7 @@ function isRegisteredUser() {
 }
 
 function canRunQuickModeration() {
-  return currentProfile?.is_admin === true || currentProfile?.is_mod === true;
+  return currentProfile?.is_owner === true || currentProfile?.is_admin === true || currentProfile?.is_mod === true;
 }
 
 function canDeleteAnyMessage() {
@@ -1215,7 +1445,8 @@ function buildDeleteButtonHtml(userId) {
 
 function isKickActive(profile) {
   if (!profile?.kicked_until) return false;
-  return new Date(profile.kicked_until).getTime() > Date.now();
+  const until = new Date(profile.kicked_until).getTime();
+  return Number.isFinite(until) && until > Date.now();
 }
 
 function applyGuestModeUI() {
@@ -1408,27 +1639,42 @@ function appendVoiceNoteMessage(msg, isMe) {
 
 async function quickKickUser(userId, username) {
   if (!canRunQuickModeration() || !userId) return;
-  const kickedUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const token = await showActionSheet({
+    title: `Kick ${username || 'user'}?`,
+    message: 'Temporary timeout duration',
+    actions: [
+      { value: '10m', label: '10 minutes', variant: 'warning' },
+      { value: '30m', label: '30 minutes', variant: 'warning' },
+      { value: '1h', label: '1 hour', variant: 'warning' }
+    ]
+  });
+  if (!token || !Object.prototype.hasOwnProperty.call(QUICK_KICK_OPTIONS, token)) return;
+  const durationMinutes = QUICK_KICK_OPTIONS[token];
+  const kickedUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
   const { error } = await sbClient.from('profiles').update({ kicked_until: kickedUntil }).eq('id', userId);
   if (error) {
     appendSystemMessage(`Kick failed for ${username || 'user'}: ${error.message}`);
     return;
   }
-  appendSystemMessage(`⚡ ${username || 'User'} has been kicked for 30 minutes.`);
+  appendSystemMessage(`⚡ ${username || 'User'} has been kicked for ${token}.`);
 }
 
 async function quickBanUser(userId, username) {
   if (!canRunQuickModeration() || !userId) return;
 
-  const choice = prompt('Ban for: 1h, 24h, 7d, or Lifetime', '1h');
-  if (choice === null) return;
-  const normalized = String(choice).trim().toLowerCase();
-  if (!Object.prototype.hasOwnProperty.call(QUICK_BAN_OPTIONS, normalized)) {
-    appendSystemMessage('Ban cancelled. Use: 1h, 24h, 7d, or Lifetime.');
-    return;
-  }
+  const token = await showActionSheet({
+    title: `Ban ${username || 'user'}?`,
+    message: 'Suspension duration',
+    actions: [
+      { value: '1d', label: '1 day', variant: 'danger' },
+      { value: '3d', label: '3 days', variant: 'danger' },
+      { value: '7d', label: '7 days', variant: 'danger' },
+      { value: 'permanent', label: 'Permanent', variant: 'danger' }
+    ]
+  });
+  if (!token || !Object.prototype.hasOwnProperty.call(QUICK_BAN_OPTIONS, token)) return;
 
-  const durationHours = QUICK_BAN_OPTIONS[normalized];
+  const durationHours = QUICK_BAN_OPTIONS[token];
   const banExpiresAt = durationHours === null
     ? null
     : new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
@@ -1445,7 +1691,7 @@ async function quickBanUser(userId, username) {
     appendSystemMessage(`Ban failed for ${username || 'user'}: ${error.message}`);
     return;
   }
-  appendSystemMessage(`🚫 ${username || 'User'} has been banned (${durationHours === null ? 'Lifetime' : normalized}).`);
+  appendSystemMessage(`🚫 ${username || 'User'} has been banned (${durationHours === null ? 'permanent' : token}).`);
 }
 
 function pruneGuestMessageTimes(roomId) {
@@ -1852,11 +2098,12 @@ document.addEventListener('click', async (event) => {
    Feature 1 — Hover Profile Card & Role Hierarchy
 ════════════════════════════════════════════════════════════════ */
 
-/* Role level: Guest=0, User=1, Mod=2, Admin=3, Owner=4 */
+/* Role level: Guest=0, User=1, VIP=2, Mod=3, Admin=4, Owner=5 */
 function getRoleLevel(u) {
-  if (u.isOwner || u.is_owner) return 4;
-  if (u.isAdmin || u.is_admin) return 3;
-  if (u.isMod   || u.is_mod)   return 2;
+  if (u.isOwner || u.is_owner) return 5;
+  if (u.isAdmin || u.is_admin) return 4;
+  if (u.isMod   || u.is_mod)   return 3;
+  if (u.isVip   || u.is_vip)   return 2;
   if (u.registered || u.is_registered) return 1;
   return 0;
 }
@@ -1869,6 +2116,7 @@ function getRoleBadgeHtml(u) {
   if (u.isOwner || u.is_owner) return '<span class="role-badge owner" title="Owner">👑</span>';
   if (u.isAdmin || u.is_admin) return '<span class="role-badge admin" title="Admin">🛡️</span>';
   if (u.isMod   || u.is_mod)   return '<span class="role-badge mod" title="Moderator">🔨</span>';
+  if (u.isVip   || u.is_vip)   return '<span class="role-badge vip" title="VIP">⭐</span>';
   if (u.registered || u.is_registered) return '<span class="role-badge user" title="User">✅</span>';
   return '<span class="role-badge guest" title="Guest">👤</span>';
 }
@@ -1877,6 +2125,7 @@ function getRoleLabel(u) {
   if (u.isOwner || u.is_owner) return 'Owner';
   if (u.isAdmin || u.is_admin) return 'Admin';
   if (u.isMod   || u.is_mod)   return 'Moderator';
+  if (u.isVip   || u.is_vip)   return 'VIP';
   if (u.registered || u.is_registered) return 'User';
   return 'Guest';
 }
@@ -1919,8 +2168,10 @@ async function showProfileCard(u, anchor) {
   const targetLevel  = getRoleLevel(u);
   const canSeeIp     = viewerLevel >= 3;
   const canBan       = viewerLevel > targetLevel && u.userId !== currentUser?.id;
+  const canKick      = canBan;
   const canGrantVip  = viewerLevel >= 3 && targetLevel === 1; // Admin/Owner → regular Users only
   const isVip        = !!(profile.is_vip);
+  const ignoreLabel  = isUserIgnored(u.userId) ? 'Unignore' : 'Ignore';
 
   const roleLabel = getRoleLabel(u);
   const roleBadge = getRoleBadgeHtml(u);
@@ -1936,11 +2187,17 @@ async function showProfileCard(u, anchor) {
   const ipRow  = canSeeIp && profile.last_ip
     ? `<div class="pc-ip">🌐 ${escHtml(profile.last_ip)}</div>`
     : '';
+  const kickBtn = canKick
+    ? `<button class="pc-kick-btn" type="button" data-uid="${escHtml(u.userId)}">⚡ Kick</button>`
+    : '';
   const banBtn = canBan
     ? `<button class="pc-ban-btn" type="button" data-uid="${escHtml(u.userId)}">🚫 Ban</button>`
     : '';
   const vipBtn = canGrantVip
     ? `<button class="pc-vip-btn" type="button" data-uid="${escHtml(u.userId)}" data-action="${isVip ? 'revoke' : 'grant'}">${isVip ? '⭐ Revoke VIP' : '⭐ Grant VIP'}</button>`
+    : '';
+  const ignoreBtn = u.userId !== currentUser?.id
+    ? `<button class="pc-ignore-btn" type="button" data-uid="${escHtml(u.userId)}" data-action="${ignoreLabel.toLowerCase()}">${ignoreLabel}</button>`
     : '';
 
   const card = document.createElement('div');
@@ -1956,7 +2213,7 @@ async function showProfileCard(u, anchor) {
     </div>
     <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
     ${ipRow}
-    <div class="pc-actions">${banBtn}${vipBtn}</div>
+    <div class="pc-actions">${kickBtn}${banBtn}${vipBtn}${ignoreBtn}</div>
   `;
 
   document.body.appendChild(card);
@@ -1983,6 +2240,12 @@ async function showProfileCard(u, anchor) {
   card.addEventListener('mouseenter', () => { clearTimeout(_pcHide); });
   card.addEventListener('mouseleave', () => hideProfileCard());
 
+  card.querySelector('.pc-kick-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    hideProfileCard();
+    quickKickUser(u.userId, u.username);
+  });
+
   card.querySelector('.pc-ban-btn')?.addEventListener('click', (ev) => {
     ev.stopPropagation();
     hideProfileCard();
@@ -1994,6 +2257,72 @@ async function showProfileCard(u, anchor) {
     const grant = ev.currentTarget.dataset.action === 'grant';
     await toggleVip(u.userId, u.username, grant);
     hideProfileCard();
+  });
+
+  card.querySelector('.pc-ignore-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const ignore = ev.currentTarget.dataset.action === 'ignore';
+    setUserIgnored(u.userId, ignore);
+    hideProfileCard();
+  });
+}
+
+let actionSheetResolver = null;
+
+function ensureActionSheet() {
+  let overlay = document.getElementById('chat-action-sheet');
+  if (overlay) return overlay;
+  overlay = document.createElement('div');
+  overlay.id = 'chat-action-sheet';
+  overlay.className = 'chat-action-sheet hidden';
+  overlay.innerHTML = `
+    <div class="chat-action-sheet-panel" role="dialog" aria-modal="true" aria-label="Choose action">
+      <div class="chat-action-sheet-title"></div>
+      <div class="chat-action-sheet-message"></div>
+      <div class="chat-action-sheet-actions"></div>
+      <button type="button" class="chat-action-sheet-cancel">Cancel</button>
+    </div>
+  `;
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closeActionSheet(null);
+  });
+  overlay.querySelector('.chat-action-sheet-cancel')?.addEventListener('click', () => closeActionSheet(null));
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function closeActionSheet(value) {
+  const overlay = document.getElementById('chat-action-sheet');
+  if (overlay) overlay.classList.add('hidden');
+  if (actionSheetResolver) {
+    actionSheetResolver(value);
+    actionSheetResolver = null;
+  }
+}
+
+function showActionSheet({ title = '', message = '', actions = [] } = {}) {
+  const overlay = ensureActionSheet();
+  const titleEl = overlay.querySelector('.chat-action-sheet-title');
+  const messageEl = overlay.querySelector('.chat-action-sheet-message');
+  const actionsEl = overlay.querySelector('.chat-action-sheet-actions');
+  if (!titleEl || !messageEl || !actionsEl) return Promise.resolve(null);
+
+  titleEl.textContent = title;
+  messageEl.textContent = message;
+  actionsEl.innerHTML = '';
+
+  actions.forEach((action) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `chat-action-btn ${action.variant || 'default'}`;
+    button.textContent = action.label;
+    button.addEventListener('click', () => closeActionSheet(action.value));
+    actionsEl.appendChild(button);
+  });
+
+  overlay.classList.remove('hidden');
+  return new Promise((resolve) => {
+    actionSheetResolver = resolve;
   });
 }
 

@@ -12,6 +12,44 @@ let pmAudioCtx = null;
 const pvtOpenUsers = new Map(); // userId -> username
 let activePmUserId = null;
 
+function ensurePmDockedRoot() {
+  const root = document.getElementById('pm-root');
+  const main = document.querySelector('.chat-main');
+  const anchor = document.getElementById('btn-load-older') || document.getElementById('messages');
+  if (!root || !main || !anchor) return root;
+  if (root.parentElement !== main) {
+    main.insertBefore(root, anchor);
+  }
+  root.classList.toggle('hidden', Object.keys(pmWindows).length === 0);
+  return root;
+}
+
+function stopPmRealtime() {
+  if (!pmChannel) return;
+  sbClient.removeChannel(pmChannel);
+  pmChannel = null;
+}
+
+window.stopPmRealtime = stopPmRealtime;
+
+function refreshPmIgnoreState(targetUserId = null) {
+  const userIds = targetUserId ? [targetUserId] : Object.keys(pmWindows);
+  userIds.forEach((userId) => {
+    const win = pmWindows[userId];
+    if (!win) return;
+    const ignored = typeof isUserIgnored === 'function' && isUserIgnored(userId);
+    win.el.classList.toggle('pm-window-ignored', ignored);
+    const ignoreBtn = win.el.querySelector('.pm-ignore-btn');
+    if (ignoreBtn) {
+      ignoreBtn.textContent = ignored ? 'Unignore' : 'Ignore';
+      ignoreBtn.title = ignored ? 'Allow incoming private messages again' : 'Ignore incoming private messages';
+    }
+    renderPmTextHistory(userId);
+  });
+}
+
+window.refreshPmIgnoreState = refreshPmIgnoreState;
+
 function renderPvtBar() {
   const bar = document.getElementById('rooms-topbar');
   if (!bar) return;
@@ -47,6 +85,7 @@ function renderPvtBar() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  ensurePmDockedRoot();
   setTimeout(() => { ensurePmRealtime(); }, 600);
 });
 
@@ -61,6 +100,10 @@ document.addEventListener('click', (event) => {
 });
 
 async function ensurePmRealtime() {
+  if (typeof enforceCurrentUserModerationState === 'function') {
+    const allowed = await enforceCurrentUserModerationState({ refresh: true });
+    if (!allowed) return;
+  }
   if (!currentUser?.id || pmChannel) return;
 
   pmChannel = sbClient.channel('pm-global');
@@ -103,7 +146,7 @@ async function openPrivateChat(userId, username) {
   activePmUserId = userId;
   renderPvtBar();
 
-  const root = document.getElementById('pm-root');
+  const root = ensurePmDockedRoot();
   if (!root) return;
 
   const wrap = document.createElement('div');
@@ -114,6 +157,7 @@ async function openPrivateChat(userId, username) {
       <span class="pm-title">💬 ${escHtml(username || getUsernameById(userId))}</span>
       <div class="pm-header-actions">
         <button type="button" class="pm-call-btn" title="Start voice call">📞</button>
+        <button type="button" class="pm-ignore-btn" title="Ignore incoming private messages">${typeof isUserIgnored === 'function' && isUserIgnored(userId) ? 'Unignore' : 'Ignore'}</button>
         <button type="button" class="pm-mute-btn" title="Toggle PM notification sound">${pmMuted[userId] ? '🔇' : '🔊'}</button>
         <button type="button" class="pm-close-btn" title="Close PM">✕</button>
       </div>
@@ -152,6 +196,7 @@ async function openPrivateChat(userId, username) {
   const imageInput = wrap.querySelector('.pm-image-url-input');
   const imageClearBtn = wrap.querySelector('.pm-image-url-clear');
   const callBtn = wrap.querySelector('.pm-call-btn');
+  const ignoreBtn = wrap.querySelector('.pm-ignore-btn');
   const acceptBtn = wrap.querySelector('.pm-call-accept');
   const declineBtn = wrap.querySelector('.pm-call-decline');
   const endCallBtn = wrap.querySelector('.pm-call-end');
@@ -165,6 +210,11 @@ async function openPrivateChat(userId, username) {
   muteBtn.onclick = () => {
     pmMuted[userId] = !pmMuted[userId];
     muteBtn.textContent = pmMuted[userId] ? '🔇' : '🔊';
+  };
+  ignoreBtn.onclick = () => {
+    if (typeof setUserIgnored !== 'function') return;
+    setUserIgnored(userId, !(typeof isUserIgnored === 'function' && isUserIgnored(userId)));
+    refreshPmIgnoreState(userId);
   };
 
   recordBtn.onclick = () => togglePmRecording(userId);
@@ -195,6 +245,7 @@ async function openPrivateChat(userId, username) {
   }
 
   renderPmTextHistory(userId);
+  refreshPmIgnoreState(userId);
   updatePmCallUi(userId);
   positionPmWindows();
 
@@ -234,9 +285,10 @@ function closePrivateChat(userId) {
 }
 
 function positionPmWindows() {
-  const list = Object.values(pmWindows);
-  list.forEach((win, idx) => {
-    win.el.style.right = `${12 + (idx * 290)}px`;
+  const root = ensurePmDockedRoot();
+  if (root) root.classList.toggle('hidden', Object.keys(pmWindows).length === 0);
+  Object.entries(pmWindows).forEach(([userId, win]) => {
+    win.el.classList.toggle('active', userId === activePmUserId);
   });
 }
 
@@ -276,6 +328,10 @@ function togglePmImageInput(userId) {
 }
 
 async function sendPrivateText(userId) {
+  if (typeof enforceCurrentUserModerationState === 'function') {
+    const allowed = await enforceCurrentUserModerationState({ refresh: true });
+    if (!allowed) return;
+  }
   if (!currentProfile?.is_registered) {
     alert('🔒 Register to send private messages.');
     return;
@@ -316,6 +372,7 @@ async function handleIncomingPm(payload) {
   if (!currentProfile?.is_registered) return;
   const fromUserId = payload.from;
   if (!fromUserId) return;
+  if (typeof canProcessIncomingPayload === 'function' && !canProcessIncomingPayload(fromUserId)) return;
 
   const username = payload.username || getUsernameById(fromUserId);
   await openPrivateChat(fromUserId, username);
@@ -431,8 +488,10 @@ function renderPmTextHistory(userId) {
   const box = getPmMessagesBox(userId);
   if (!box) return;
   box.innerHTML = '';
+  const ignored = typeof isUserIgnored === 'function' && isUserIgnored(userId);
 
   (pmTextHistory[userId] || []).forEach(msg => {
+    if (ignored && msg.from === userId) return;
     appendPmHistoryMessage(userId, msg, msg.from === currentUser.id);
   });
 }
@@ -739,6 +798,7 @@ async function handlePmVoiceOffer(payload) {
   if (!payload || payload.to !== currentUser?.id || !currentProfile?.is_registered) return;
   const fromUserId = payload.from;
   if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+  if (typeof canProcessIncomingPayload === 'function' && !canProcessIncomingPayload(fromUserId)) return;
 
   await openPrivateChat(fromUserId, payload.username || getUsernameById(fromUserId));
   const state = ensurePmCallState(fromUserId);
@@ -755,6 +815,7 @@ async function handlePmVoiceAnswer(payload) {
   if (!payload || payload.to !== currentUser?.id) return;
   const fromUserId = payload.from;
   if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+  if (typeof canProcessIncomingPayload === 'function' && !canProcessIncomingPayload(fromUserId)) return;
   const state = ensurePmCallState(fromUserId);
   if (!state.pc) return;
 
@@ -767,6 +828,7 @@ function handlePmVoiceIce(payload) {
   if (!payload || payload.to !== currentUser?.id || !payload.candidate) return;
   const fromUserId = payload.from;
   if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+  if (typeof canProcessIncomingPayload === 'function' && !canProcessIncomingPayload(fromUserId)) return;
   const state = ensurePmCallState(fromUserId);
   if (!state.pc || !state.pc.remoteDescription) {
     state.pendingIce.push(payload.candidate);
@@ -779,6 +841,7 @@ function handlePmVoiceHangup(payload) {
   if (!payload || payload.to !== currentUser?.id) return;
   const fromUserId = payload.from;
   if (!fromUserId || payload.callKey !== getPmVoiceChannelKey(fromUserId)) return;
+  if (typeof canProcessIncomingPayload === 'function' && !canProcessIncomingPayload(fromUserId)) return;
   cleanupPmVoiceCallState(fromUserId);
 }
 
@@ -793,6 +856,10 @@ function cleanupPmVoiceUrls(userId) {
 }
 
 async function sendPmBroadcast(payload) {
+  if (typeof enforceCurrentUserModerationState === 'function') {
+    const allowed = await enforceCurrentUserModerationState({ refresh: true });
+    if (!allowed) return;
+  }
   if (!pmChannel || !currentUser?.id) return;
   await pmChannel.send({
     type: 'broadcast',
