@@ -288,6 +288,23 @@
   background: rgba(248,113,113,0.14);
   color: var(--red);
 }
+
+.pm-popup-tabs .private-chat-tab {
+  border-color: rgba(var(--accent-rgb),0.24);
+  background: rgba(7, 10, 26, 0.78);
+  color: var(--muted);
+}
+
+.pm-popup-tabs .private-chat-tab:hover {
+  background: rgba(var(--accent-rgb),0.14);
+  color: var(--text);
+}
+
+.pm-popup-tabs .private-chat-tab.active {
+  background: rgba(var(--accent-rgb),0.2);
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb),0.42);
+}
 .room-tab {
   display: inline-flex;
   align-items: center;

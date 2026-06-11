@@ -11,14 +11,18 @@ let pmAudioCtx = null;
 // Track open private chat users for the private chat tab bar
 const pvtOpenUsers = new Map(); // userId -> username
 let activePmUserId = null;
+let pmDragState = null;
 
 function ensurePmDockedRoot() {
   const root = document.getElementById('pm-root');
-  const main = document.querySelector('.chat-main');
-  const anchor = document.getElementById('btn-load-older') || document.getElementById('messages');
-  if (!root || !main || !anchor) return root;
-  if (root.parentElement !== main) {
-    main.insertBefore(root, anchor);
+  if (!root) return root;
+  if (!root.querySelector('.pm-popup-shell')) {
+    root.innerHTML = `
+      <div class="pm-popup-shell">
+        <div class="pm-popup-tabs hidden" id="pm-popup-tabs" aria-label="Open private chats"></div>
+        <div class="pm-popup-stage" id="pm-popup-stage"></div>
+      </div>
+    `;
   }
   root.classList.toggle('hidden', Object.keys(pmWindows).length === 0);
   return root;
@@ -51,7 +55,12 @@ function refreshPmIgnoreState(targetUserId = null) {
 window.refreshPmIgnoreState = refreshPmIgnoreState;
 
 function renderPvtBar() {
-  const bar = document.getElementById('rooms-topbar');
+  const legacyBar = document.getElementById('rooms-topbar');
+  if (legacyBar) {
+    legacyBar.innerHTML = '';
+    legacyBar.classList.add('hidden');
+  }
+  const bar = document.getElementById('pm-popup-tabs');
   if (!bar) return;
   bar.innerHTML = '';
   if (pvtOpenUsers.size === 0) {
@@ -60,10 +69,13 @@ function renderPvtBar() {
   }
   bar.classList.remove('hidden');
   pvtOpenUsers.forEach((username, userId) => {
+    const meta = pmWindows[userId];
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'private-chat-tab' + (activePmUserId === userId ? ' active' : '');
-    item.onclick = () => openPrivateChat(userId, username);
+    item.className = 'private-chat-tab'
+      + (activePmUserId === userId && !meta?.minimized ? ' active' : '')
+      + (meta?.minimized ? ' minimized' : '');
+    item.onclick = () => restorePrivateChat(userId);
 
     const name = document.createElement('span');
     name.className = 'private-chat-tab-name';
@@ -87,6 +99,11 @@ function renderPvtBar() {
 window.addEventListener('DOMContentLoaded', () => {
   ensurePmDockedRoot();
   setTimeout(() => { ensurePmRealtime(); }, 600);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !activePmUserId) return;
+  closePrivateChat(activePmUserId);
 });
 
 document.addEventListener('click', (event) => {
@@ -136,9 +153,7 @@ async function openPrivateChat(userId, username) {
   await ensurePmRealtime();
 
   if (pmWindows[userId]) {
-    activePmUserId = userId;
-    renderPvtBar();
-    focusPmWindow(userId);
+    restorePrivateChat(userId);
     return;
   }
 
@@ -148,17 +163,28 @@ async function openPrivateChat(userId, username) {
 
   const root = ensurePmDockedRoot();
   if (!root) return;
+  const stage = document.getElementById('pm-popup-stage');
+  if (!stage) return;
+  const displayName = username || getUsernameById(userId);
+  const avatarLetter = escHtml((displayName || '?').trim().charAt(0).toUpperCase() || '?');
 
   const wrap = document.createElement('div');
   wrap.className = 'pm-window';
   wrap.dataset.userId = userId;
   wrap.innerHTML = `
     <div class="pm-header">
-      <span class="pm-title">💬 ${escHtml(username || getUsernameById(userId))}</span>
+      <div class="pm-title-wrap">
+        <div class="pm-avatar" aria-hidden="true">${avatarLetter}</div>
+        <div class="pm-title-copy">
+          <span class="pm-title">${escHtml(displayName)}</span>
+          <span class="pm-subtitle">Private message</span>
+        </div>
+      </div>
       <div class="pm-header-actions">
-        <button type="button" class="pm-call-btn" title="Start voice call">📞</button>
+        <button type="button" class="pm-call-btn" title="Start voice call">Call</button>
         <button type="button" class="pm-ignore-btn" title="Ignore incoming private messages">${typeof isUserIgnored === 'function' && isUserIgnored(userId) ? 'Unignore' : 'Ignore'}</button>
-        <button type="button" class="pm-mute-btn" title="Toggle PM notification sound">${pmMuted[userId] ? '🔇' : '🔊'}</button>
+        <button type="button" class="pm-mute-btn" title="Toggle PM notification sound">${pmMuted[userId] ? 'Muted' : 'Sound'}</button>
+        <button type="button" class="pm-minimize-btn" title="Minimize PM">_</button>
         <button type="button" class="pm-close-btn" title="Close PM">✕</button>
       </div>
     </div>
@@ -176,20 +202,30 @@ async function openPrivateChat(userId, username) {
       <input class="pm-image-url-input" type="text" maxlength="1000" placeholder="Paste an image/GIF URL…" autocomplete="off"/>
       <button type="button" class="media-url-clear pm-image-url-clear" title="Cancel image URL">✕</button>
     </div>
-    <div class="pm-input-row">
-      <input class="pm-input" type="text" maxlength="500" placeholder="Type a private message…"/>
+    <div class="pm-toolbar">
       <button type="button" class="pm-image-btn" title="Share image/GIF by URL">🖼️</button>
       <button type="button" class="pm-record-btn" title="Record voice message">🎙️</button>
+    </div>
+    <div class="pm-input-row">
+      <input class="pm-input" type="text" maxlength="500" placeholder="Type a private message…"/>
       <button type="button" class="pm-send-btn">Send</button>
     </div>
   `;
 
-  root.appendChild(wrap);
-  pmWindows[userId] = { el: wrap, userId, username: username || getUsernameById(userId) };
+  stage.appendChild(wrap);
+  pmWindows[userId] = {
+    el: wrap,
+    userId,
+    username: displayName,
+    minimized: false,
+    left: 0,
+    top: 0
+  };
 
   const input = wrap.querySelector('.pm-input');
   const sendBtn = wrap.querySelector('.pm-send-btn');
   const closeBtn = wrap.querySelector('.pm-close-btn');
+  const minimizeBtn = wrap.querySelector('.pm-minimize-btn');
   const muteBtn = wrap.querySelector('.pm-mute-btn');
   const recordBtn = wrap.querySelector('.pm-record-btn');
   const imageBtn = wrap.querySelector('.pm-image-btn');
@@ -206,10 +242,11 @@ async function openPrivateChat(userId, username) {
     if (e.key === 'Enter') sendPrivateText(userId);
   };
 
+  minimizeBtn.onclick = () => minimizePrivateChat(userId);
   closeBtn.onclick = () => closePrivateChat(userId);
   muteBtn.onclick = () => {
     pmMuted[userId] = !pmMuted[userId];
-    muteBtn.textContent = pmMuted[userId] ? '🔇' : '🔊';
+    muteBtn.textContent = pmMuted[userId] ? 'Muted' : 'Sound';
   };
   ignoreBtn.onclick = () => {
     if (typeof setUserIgnored !== 'function') return;
@@ -244,6 +281,8 @@ async function openPrivateChat(userId, username) {
     callBtn.style.display = 'none';
   }
 
+  enablePmDragging(userId);
+  setInitialPmWindowPosition(userId);
   renderPmTextHistory(userId);
   refreshPmIgnoreState(userId);
   updatePmCallUi(userId);
@@ -257,10 +296,29 @@ async function openPrivateChat(userId, username) {
 function focusPmWindow(userId) {
   const item = pmWindows[userId];
   if (!item) return;
+  item.minimized = false;
   activePmUserId = userId;
   renderPvtBar();
+  positionPmWindows();
   item.el.classList.add('pulse');
   setTimeout(() => item.el.classList.remove('pulse'), 250);
+  item.el.querySelector('.pm-input')?.focus();
+}
+
+function restorePrivateChat(userId) {
+  if (!pmWindows[userId]) return;
+  focusPmWindow(userId);
+}
+
+function minimizePrivateChat(userId) {
+  const item = pmWindows[userId];
+  if (!item) return;
+  item.minimized = true;
+  if (activePmUserId === userId) {
+    activePmUserId = Array.from(pvtOpenUsers.keys()).find((id) => id !== userId && !pmWindows[id]?.minimized) || null;
+  }
+  renderPvtBar();
+  positionPmWindows();
 }
 
 function closePrivateChat(userId) {
@@ -288,9 +346,88 @@ function positionPmWindows() {
   const root = ensurePmDockedRoot();
   if (root) root.classList.toggle('hidden', Object.keys(pmWindows).length === 0);
   Object.entries(pmWindows).forEach(([userId, win]) => {
-    win.el.classList.toggle('active', userId === activePmUserId);
+    const active = userId === activePmUserId && !win.minimized;
+    win.el.classList.toggle('active', active);
+    win.el.classList.toggle('hidden', !active);
+    win.el.style.left = `${win.left}px`;
+    win.el.style.top = `${win.top}px`;
   });
 }
+
+function getPmBounds() {
+  const stage = document.getElementById('pm-popup-stage');
+  const rect = stage?.getBoundingClientRect();
+  return rect || { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+}
+
+function clampPmPosition(userId) {
+  const item = pmWindows[userId];
+  if (!item) return;
+  const bounds = getPmBounds();
+  const rect = item.el.getBoundingClientRect();
+  const maxLeft = Math.max(12, bounds.width - rect.width - 12);
+  const maxTop = Math.max(12, bounds.height - rect.height - 12);
+  item.left = Math.min(Math.max(12, item.left), maxLeft);
+  item.top = Math.min(Math.max(12, item.top), maxTop);
+}
+
+function setInitialPmWindowPosition(userId) {
+  const item = pmWindows[userId];
+  if (!item) return;
+  const chatMain = document.querySelector('.chat-main')?.getBoundingClientRect();
+  const roster = document.getElementById('sidebar-right')?.getBoundingClientRect();
+  const fallbackLeft = chatMain ? Math.max(12, chatMain.left + 12) : Math.max(12, window.innerWidth * 0.24);
+  const fallbackTop = chatMain ? Math.max(72, chatMain.top + 18) : 110;
+  item.left = roster ? Math.max(12, roster.left - 340) : fallbackLeft;
+  item.top = fallbackTop;
+  requestAnimationFrame(() => {
+    clampPmPosition(userId);
+    positionPmWindows();
+  });
+}
+
+function enablePmDragging(userId) {
+  const item = pmWindows[userId];
+  const header = item?.el.querySelector('.pm-header');
+  if (!item || !header) return;
+
+  header.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    if (event.target.closest('button, input, textarea, a')) return;
+    const rect = item.el.getBoundingClientRect();
+    pmDragState = {
+      userId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    item.el.setPointerCapture?.(event.pointerId);
+    header.classList.add('dragging');
+    event.preventDefault();
+  });
+}
+
+document.addEventListener('pointermove', (event) => {
+  if (!pmDragState) return;
+  const item = pmWindows[pmDragState.userId];
+  if (!item) return;
+  const bounds = getPmBounds();
+  item.left = event.clientX - bounds.left - pmDragState.offsetX;
+  item.top = event.clientY - bounds.top - pmDragState.offsetY;
+  clampPmPosition(pmDragState.userId);
+  positionPmWindows();
+});
+
+document.addEventListener('pointerup', () => {
+  if (!pmDragState) return;
+  const item = pmWindows[pmDragState.userId];
+  item?.el.querySelector('.pm-header')?.classList.remove('dragging');
+  pmDragState = null;
+});
+
+window.addEventListener('resize', () => {
+  Object.keys(pmWindows).forEach((userId) => clampPmPosition(userId));
+  positionPmWindows();
+});
 
 function getPmInput(userId) {
   return pmWindows[userId]?.el.querySelector('.pm-input');

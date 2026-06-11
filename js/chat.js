@@ -165,12 +165,40 @@ const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
 const AUTH_ENTRY_PAGE_URL = 'login.html';
 const IGNORED_USERS_STORAGE_KEY = 'cc-ignored-users';
+const POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
+const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
 let guestCleanupPromise = null;
 let ignoredUserIds = loadIgnoredUserIds();
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForRestoredSession({ attempts = 12, delayMs = 250 } = {}) {
+  for (let i = 0; i < attempts; i += 1) {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (session) return session;
+    await sleep(delayMs);
+  }
+  return null;
+}
+
 async function getActiveChatSession() {
   const { data: { session } } = await sbClient.auth.getSession();
-  if (session) return session;
+  if (session) {
+    sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+    return session;
+  }
+
+  const pendingRedirectTs = Number(sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY) || '0');
+  if (pendingRedirectTs && Date.now() - pendingRedirectTs < POST_LOGIN_REDIRECT_MAX_AGE_MS) {
+    const restoredSession = await waitForRestoredSession();
+    sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+    if (restoredSession) return restoredSession;
+    window.location.replace(`${AUTH_ENTRY_PAGE_URL}?session=restore`);
+    return null;
+  }
+  sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
 
   // Check if we're coming from a logout action
   const isLogoutFlag = sessionStorage.getItem('cc_logout_flag') === 'true';

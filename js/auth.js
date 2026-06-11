@@ -1,4 +1,9 @@
 const LOGIN_PAGE_URL = 'login.html';
+const POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
+
+function markPendingChatRedirect() {
+  sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, String(Date.now()));
+}
 
 function showTab(tab) {
   document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
@@ -98,6 +103,7 @@ async function loginUser() {
     localStorage.removeItem('cc_pending_email');
   }
 
+  markPendingChatRedirect();
   window.location.href = 'chat.html';
 }
 
@@ -212,6 +218,7 @@ async function registerUser() {
   if (data.session) {
     // Clear logout flag on successful registration with immediate session
     sessionStorage.removeItem('cc_logout_flag');
+    markPendingChatRedirect();
     showMsg(msg, '✅ Account created! Taking you to chat…', 'success');
     setTimeout(() => { window.location.href = 'chat.html'; }, 1200);
   } else {
@@ -355,6 +362,7 @@ if (isLoginPage) {
   // Check if we're coming from a logout action
   const urlParams = new URLSearchParams(window.location.search);
   const isLogoutRedirect = urlParams.has('logout');
+  const isRestoreFailure = urlParams.has('session');
   
   // Re-apply cooldown state on page load (e.g. after a page refresh)
   const cooldownLeft = getRegCooldownRemaining();
@@ -384,6 +392,14 @@ if (isLoginPage) {
   if (!isLogoutRedirect) {
     sbClient.auth.getSession().then(({ data }) => {
       if (data.session) window.location.href = 'chat.html';
+    });
+  }
+
+  if (isRestoreFailure) {
+    window.addEventListener('DOMContentLoaded', () => {
+      const msg = document.getElementById('login-msg');
+      if (!msg) return;
+      showMsg(msg, 'Session restore took too long. Please log in again.', 'error');
     });
   }
 }

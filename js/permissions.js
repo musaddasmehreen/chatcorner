@@ -8,39 +8,101 @@
  *  3. Camera         (video chat)
  */
 
-async function requestAllPermissions() {
-  const btn = document.querySelector('.btn-allow');
-  if (btn) { btn.textContent = '⏳ Requesting…'; btn.disabled = true; }
+const PERMISSION_REQUEST_TIMEOUT_MS = 8000;
+let permissionsRequestInFlight = null;
 
-  // ── Priority 1: Notifications ──────────────────────────────────────────────
-  try {
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
-  } catch (e) { console.warn('Notification permission error:', e); }
-
-  // ── Priority 2: Microphone ─────────────────────────────────────────────────
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    stream.getTracks().forEach(t => t.stop());
-  } catch (e) { console.warn('Microphone permission error:', e); }
-
-  // ── Priority 3: Camera ─────────────────────────────────────────────────────
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
-    stream.getTracks().forEach(t => t.stop());
-  } catch (e) { console.warn('Camera permission error:', e); }
-
-  // ── Done ───────────────────────────────────────────────────────────────────
-  if (btn) { btn.textContent = '✅ Done!'; btn.disabled = false; }
-  await updatePermissionIndicators();
-  setTimeout(() => dismissPermissions(), 1500);
+function getAllowButton() {
+  return document.querySelector('.btn-allow');
 }
 
-function dismissPermissions() {
+function setAllowButtonState(text, disabled) {
+  const btn = getAllowButton();
+  if (!btn) return;
+  btn.textContent = text;
+  btn.disabled = disabled;
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} request timed out`)), timeoutMs);
+    })
+  ]);
+}
+
+async function requestMediaPermission(constraints, label) {
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  const stream = await withTimeout(
+    navigator.mediaDevices.getUserMedia(constraints),
+    PERMISSION_REQUEST_TIMEOUT_MS,
+    label
+  );
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window) || Notification.permission !== 'default') return;
+  await withTimeout(
+    Notification.requestPermission(),
+    PERMISSION_REQUEST_TIMEOUT_MS,
+    'Notification'
+  );
+}
+
+async function requestAllPermissions() {
+  if (permissionsRequestInFlight) return permissionsRequestInFlight;
+
+  permissionsRequestInFlight = (async () => {
+    setAllowButtonState('⏳ Requesting...', true);
+
+    try {
+      // ── Priority 1: Notifications ──────────────────────────────────────────
+      try {
+        await requestNotificationPermission();
+      } catch (e) {
+        console.warn('Notification permission error:', e);
+      }
+
+      // ── Priority 2: Microphone ─────────────────────────────────────────────
+      try {
+        await requestMediaPermission({ audio: true, video: false }, 'Microphone');
+      } catch (e) {
+        console.warn('Microphone permission error:', e);
+      }
+
+      // ── Priority 3: Camera ─────────────────────────────────────────────────
+      try {
+        await requestMediaPermission({ audio: false, video: true }, 'Camera');
+      } catch (e) {
+        console.warn('Camera permission error:', e);
+      }
+
+      await updatePermissionIndicators();
+
+      const allGranted = await areCorePermissionsGranted();
+      if (allGranted) {
+        setAllowButtonState('✅ Done!', false);
+        localStorage.removeItem('cc_perms_dismissed');
+        setTimeout(() => dismissPermissions(false), 900);
+      } else {
+        setAllowButtonState('Try Again', false);
+      }
+    } catch (error) {
+      console.warn('Permissions request failed:', error);
+      setAllowButtonState('Try Again', false);
+    } finally {
+      permissionsRequestInFlight = null;
+    }
+  })();
+
+  return permissionsRequestInFlight;
+}
+
+function dismissPermissions(remember = true) {
   const banner = document.getElementById('permissions-banner');
   if (banner) banner.style.display = 'none';
-  localStorage.setItem('cc_perms_dismissed', '1');
+  if (remember) localStorage.setItem('cc_perms_dismissed', '1');
 }
 
 async function updatePermissionIndicators() {
@@ -59,6 +121,19 @@ async function updatePermissionIndicators() {
   } catch (e) { /* permissions API not supported */ }
 }
 
+async function areCorePermissionsGranted() {
+  try {
+    const mic = await navigator.permissions.query({ name: 'microphone' });
+    const cam = await navigator.permissions.query({ name: 'camera' });
+    const notificationsGranted = ('Notification' in window)
+      ? Notification.permission === 'granted'
+      : true;
+    return mic.state === 'granted' && cam.state === 'granted' && notificationsGranted;
+  } catch (_) {
+    return false;
+  }
+}
+
 function setIndicator(id, state) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -67,13 +142,11 @@ function setIndicator(id, state) {
 }
 
 async function initPermissionsBanner() {
+  if (localStorage.getItem('cc_perms_dismissed') === '1') return;
+
   try {
-    const mic = await navigator.permissions.query({ name: 'microphone' });
-    const cam = await navigator.permissions.query({ name: 'camera' });
-    // If both already granted, nothing to do — hide the banner and return
-    if (mic.state === 'granted' && cam.state === 'granted' &&
-        ('Notification' in window ? Notification.permission !== 'default' : true)) {
-      dismissPermissions();
+    if (await areCorePermissionsGranted()) {
+      dismissPermissions(false);
       return;
     }
   } catch (e) { /* permissions API unavailable — proceed to request */ }
@@ -83,9 +156,7 @@ async function initPermissionsBanner() {
   if (banner) banner.style.display = 'flex';
 
   await updatePermissionIndicators();
-
-  // Automatically trigger permission requests without waiting for a button click
-  await requestAllPermissions();
+  setAllowButtonState('✅ Allow All', false);
 }
 
 window.addEventListener('DOMContentLoaded', initPermissionsBanner);
