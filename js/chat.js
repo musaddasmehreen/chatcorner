@@ -442,13 +442,33 @@ function updateCurrentUserBadge() {
   const welcome = document.getElementById('welcome-nick');
   if (!currentProfile) return;
   let label = currentProfile.username || 'User';
-  if (currentProfile.is_admin) label += ' \ud83d\udee1\ufe0f';
+  if (currentProfile.is_owner) label += ' \ud83d\udc51';
+  else if (currentProfile.is_admin) label += ' \ud83d\udee1\ufe0f';
   else if (currentProfile.is_registered) label += ' \u2713';
   else label += ' \ud83d\udc64';
   if (badge) badge.textContent = label;
   if (welcome) welcome.textContent = currentProfile.username || 'User';
   const adminLink = document.getElementById('btn-admin-link');
-  if (adminLink) adminLink.classList.toggle('hidden', !currentProfile.is_admin);
+  if (adminLink) adminLink.classList.toggle('hidden', !(currentProfile.is_admin || currentProfile.is_owner));
+}
+
+function updateRoomMeta(room = currentRoom, onlineCount = Object.keys(onlineUsers).length) {
+  const roomMetaLabel = document.getElementById('room-meta-label');
+  const roomPresencePill = document.getElementById('room-presence-pill');
+  const roomTypePill = document.getElementById('room-type-pill');
+  if (!room) {
+    if (roomMetaLabel) roomMetaLabel.textContent = 'Public room';
+    if (roomPresencePill) roomPresencePill.textContent = '0 online';
+    if (roomTypePill) roomTypePill.textContent = 'Text chat';
+    return;
+  }
+  if (roomMetaLabel) {
+    if (room.is_locked) roomMetaLabel.textContent = 'Read-only room';
+    else if (room.is_audio_enabled) roomMetaLabel.textContent = 'Voice-enabled room';
+    else roomMetaLabel.textContent = 'Public room';
+  }
+  if (roomPresencePill) roomPresencePill.textContent = `${onlineCount} online`;
+  if (roomTypePill) roomTypePill.textContent = room.is_audio_enabled ? 'Voice + text' : 'Text chat';
 }
 
 function disconnectRealtimeChannels() {
@@ -815,7 +835,11 @@ async function loadRooms() {
         tab.type = 'button';
         tab.className = 'room-tab';
         tab.dataset.roomId = String(room.id);
-        tab.textContent = room.name;
+        tab.title = room.name;
+        tab.innerHTML = `
+          <span class="room-tab-label">${escHtml(room.name)}</span>
+          <span class="room-count-badge">${Number.isFinite(room.user_count) ? room.user_count : 0}</span>
+        `;
         tab.onclick = () => enterRoom(room);
         tabsList.appendChild(tab);
       }
@@ -842,7 +866,14 @@ async function refreshRoomCounts() {
 }
 
 function updateRoomTabCount(roomId, count) {
-  return;
+  if (!roomId) return;
+  const tab = document.querySelector(`.room-tab[data-room-id="${roomId}"]`);
+  const badge = tab?.querySelector('.room-count-badge');
+  if (badge) badge.textContent = String(Math.max(0, count || 0));
+  cachedRooms = cachedRooms.map((room) =>
+    room.id === roomId ? { ...room, user_count: count } : room
+  );
+  if (currentRoom?.id === roomId) updateRoomMeta(currentRoom, count);
 }
 
 // Rooms are shown in the left sidebar only.
@@ -871,6 +902,8 @@ async function enterRoom(room) {
   document.getElementById('messages').innerHTML = '';
   onlineUsers = {};
   cameraStates = {};
+  updateRoomMeta(room, 0);
+  document.getElementById('typing-indicator-host')?.replaceChildren();
 
   // Update active tab in topbar and room tabs
   document.querySelectorAll('.room-tab').forEach(t =>
@@ -883,7 +916,7 @@ async function enterRoom(room) {
 
   const audioBar = document.getElementById('audio-bar');
   const msgInput = document.getElementById('msg-input');
-  const sendBtn  = document.querySelector('.btn-send');
+  const sendBtn  = document.getElementById('btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
 
   if (room.is_audio_enabled) {
@@ -1210,19 +1243,26 @@ function renderUserList() {
 
   const onlineCount = document.getElementById('online-count');
   if (onlineCount) onlineCount.textContent = String(sortedUsers.length);
+  updateRoomMeta(currentRoom, sortedUsers.length);
 
   // Update room-users-bar
   const bar = document.getElementById('room-users-bar');
   if (bar) {
     bar.innerHTML = '';
     const bfrag = document.createDocumentFragment();
-    sortedUsers.forEach(u => {
+    sortedUsers.slice(0, 6).forEach(u => {
       const pill = document.createElement('span');
       pill.className = 'room-user-pill';
       const dot = u.registered ? '🟢' : '👤';
       pill.textContent = `${dot} ${u.username}`;
       bfrag.appendChild(pill);
     });
+    if (sortedUsers.length > 6) {
+      const more = document.createElement('span');
+      more.className = 'room-user-pill room-user-pill-muted';
+      more.textContent = `+${sortedUsers.length - 6} more`;
+      bfrag.appendChild(more);
+    }
     bar.appendChild(bfrag);
   }
 }
@@ -1328,13 +1368,14 @@ function showBlockedOverlay(message) {
 /* ── Typing indicator ── */
 function updateTypingIndicator() {
   let el = document.getElementById('typing-indicator');
+  const host = document.getElementById('typing-indicator-host');
   const others = [...typingUsers.values()].filter(u => u.userId !== currentUser?.id);
   if (!others.length) { if (el) el.remove(); return; }
   if (!el) {
     el = document.createElement('div');
     el.id = 'typing-indicator';
     el.className = 'typing-indicator';
-    document.getElementById('messages')?.after(el);
+    host?.appendChild(el);
   }
   const names = others.slice(0, 3).map(u => escHtml(u.username)).join(', ');
   el.textContent = `✏️ ${names} ${others.length === 1 ? 'is' : 'are'} typing…`;
@@ -1564,7 +1605,7 @@ function applyGuestModeUI() {
 
 function updateComposerState() {
   const msgInput = document.getElementById('msg-input');
-  const sendBtn = document.querySelector('.btn-send');
+  const sendBtn = document.getElementById('btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
   const imageBtn = document.getElementById('btn-image-url');
   const voiceBtn = document.getElementById('btn-voice-note');

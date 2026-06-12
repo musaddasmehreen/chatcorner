@@ -96,6 +96,14 @@
         </div>
 
         <div class="rooms-topbar hidden" id="rooms-topbar" aria-label="Private chats"></div>
+        <div class="room-meta-bar" aria-label="Room details">
+          <div class="room-meta-primary">
+            <span class="room-meta-label" id="room-meta-label">Public room</span>
+            <span class="room-meta-pill" id="room-presence-pill">0 online</span>
+            <span class="room-meta-pill" id="room-type-pill">Text chat</span>
+          </div>
+          <div class="room-users-bar" id="room-users-bar" aria-label="Active users in room"></div>
+        </div>
 
         <div class="chat-box">
           <button id="btn-load-older" class="btn-load-older hidden" onclick="loadOlderMessages()" aria-label="Load older messages">⬆ Load older messages</button>
@@ -104,6 +112,7 @@
         </div>
 
         <div class="mini-cams-bar" id="minimized-cams-bar"></div>
+        <div class="typing-indicator-host" id="typing-indicator-host" aria-live="polite"></div>
 
         <!-- Voice bar -->
         <div class="audio-bar hidden" id="audio-bar">
@@ -147,7 +156,8 @@
       <!-- RIGHT: online users -->
       <aside class="sidebar sidebar-right sidebar-classic" id="sidebar-right">
         <div class="online-header">
-          <span id="online-count">0</span> online
+          <span class="online-header-title">People In Room</span>
+          <span class="online-header-count"><span id="online-count">0</span> online</span>
         </div>
         <ul class="user-list user-list-classic" id="user-list"></ul>
       </aside>
