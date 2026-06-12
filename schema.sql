@@ -1,205 +1,142 @@
 -- =====================================================================
--- CHATCORNER - COMPLETE SUPABASE SQL SCHEMA
--- Execute this entire script in Supabase SQL Editor
+-- CHATCORNER — COMPLETE SUPABASE SCHEMA (matches js/chat.js)
+-- Run this entire script in Supabase SQL Editor
 -- =====================================================================
 
--- =====================================================================
--- TABLE 1: PUBLIC.MESSAGES
--- Core messaging table for storing chat messages across rooms
--- =====================================================================
-
-CREATE TABLE IF NOT EXISTS public.messages (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    room_id TEXT NOT NULL,
-    username TEXT NOT NULL,
-    message_text VARCHAR(500) NOT NULL,
-    avatar_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT message_length_check CHECK (LENGTH(message_text) <= 500)
+-- PROFILES
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    username text NOT NULL,
+    email text,
+    avatar_color text DEFAULT '#7c3aed',
+    avatar_url text,
+    is_registered boolean DEFAULT false,
+    is_admin boolean DEFAULT false,
+    is_mod boolean DEFAULT false,
+    is_owner boolean DEFAULT false,
+    is_vip boolean DEFAULT false,
+    is_banned boolean DEFAULT false,
+    banned_at timestamptz,
+    banned_by uuid,
+    ban_reason text,
+    ban_expires_at timestamptz,
+    kicked_until timestamptz,
+    created_at timestamptz DEFAULT now()
 );
 
--- Add indexes for faster queries
+-- ROOMS
+CREATE TABLE IF NOT EXISTS public.rooms (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text UNIQUE NOT NULL,
+    description text,
+    is_audio_enabled boolean DEFAULT false,
+    is_locked boolean DEFAULT false,
+    created_at timestamptz DEFAULT now()
+);
+
+-- MESSAGES
+CREATE TABLE IF NOT EXISTS public.messages (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    room_id uuid NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    username text NOT NULL,
+    content text NOT NULL,
+    type text NOT NULL DEFAULT 'text',
+    created_at timestamptz DEFAULT now(),
+    CONSTRAINT message_length_check CHECK (char_length(content) <= 5000)
+);
+
+-- PRIVATE MESSAGES
+CREATE TABLE IF NOT EXISTS public.private_messages (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    sender_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    recipient_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    content text NOT NULL,
+    type text NOT NULL DEFAULT 'text',
+    created_at timestamptz DEFAULT now()
+);
+
+-- APP SETTINGS
+CREATE TABLE IF NOT EXISTS public.app_settings (
+    key text PRIMARY KEY,
+    value text,
+    updated_at timestamptz DEFAULT now()
+);
+
+-- BROADCASTS (admin)
+CREATE TABLE IF NOT EXISTS public.broadcasts (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    message text,
+    sent_by uuid REFERENCES public.profiles(id),
+    room_id uuid REFERENCES public.rooms(id),
+    created_at timestamptz DEFAULT now()
+);
+
+-- INDEXES
 CREATE INDEX IF NOT EXISTS idx_messages_room_id ON public.messages(room_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_room_created ON public.messages(room_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles(username);
 
--- Enable Row Level Security (optional but recommended for multi-user safety)
+-- SEED DEFAULT ROOMS
+INSERT INTO public.rooms (name, description, is_audio_enabled)
+VALUES
+    ('General', 'Main public chat room', false),
+    ('Voice Lounge', 'Voice and video enabled room', true)
+ON CONFLICT (name) DO NOTHING;
+
+-- ROW LEVEL SECURITY
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.private_messages ENABLE ROW LEVEL SECURITY;
 
--- Create a policy allowing anyone to read messages
-CREATE POLICY "Enable read access for all users" ON public.messages
-    FOR SELECT USING (true);
+DROP POLICY IF EXISTS "profiles_read" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
+DROP POLICY IF EXISTS "rooms_read" ON public.rooms;
+DROP POLICY IF EXISTS "messages_read" ON public.messages;
+DROP POLICY IF EXISTS "messages_insert_own" ON public.messages;
+DROP POLICY IF EXISTS "pm_read" ON public.private_messages;
+DROP POLICY IF EXISTS "pm_insert" ON public.private_messages;
 
--- Create a policy allowing insert for authenticated users
-CREATE POLICY "Enable insert for all users" ON public.messages
-    FOR INSERT WITH CHECK (true);
+CREATE POLICY "profiles_read" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "profiles_insert_own" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
--- =====================================================================
--- TABLE 2: PUBLIC.ACTIVE_USERS
--- Registry of active peers connected to each chatroom
--- =====================================================================
+CREATE POLICY "rooms_read" ON public.rooms FOR SELECT USING (true);
 
-CREATE TABLE IF NOT EXISTS public.active_users (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    username TEXT NOT NULL UNIQUE,
-    peer_id TEXT NOT NULL,
-    room_id TEXT NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT peer_id_not_empty CHECK (LENGTH(peer_id) > 0),
-    CONSTRAINT username_not_empty CHECK (LENGTH(username) > 0)
+CREATE POLICY "messages_read" ON public.messages FOR SELECT USING (true);
+CREATE POLICY "messages_insert_own" ON public.messages FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "pm_read" ON public.private_messages FOR SELECT USING (
+    auth.uid() = sender_id OR auth.uid() = recipient_id
 );
+CREATE POLICY "pm_insert" ON public.private_messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
 
--- Add indexes for faster queries
-CREATE INDEX IF NOT EXISTS idx_active_users_room_id ON public.active_users(room_id);
-CREATE INDEX IF NOT EXISTS idx_active_users_peer_id ON public.active_users(peer_id);
-CREATE INDEX IF NOT EXISTS idx_active_users_updated_at ON public.active_users(updated_at DESC);
-
--- Enable Row Level Security
-ALTER TABLE public.active_users ENABLE ROW LEVEL SECURITY;
-
--- Create read policy
-CREATE POLICY "Enable read access for active users" ON public.active_users
-    FOR SELECT USING (true);
-
--- Create insert/update policy
-CREATE POLICY "Enable insert/update for all users" ON public.active_users
-    FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Enable update for all users" ON public.active_users
-    FOR UPDATE USING (true) WITH CHECK (true);
-
--- =====================================================================
--- REAL-TIME SETUP: Enable Replication for WebSocket Streaming
--- =====================================================================
-
--- Step 1: Set messages table to FULL replica identity (required for real-time)
+-- REALTIME
 ALTER TABLE public.messages REPLICA IDENTITY FULL;
+ALTER TABLE public.profiles REPLICA IDENTITY FULL;
 
--- Step 2: Set active_users table to FULL replica identity
-ALTER TABLE public.active_users REPLICA IDENTITY FULL;
-
--- Step 3: Add both tables to replication publication
--- This enables PostgreSQL to broadcast changes via WebSocket
-BEGIN;
-    -- Drop existing publication if it exists
-    DROP PUBLICATION IF EXISTS supabase_realtime;
-    
-    -- Create new publication for real-time events
-    CREATE PUBLICATION supabase_realtime FOR TABLE public.messages, public.active_users;
-COMMIT;
-
--- Verify replication is enabled
--- SELECT * FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
-
--- =====================================================================
--- AUTOMATED MAINTENANCE: PG_CRON SCHEDULER
--- Automatically purge old messages to keep database lean
--- =====================================================================
-
--- Enable pg_cron extension (must be done by superuser)
--- Note: Contact Supabase support if pg_cron extension is not available
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
--- Create scheduled job: Daily cleanup at midnight UTC
--- Deletes all messages older than 3 days
-SELECT cron.schedule(
-    'flush-stale-logs',           -- Job name (unique identifier)
-    '0 0 * * *',                  -- Cron expression: every day at 00:00 UTC
-    'DELETE FROM public.messages WHERE created_at < NOW() - INTERVAL ''3 days'''
-);
-
--- View all scheduled jobs
--- SELECT * FROM cron.job;
-
--- View job run history
--- SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
-
--- =====================================================================
--- ADDITIONAL HELPER FUNCTIONS (Optional)
--- =====================================================================
-
--- Function to get active user count per room (for analytics)
-CREATE OR REPLACE FUNCTION get_room_user_count(room_name TEXT)
-RETURNS INT AS $$
+DO $$
 BEGIN
-    RETURN (SELECT COUNT(*) FROM public.active_users WHERE room_id = room_name::TEXT);
-END;
-$$ LANGUAGE plpgsql;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- Function to get message count per room (for UI display)
-CREATE OR REPLACE FUNCTION get_room_message_count(room_name TEXT)
-RETURNS INT AS $$
+DO $$
 BEGIN
-    RETURN (SELECT COUNT(*) FROM public.messages 
-            WHERE room_id = room_name::TEXT 
-            AND created_at > NOW() - INTERVAL '1 day');
-END;
-$$ LANGUAGE plpgsql;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- Function to remove inactive users (older than 10 minutes)
-CREATE OR REPLACE FUNCTION remove_inactive_users()
-RETURNS void AS $$
-BEGIN
-    DELETE FROM public.active_users 
-    WHERE updated_at < NOW() - INTERVAL '10 minutes';
-    RAISE NOTICE 'Removed inactive users';
-END;
-$$ LANGUAGE plpgsql;
+-- OPTIONAL: purge messages older than 24 hours (requires pg_cron)
+-- CREATE EXTENSION IF NOT EXISTS pg_cron;
+-- SELECT cron.schedule('purge-messages-24h', '0 0 * * *',
+--   'DELETE FROM public.messages WHERE created_at < NOW() - INTERVAL ''24 hours''');
 
 -- =====================================================================
--- SAMPLE DATA (Optional - for testing)
--- =====================================================================
-
--- Insert sample message
-INSERT INTO public.messages (room_id, username, message_text, avatar_url, created_at)
-VALUES (
-    'General',
-    'System',
-    '✨ Welcome to ChatCorner! This is a real-time decoupled chatroom application.',
-    'https://ui-avatars.com/api/?name=System&background=667eea&color=fff',
-    NOW()
-) ON CONFLICT DO NOTHING;
-
--- Insert sample active user
-INSERT INTO public.active_users (username, peer_id, room_id, updated_at)
-VALUES (
-    'Demo_User',
-    'demo-peer-12345',
-    'General',
-    NOW()
-) ON CONFLICT (username) DO UPDATE SET updated_at = NOW();
-
--- =====================================================================
--- VERIFICATION QUERIES
--- =====================================================================
-
--- Check messages table structure
--- SELECT * FROM information_schema.columns WHERE table_name = 'messages';
-
--- Check active_users table structure
--- SELECT * FROM information_schema.columns WHERE table_name = 'active_users';
-
--- Verify publication exists
--- SELECT * FROM pg_publication WHERE pubname = 'supabase_realtime';
-
--- Check indexes
--- SELECT schemaname, tablename, indexname FROM pg_indexes 
--- WHERE schemaname = 'public' AND tablename IN ('messages', 'active_users');
-
--- =====================================================================
--- CLEANUP COMMANDS (Use cautiously!)
--- =====================================================================
-
--- To drop all scheduled jobs:
--- SELECT cron.unschedule('flush-stale-logs');
-
--- To truncate messages table (WARNING: This deletes all messages!)
--- TRUNCATE TABLE public.messages CASCADE;
-
--- To drop all tables (WARNING: Destructive!)
--- DROP TABLE IF EXISTS public.active_users CASCADE;
--- DROP TABLE IF EXISTS public.messages CASCADE;
-
--- =====================================================================
--- END OF SCHEMA SETUP
+-- AFTER FIRST LOGIN: promote your account to admin (replace email)
+-- UPDATE public.profiles SET is_admin = true, is_registered = true
+-- WHERE email = 'your-email@example.com';
 -- =====================================================================

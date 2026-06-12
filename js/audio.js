@@ -8,6 +8,11 @@ let isMuted = false;
 let inVoice = false;
 let isCameraOn = false;
 
+function ccEl(id) { return document.getElementById(id); }
+function ccShow(id) { ccEl(id)?.classList.remove('hidden'); }
+function ccHide(id) { ccEl(id)?.classList.add('hidden'); }
+function ccText(id, text) { const node = ccEl(id); if (node) node.textContent = text; }
+
 let audioCtx = null;
 let analyserNodes = {};
 let analyserData = {};
@@ -60,13 +65,13 @@ async function joinVoice() {
   voiceJoinAt = Date.now();
   participantLevels[currentUser.id] = 0;
 
-  document.getElementById('btn-join-voice').classList.add('hidden');
-  document.getElementById('btn-leave-voice').classList.remove('hidden');
-  document.getElementById('btn-mute').classList.remove('hidden');
-  document.getElementById('btn-toggle-camera').classList.remove('hidden');
-  document.getElementById('voice-visualizer').classList.remove('hidden');
+  ccHide('btn-join-voice');
+  ccShow('btn-leave-voice');
+  ccShow('btn-mute');
+  ccShow('btn-toggle-camera');
+  ccShow('voice-visualizer');
+  ccText('btn-mute', '🔇 Mute');
   updateVoiceStatus();
-  document.getElementById('btn-mute').textContent = '🔇 Mute';
 
   updateVideoButtons();
   updateLocalPreview();
@@ -147,19 +152,26 @@ async function leaveVoice() {
   clearAllVisualizers();
   participantLevels = {};
 
-  document.getElementById('video-grid').innerHTML = '';
-  document.getElementById('video-grid').classList.add('hidden');
-  document.getElementById('local-video').srcObject = null;
-  document.getElementById('local-video').classList.add('hidden');
-  document.getElementById('peers-list').innerHTML = '';
+  const videoGrid = ccEl('video-grid');
+  if (videoGrid) {
+    videoGrid.innerHTML = '';
+    videoGrid.classList.add('hidden');
+  }
+  const localVideo = ccEl('local-video');
+  if (localVideo) {
+    localVideo.srcObject = null;
+    localVideo.classList.add('hidden');
+  }
+  const peersList = ccEl('peers-list');
+  if (peersList) peersList.innerHTML = '';
 
-  document.getElementById('btn-join-voice').classList.remove('hidden');
-  document.getElementById('btn-leave-voice').classList.add('hidden');
-  document.getElementById('btn-mute').classList.add('hidden');
-  document.getElementById('btn-toggle-camera').classList.add('hidden');
-  document.getElementById('voice-visualizer').classList.add('hidden');
-  document.getElementById('audio-status').textContent = '🎙️ Voice: Off';
-  document.getElementById('audio-status').classList.remove('listener-mode');
+  ccShow('btn-join-voice');
+  ccHide('btn-leave-voice');
+  ccHide('btn-mute');
+  ccHide('btn-toggle-camera');
+  ccHide('voice-visualizer');
+  ccText('audio-status', '🎙️ Voice: Off');
+  ccEl('audio-status')?.classList.remove('listener-mode');
 
   isMuted = false;
   isCameraOn = false;
@@ -183,7 +195,7 @@ function toggleMute() {
   if (!track) return;
   isMuted = !isMuted;
   track.enabled = !isMuted;
-  document.getElementById('btn-mute').textContent = isMuted ? '🎙️ Unmute' : '🔇 Mute';
+  ccText('btn-mute', isMuted ? '🎙️ Unmute' : '🔇 Mute');
 }
 
 async function toggleCamera() {
@@ -344,12 +356,12 @@ function ensurePeerTile(peerId, username) {
 
     tile.appendChild(videoEl);
     tile.appendChild(label);
-    document.getElementById('video-grid').appendChild(tile);
+    ccEl('video-grid')?.appendChild(tile);
   }
 
   const cameraOn = typeof cameraStates !== 'undefined' ? !!cameraStates[peerId] : true;
   tile.classList.toggle('hidden', !cameraOn);
-  document.getElementById('video-grid').classList.remove('hidden');
+  ccEl('video-grid')?.classList.remove('hidden');
   return tile.querySelector('video');
 }
 
@@ -432,12 +444,12 @@ function updateLocalPreview() {
   }
 
   if (inVoice) {
-    document.getElementById('video-grid').classList.remove('hidden');
+    ccEl('video-grid')?.classList.remove('hidden');
   }
 }
 
 function updateVideoButtons() {
-  document.getElementById('btn-toggle-camera').textContent = isCameraOn ? '📷 Camera Off' : '📷 Camera On';
+  ccText('btn-toggle-camera', isCameraOn ? '📷 Camera Off' : '📷 Camera On');
 }
 
 function attachVideoTrackToPeers(videoTrack) {

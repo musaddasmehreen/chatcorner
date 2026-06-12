@@ -1,4 +1,6 @@
 / /chat.html 302
 /index.html /chat.html 302
+/chat /chat.html 200
+/chat/ /chat.html 200
 /adminup /adminup.html 200
 /admin /admin.html 200
