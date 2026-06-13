@@ -842,6 +842,7 @@ async function enterRoom(room) {
     .from('messages')
     .select('*')
     .eq('room_id', room.id)
+    .neq('type', 'system')
     .order('created_at', { ascending: true })
     .limit(50);
 
@@ -870,6 +871,8 @@ async function enterRoom(room) {
       filter: `room_id=eq.${room.id}`
     }, payload => {
       if (!canProcessIncomingPayload(payload.new?.user_id)) return;
+      // Skip system (deletion notice) messages from DB realtime — they are shown locally and auto-expire
+      if (payload.new?.type === 'system') return;
       appendMessage(payload.new);
       scrollToBottom();
     })
@@ -971,7 +974,7 @@ async function sendMessage() {
     document.getElementById('room-image-url-input')?.focus();
     return;
   }
-  if (!isRegisteredUser() && !currentRoom?.is_audio_enabled) {
+  if (!isRegisteredUser()) {
     const waitMs = getGuestMessageWaitMs(currentRoom.id);
     if (waitMs > 0) {
       showGuestRateLimitToast(waitMs);
@@ -1188,6 +1191,7 @@ async function loadOlderMessages() {
     .from('messages')
     .select('*')
     .eq('room_id', currentRoom.id)
+    .neq('type', 'system')
     .lt('created_at', oldestMessageTimestamp)
     .order('created_at', { ascending: false })
     .limit(50);
@@ -2026,22 +2030,8 @@ async function deleteMessageForEveryone(messageId, targetUserId, targetUsername)
 
   if (deletingAsModerator && currentRoom?.id) {
     const deleterName = currentProfile?.username || 'Admin';
-    const { error: placeholderError } = await sbClient.from('messages').insert({
-      room_id: currentRoom.id,
-      user_id: currentUser.id,
-      username: deleterName,
-      content: `${DELETED_MESSAGE_PREFIX}${deleterName}`,
-      type: 'system'
-    });
-    if (placeholderError) {
-      console.warn('Failed to write moderation deletion placeholder', {
-        deleterId: currentUser?.id,
-        targetUserId,
-        targetUsername,
-        messageId,
-        error: placeholderError.message
-      });
-    }
+    // Show deletion notice locally only — NOT stored in DB to keep history clean
+    appendSystemMessage(`🗑️ Message deleted by ${deleterName}`);
   }
 }
 

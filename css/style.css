@@ -492,7 +492,6 @@ body {
 
 /* ── Sidebars ── */
 .sidebar {
-  width: 210px;
   background: var(--surface);
   display: flex;
   flex-direction: column;
@@ -501,18 +500,58 @@ body {
   transition: background 0.25s;
 }
 
-.sidebar.left  { border-right: 1px solid var(--border); width: 160px; }
-.sidebar.right { border-left: 1px solid var(--border); width: 240px; }
+/* Support both old (.sidebar.left) and new (.sidebar-left) class naming */
+.sidebar.left,
+.sidebar-left  { border-right: 1px solid var(--border); width: 160px; }
+.sidebar.right,
+.sidebar-right { border-left: 1px solid var(--border); width: 240px; }
 
-.sidebar-title {
-  padding: 0.7rem 0.85rem 0.35rem;
-  font-size: 0.7rem;
+/* ── Theme bar (inside left sidebar) ── */
+.theme-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0.5rem 0.4rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.theme-bar-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+  width: 100%;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.theme-name-label {
+  font-size: 0.65rem;
+  color: var(--accent);
+  font-weight: 600;
+  width: 100%;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ── Sidebar section labels (ROOMS, USERS IN ROOM) ── */
+.sidebar-section-label {
+  padding: 0.55rem 0.85rem 0.3rem;
+  font-size: 0.66rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
   flex-shrink: 0;
   opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar hr {
@@ -811,6 +850,20 @@ body {
   padding: 0.25rem 1rem;
   font-style: italic;
   opacity: 0.65;
+  transition: opacity 0.3s, max-height 0.3s;
+}
+
+/* Deletion notices fade and collapse when auto-removed */
+.msg-system-deleted {
+  color: var(--red);
+  opacity: 0.55;
+}
+
+.msg-system.is-deleting {
+  opacity: 0 !important;
+  max-height: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
 }
 
 /* ── Audio Bar ── */
