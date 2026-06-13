@@ -62,3 +62,81 @@ SELECT cron.schedule(
 
 -- Check for any recent job failures
 -- SELECT * FROM cron.job_run_details WHERE success = false ORDER BY start_time DESC LIMIT 5;
+
+
+-- =====================================================================
+-- UPDATE: SCHEMA SYNCHRONIZATION (MIGRATION RUN ON 2026-06-14)
+-- =====================================================================
+
+-- Add missing columns to the existing public.profiles table
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_banned boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS banned_at timestamp with time zone;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS banned_by uuid;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS ban_reason text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS ban_expires_at timestamp with time zone;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_mod boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_owner boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_vip boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS has_2fa_enabled boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS two_fa_secret text;
+
+-- Create app_settings table if not exists
+CREATE TABLE IF NOT EXISTS public.app_settings (
+    key text PRIMARY KEY,
+    value text,
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+-- Create broadcasts table if not exists
+CREATE TABLE IF NOT EXISTS public.broadcasts (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    message text NOT NULL,
+    sent_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+    room_id uuid REFERENCES public.rooms(id) ON DELETE CASCADE,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- Create private_messages table if not exists
+CREATE TABLE IF NOT EXISTS public.private_messages (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+    recipient_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+    content text NOT NULL,
+    type text DEFAULT 'text',
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- Enable RLS on profiles and new tables
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.broadcasts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.private_messages ENABLE ROW LEVEL SECURITY;
+
+-- Setup RLS policies for profiles
+DROP POLICY IF EXISTS "Allow public read access to profiles" ON public.profiles;
+CREATE POLICY "Allow public read access to profiles" ON public.profiles
+    FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow users to update their own profile" ON public.profiles;
+CREATE POLICY "Allow users to update their own profile" ON public.profiles
+    FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Allow users to insert their own profile" ON public.profiles;
+CREATE POLICY "Allow users to insert their own profile" ON public.profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Setup RLS policies for app_settings
+DROP POLICY IF EXISTS "Allow public read to app_settings" ON public.app_settings;
+CREATE POLICY "Allow public read to app_settings" ON public.app_settings
+    FOR SELECT USING (true);
+
+-- Setup RLS policies for private_messages
+DROP POLICY IF EXISTS "Allow users to read their own PMs" ON public.private_messages;
+CREATE POLICY "Allow users to read their own PMs" ON public.private_messages
+    FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = recipient_id);
+
+DROP POLICY IF EXISTS "Allow users to send PMs" ON public.private_messages;
+CREATE POLICY "Allow users to send PMs" ON public.private_messages
+    FOR INSERT WITH CHECK (auth.uid() = sender_id);
