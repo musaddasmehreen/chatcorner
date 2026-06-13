@@ -640,11 +640,16 @@ function drawMainVisualizer() {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
+  const styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue('--accent').trim() || '#7c3aed';
+  const accent2 = styles.getPropertyValue('--accent2').trim() || '#38c8e8';
+  const accentRgb = styles.getPropertyValue('--accent-rgb').trim() || '124, 58, 237';
+
   const levels = Object.values(participantLevels);
   const maxLevel = levels.length ? Math.max(...levels) : 0;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(var(--accent-rgb),0.16)';
+  ctx.fillStyle = `rgba(${accentRgb},0.16)`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const barWidth = canvas.width / VISUALIZER_BARS;
@@ -652,13 +657,19 @@ function drawMainVisualizer() {
     const mod = Math.sin((performance.now() / 220) + i * 0.9) * 0.18;
     const barLevel = Math.max(0.06, Math.min(1, maxLevel + mod));
     const h = barLevel * canvas.height;
-    ctx.fillStyle = i % 2 ? 'var(--accent)' : 'var(--accent2)';
+    ctx.fillStyle = i % 2 ? accent : accent2;
     ctx.fillRect(i * barWidth + 1, canvas.height - h, Math.max(2, barWidth - 2), h);
   }
 }
 
 function drawMiniSoundbars() {
   const bars = document.querySelectorAll('.mini-soundbar');
+  if (!bars.length) return;
+  const styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue('--accent').trim() || '#7c3aed';
+  const accent2 = styles.getPropertyValue('--accent2').trim() || '#38c8e8';
+  const accentRgb = styles.getPropertyValue('--accent-rgb').trim() || '124, 58, 237';
+
   bars.forEach((canvas) => {
     const userId = canvas.dataset.userId;
     const level = participantLevels[userId] || 0;
@@ -666,11 +677,11 @@ function drawMiniSoundbars() {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(var(--accent-rgb),0.18)';
+    ctx.fillStyle = `rgba(${accentRgb},0.18)`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const width = Math.max(2, Math.floor(level * canvas.width));
-    ctx.fillStyle = level > 0.12 ? 'var(--accent2)' : 'var(--accent)';
+    ctx.fillStyle = level > 0.12 ? accent2 : accent;
     ctx.fillRect(0, 0, width, canvas.height);
   });
 }
