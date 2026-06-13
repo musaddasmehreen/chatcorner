@@ -162,7 +162,6 @@ const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
 const AUTH_ENTRY_PAGE_URL = 'login.html';
 const IGNORED_USERS_STORAGE_KEY = 'cc-ignored-users';
-const POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
 const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
 let guestCleanupPromise = null;
 let ignoredUserIds = loadIgnoredUserIds();

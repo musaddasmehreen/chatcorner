@@ -83,3 +83,6 @@ window.currentProfile = null;
 window.currentRoom = null;
 window.onlineUsers = {};
 window.cameraStates = {};
+
+const POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
+window.POST_LOGIN_REDIRECT_KEY = POST_LOGIN_REDIRECT_KEY;

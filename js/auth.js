@@ -1,5 +1,4 @@
 const LOGIN_PAGE_URL = 'login.html';
-const POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
 
 function markPendingChatRedirect() {
   sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, String(Date.now()));
