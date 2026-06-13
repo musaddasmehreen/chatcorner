@@ -1606,7 +1606,7 @@ function sanitizeImageSource(msg) {
 function sanitizeAudioSource(msg) {
   const source = msg?.audio_url || msg?.voice_url || msg?.content || '';
   if (!source) return '';
-  if (source.startsWith('data:audio/') || source.startsWith('blob:') || source.startsWith('https://') || source.startsWith('http://')) {
+  if (source.startsWith('data:') || source.startsWith('blob:') || source.startsWith('https://') || source.startsWith('http://')) {
     return source;
   }
   return '';
@@ -1898,7 +1898,8 @@ async function sendVoiceNote() {
       }
 
       try {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const mimeType = roomVoiceNoteRecorder?.mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type: mimeType });
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
         const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
           room_id: roomIdForVoiceNote,

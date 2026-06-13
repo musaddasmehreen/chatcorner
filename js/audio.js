@@ -60,13 +60,14 @@ async function joinVoice() {
   voiceJoinAt = Date.now();
   participantLevels[currentUser.id] = 0;
 
-  document.getElementById('btn-join-voice').classList.add('hidden');
-  document.getElementById('btn-leave-voice').classList.remove('hidden');
-  document.getElementById('btn-mute').classList.remove('hidden');
-  document.getElementById('btn-toggle-camera').classList.remove('hidden');
-  document.getElementById('voice-visualizer').classList.remove('hidden');
+  document.getElementById('btn-join-voice')?.classList.add('hidden');
+  document.getElementById('btn-leave-voice')?.classList.remove('hidden');
+  document.getElementById('btn-mute')?.classList.remove('hidden');
+  document.getElementById('btn-toggle-camera')?.classList.remove('hidden');
+  document.getElementById('voice-visualizer')?.classList.remove('hidden');
   updateVoiceStatus();
-  document.getElementById('btn-mute').textContent = '🔇 Mute';
+  const btnMute = document.getElementById('btn-mute');
+  if (btnMute) btnMute.textContent = '🔇 Mute';
 
   updateVideoButtons();
   updateLocalPreview();
@@ -113,11 +114,11 @@ async function joinVoice() {
 }
 
 async function leaveVoice() {
-  if (!inVoice) return;
   const wasListener = isListenerMode;
+  const previouslyInVoice = inVoice;
   inVoice = false;
 
-  if (audioChannel) {
+  if (previouslyInVoice && audioChannel) {
     if (!wasListener) {
       await audioChannel.send({
         type: 'broadcast',
@@ -134,42 +135,57 @@ async function leaveVoice() {
     audioChannel = null;
   }
 
-  localStream?.getTracks().forEach(t => t.stop());
-  localStream = null;
+  if (previouslyInVoice) {
+    localStream?.getTracks().forEach(t => t.stop());
+    localStream = null;
 
-  Object.entries(peers).forEach(([peerId, pc]) => {
-    try { pc.close(); } catch (_) {}
-    cleanupPeerMedia(peerId);
-  });
-  peers = {};
+    Object.entries(peers).forEach(([peerId, pc]) => {
+      try { pc.close(); } catch (_) {}
+      cleanupPeerMedia(peerId);
+    });
+    peers = {};
 
-  closeFloatingCamera();
-  clearAllVisualizers();
-  participantLevels = {};
+    closeFloatingCamera();
+    clearAllVisualizers();
+    participantLevels = {};
+  }
 
-  document.getElementById('video-grid').innerHTML = '';
-  document.getElementById('video-grid').classList.add('hidden');
-  document.getElementById('local-video').srcObject = null;
-  document.getElementById('local-video').classList.add('hidden');
-  document.getElementById('peers-list').innerHTML = '';
+  const videoGrid = document.getElementById('video-grid');
+  if (videoGrid) {
+    videoGrid.innerHTML = '';
+    videoGrid.classList.add('hidden');
+  }
+  const localVideo = document.getElementById('local-video');
+  if (localVideo) {
+    localVideo.srcObject = null;
+    localVideo.classList.add('hidden');
+  }
+  const peersList = document.getElementById('peers-list');
+  if (peersList) peersList.innerHTML = '';
 
-  document.getElementById('btn-join-voice').classList.remove('hidden');
-  document.getElementById('btn-leave-voice').classList.add('hidden');
-  document.getElementById('btn-mute').classList.add('hidden');
-  document.getElementById('btn-toggle-camera').classList.add('hidden');
-  document.getElementById('voice-visualizer').classList.add('hidden');
-  document.getElementById('audio-status').textContent = '🎙️ Voice: Off';
-  document.getElementById('audio-status').classList.remove('listener-mode');
+  document.getElementById('btn-join-voice')?.classList.remove('hidden');
+  document.getElementById('btn-leave-voice')?.classList.add('hidden');
+  document.getElementById('btn-mute')?.classList.add('hidden');
+  document.getElementById('btn-toggle-camera')?.classList.add('hidden');
+  document.getElementById('voice-visualizer')?.classList.add('hidden');
+  
+  const statusEl = document.getElementById('audio-status');
+  if (statusEl) {
+    statusEl.textContent = '🎙️ Voice: Off';
+    statusEl.classList.remove('listener-mode');
+  }
 
-  isMuted = false;
-  isCameraOn = false;
-  isListenerMode = false;
-  listenerQueue = [];
-  voiceJoinAt = null;
-  isPromotingSpeaker = false;
+  if (previouslyInVoice) {
+    isMuted = false;
+    isCameraOn = false;
+    isListenerMode = false;
+    listenerQueue = [];
+    voiceJoinAt = null;
+    isPromotingSpeaker = false;
 
-  if (typeof setLocalCameraState === 'function') {
-    await setLocalCameraState(false);
+    if (typeof setLocalCameraState === 'function') {
+      await setLocalCameraState(false);
+    }
   }
 }
 
@@ -183,7 +199,8 @@ function toggleMute() {
   if (!track) return;
   isMuted = !isMuted;
   track.enabled = !isMuted;
-  document.getElementById('btn-mute').textContent = isMuted ? '🎙️ Unmute' : '🔇 Mute';
+  const btnMute = document.getElementById('btn-mute');
+  if (btnMute) btnMute.textContent = isMuted ? '🎙️ Unmute' : '🔇 Mute';
 }
 
 async function toggleCamera() {
@@ -328,7 +345,8 @@ function createPeerConnection(peerId, username) {
 
 function ensurePeerTile(peerId, username) {
   let tile = document.getElementById('video-tile-' + peerId);
-  if (!tile) {
+  const grid = document.getElementById('video-grid');
+  if (!tile && grid) {
     tile = document.createElement('div');
     tile.className = 'video-tile';
     tile.id = 'video-tile-' + peerId;
@@ -344,13 +362,13 @@ function ensurePeerTile(peerId, username) {
 
     tile.appendChild(videoEl);
     tile.appendChild(label);
-    document.getElementById('video-grid').appendChild(tile);
+    grid.appendChild(tile);
   }
 
   const cameraOn = typeof cameraStates !== 'undefined' ? !!cameraStates[peerId] : true;
-  tile.classList.toggle('hidden', !cameraOn);
-  document.getElementById('video-grid').classList.remove('hidden');
-  return tile.querySelector('video');
+  tile?.classList.toggle('hidden', !cameraOn);
+  grid?.classList.remove('hidden');
+  return tile?.querySelector('video');
 }
 
 function hidePeerTile(peerId) {
@@ -424,20 +442,21 @@ function updateLocalPreview() {
   const hasVideo = !!localStream?.getVideoTracks().length && isCameraOn;
 
   if (hasVideo) {
-    localVideo.srcObject = localStream;
-    localVideo.classList.remove('hidden');
+    if (localVideo) localVideo.srcObject = localStream;
+    localVideo?.classList.remove('hidden');
   } else {
-    localVideo.srcObject = null;
-    localVideo.classList.add('hidden');
+    if (localVideo) localVideo.srcObject = null;
+    localVideo?.classList.add('hidden');
   }
 
   if (inVoice) {
-    document.getElementById('video-grid').classList.remove('hidden');
+    document.getElementById('video-grid')?.classList.remove('hidden');
   }
 }
 
 function updateVideoButtons() {
-  document.getElementById('btn-toggle-camera').textContent = isCameraOn ? '📷 Camera Off' : '📷 Camera On';
+  const btnToggleCamera = document.getElementById('btn-toggle-camera');
+  if (btnToggleCamera) btnToggleCamera.textContent = isCameraOn ? '📷 Camera Off' : '📷 Camera On';
 }
 
 function attachVideoTrackToPeers(videoTrack) {
@@ -514,7 +533,8 @@ async function promoteListenerToSpeaker() {
     isMuted = false;
     const track = localStream?.getAudioTracks()[0];
     if (track) track.enabled = true;
-    document.getElementById('btn-mute').textContent = '🔇 Mute';
+    const btnMute = document.getElementById('btn-mute');
+    if (btnMute) btnMute.textContent = '🔇 Mute';
     await trackVoicePresence('speaker');
     updateVoiceStatus();
   } finally {
@@ -552,7 +572,8 @@ function syncVoiceRoleState() {
     const track = localStream?.getAudioTracks()[0];
     if (track) track.enabled = !shouldListen;
     isMuted = shouldListen;
-    document.getElementById('btn-mute').textContent = shouldListen ? '🎙️ Unmute' : '🔇 Mute';
+    const btnMute = document.getElementById('btn-mute');
+    if (btnMute) btnMute.textContent = shouldListen ? '🎙️ Unmute' : '🔇 Mute';
     trackVoicePresence(shouldListen ? 'listener' : 'speaker').catch(() => {});
   } else {
     isListenerMode = me.role === 'listener';
