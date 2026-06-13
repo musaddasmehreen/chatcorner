@@ -8,28 +8,31 @@
 
 /* ── Theme: Classic — clean white chatroom (default) ── */
 [data-theme="classic"] {
-  --bg:          #f0f0f0;
-  --surface:     #ffffff;
-  --panel:       #fafafa;
-  --border:      #c8e6c9;
-  --accent:      #2e7d32;
-  --accent2:     #1565c0;
-  --accent-rgb:  46,125,50;
-  --accent2-rgb: 21,101,192;
-  --green:       #2e7d32;
-  --red:         #c41e3a;
-  --text:        #222222;
-  --muted:       #666666;
-  --nick:        #1565c0;
-  --msg-bg:      transparent;
-  --msg-self:    transparent;
-  --radius:      4px;
-  --particle:    rgba(46,125,50,0.08);
-  --glow:        rgba(46,125,50,0.15);
-  --topbar-bg:   #ffffff;
-  --input-bg:    #ffffff;
-  --send-btn:    #c41e3a;
-  --shadow:      0 2px 12px rgba(0,0,0,0.08);
+  --bg:              #f0f0f0;
+  --surface:         #ffffff;
+  --panel:           #fafafa;
+  --border:          #c8e6c9;
+  --accent:          #2e7d32;
+  --accent2:         #1565c0;
+  --accent-rgb:      46,125,50;
+  --accent2-rgb:     21,101,192;
+  --green:           #2e7d32;
+  --red:             #c41e3a;
+  --text:            #222222;
+  --muted:           #666666;
+  --nick:            #1565c0;
+  --msg-bg:          transparent;
+  --msg-self:        transparent;
+  --radius:          4px;
+  --particle:        rgba(46,125,50,0.08);
+  --glow:            rgba(46,125,50,0.15);
+  --topbar-bg:       #ffffff;
+  --input-bg:        #ffffff;
+  --send-btn:        #c41e3a;
+  --shadow:          0 2px 12px rgba(0,0,0,0.08);
+  /* Classic layout extras */
+  --chat-border:     #4caf50;
+  --user-panel-bg:   linear-gradient(180deg, #fff9c4 0%, #fce4ec 40%, #e3f2fd 100%);
 }
 
 /* ── Theme: Nebula (default) — soft midnight blue/violet ── */
