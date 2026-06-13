@@ -76,3 +76,10 @@ window.ccSecurity = {
   canAccessAdminBootstrap,
   enforceAdminBootstrapAccess
 };
+
+// Global chat state variables shared across scripts
+window.currentUser = null;
+window.currentProfile = null;
+window.currentRoom = null;
+window.onlineUsers = {};
+window.cameraStates = {};

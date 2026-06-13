@@ -138,14 +138,11 @@ function getRoomImageUrlValue() {
 }
 
 /* ══ Chat State ═════════════════════════════════════════════════ */
-let currentUser    = null;
-let currentProfile = null;
-let currentRoom    = null;
+// Shared global state variables (declared on window in config.js)
+// currentUser, currentProfile, currentRoom, onlineUsers, cameraStates
 let messageChannel = null;
 let presenceChannel= null;
 let profileChannel = null;
-let onlineUsers    = {};
-let cameraStates   = {};
 let presenceBaseData = {};
 const GUEST_TEXT_RATE_LIMIT_COUNT = 2;
 const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -650,6 +647,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   updateCurrentUserBadge();
+  if (typeof ensurePmRealtime === 'function') {
+    ensurePmRealtime();
+  }
   if (currentProfile.is_registered) {
     const avatarBtn = document.getElementById('btn-edit-avatar');
     if (avatarBtn) avatarBtn.style.display = '';

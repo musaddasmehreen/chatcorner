@@ -116,6 +116,8 @@ document.addEventListener('click', (event) => {
   });
 });
 
+window.ensurePmRealtime = ensurePmRealtime;
+
 async function ensurePmRealtime() {
   if (typeof enforceCurrentUserModerationState === 'function') {
     const allowed = await enforceCurrentUserModerationState({ refresh: true });
