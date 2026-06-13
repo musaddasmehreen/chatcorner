@@ -4,7 +4,7 @@
 ═══════════════════════════════════════════════════════════════ */
 const THEMES      = ['nebula','ember','arctic','matrix','rose'];
 const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arctic \u2744\ufe0f', matrix:'Matrix', rose:'Rose \ud83c\udf38' };
-const GUEST_VOICE_LIMIT = 1;
+const GUEST_VOICE_LIMIT = 2;
 const EMOJI_GROUPS = [
   {
     label: 'Live',
@@ -144,8 +144,9 @@ let messageChannel = null;
 let presenceChannel= null;
 let profileChannel = null;
 let presenceBaseData = {};
-const GUEST_TEXT_RATE_LIMIT_COUNT = 2;
+const GUEST_TEXT_RATE_LIMIT_COUNT = 5;
 const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const GUEST_VOICE_MAX_DURATION_MS = 5000;
 const guestMessageTimesByRoom = new Map();
 let guestRateToastTimer = null;
 let roomVoiceNoteRecorder = null;
@@ -848,11 +849,12 @@ async function enterRoom(room) {
   const loadMoreBtn = document.getElementById('btn-load-older');
   if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !messages || messages.length < 50);
 
-  // Batch-append for performance
+  // Batch-append for performance (skip persisted system/deletion notices so newcomers don't see them)
   if (messages?.length) {
     const container = document.getElementById('messages');
     const frag = document.createDocumentFragment();
     messages.forEach(m => {
+      if (m.type === 'system') return; // deletion notices are transient — don't show in history
       const node = buildMessageNode(m);
       if (node) frag.appendChild(node);
     });
@@ -939,7 +941,7 @@ async function enterRoom(room) {
       }
     });
 
-  appendSystemMessage(`You joined #${room.name}`);
+  // (join notice suppressed — fresh page on room entry)
 }
 
 // FIX 1 — Disable input controls and show notice bar for guest users
@@ -1069,7 +1071,17 @@ function buildMessageNode(msg) {
 
 function appendMessage(msg) {
   const node = buildMessageNode(msg);
-  if (node) document.getElementById('messages').appendChild(node);
+  if (!node) return;
+  document.getElementById('messages').appendChild(node);
+  // Deletion notices (type=system) auto-disappear after 5 minutes for live users
+  if (msg?.type === 'system' && String(msg?.content || '').startsWith(DELETED_MESSAGE_PREFIX)) {
+    setTimeout(() => {
+      if (node.parentNode) {
+        node.classList.add('is-deleting');
+        setTimeout(() => node.remove(), 220);
+      }
+    }, 5 * 60 * 1000);
+  }
 }
 
 function appendSystemMessage(text) {
@@ -1193,6 +1205,7 @@ async function loadOlderMessages() {
   const frag = document.createDocumentFragment();
 
   [...older].reverse().forEach(m => {
+    if (m.type === 'system') return; // skip deletion notices in paginated history too
     const node = buildMessageNode(m);
     if (node) frag.appendChild(node);
   });
@@ -1928,6 +1941,14 @@ async function sendVoiceNote() {
     roomVoiceNoteRecorder.start();
     setVoiceNoteButtonState(true);
     appendSystemMessage('🎙️ Recording voice note… click again to send.');
+    // Guests: auto-stop after 5 seconds
+    if (!isRegisteredUser()) {
+      setTimeout(() => {
+        if (roomVoiceNoteRecorder?.state === 'recording') {
+          roomVoiceNoteRecorder.stop();
+        }
+      }, GUEST_VOICE_MAX_DURATION_MS);
+    }
   } catch (error) {
     appendSystemMessage(getVoiceNoteStartErrorMessage(error));
     setVoiceNoteButtonState(false);
@@ -1988,6 +2009,13 @@ function handleRealtimeMessageUpdate(msg) {
   const row = document.querySelector(`#messages .msg-row[data-message-id="${CSS.escape(String(msg.id))}"]`);
   if (!row) return;
   row.replaceWith(replacement);
+  // Auto-remove deletion notice after 5 minutes for live users
+  setTimeout(() => {
+    if (replacement.parentNode) {
+      replacement.classList.add('is-deleting');
+      setTimeout(() => replacement.remove(), 220);
+    }
+  }, 5 * 60 * 1000);
 }
 
 async function deleteMessageForEveryone(messageId, targetUserId, targetUsername) {
