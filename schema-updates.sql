@@ -140,3 +140,14 @@ CREATE POLICY "Allow users to read their own PMs" ON public.private_messages
 DROP POLICY IF EXISTS "Allow users to send PMs" ON public.private_messages;
 CREATE POLICY "Allow users to send PMs" ON public.private_messages
     FOR INSERT WITH CHECK (auth.uid() = sender_id);
+
+
+-- Enable pg_cron extension
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Purge inactive guest profiles created more than 2 hours ago
+SELECT cron.schedule(
+    'purge-guest-profiles-2h',
+    '0 * * * *', -- Run every hour
+    'DELETE FROM public.profiles WHERE is_registered = false AND created_at < NOW() - INTERVAL \'2 hours\''
+);

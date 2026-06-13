@@ -172,3 +172,18 @@ BEGIN;
         public.profiles, 
         public.private_messages;
 COMMIT;
+
+
+-- =====================================================================
+-- AUTOMATED MAINTENANCE: PG_CRON SCHEDULER
+-- =====================================================================
+
+-- Enable pg_cron extension
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Purge inactive guest profiles created more than 2 hours ago
+SELECT cron.schedule(
+    'purge-guest-profiles-2h',
+    '0 * * * *', -- Run every hour
+    'DELETE FROM public.profiles WHERE is_registered = false AND created_at < NOW() - INTERVAL \'2 hours\''
+);

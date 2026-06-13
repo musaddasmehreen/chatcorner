@@ -195,7 +195,8 @@ async function getActiveChatSession() {
     const restoredSession = await waitForRestoredSession();
     sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
     if (restoredSession) return restoredSession;
-    window.location.replace(`${AUTH_ENTRY_PAGE_URL}?session=restore`);
+    sessionStorage.setItem('cc_session_restore_failed', 'true');
+    window.location.replace(AUTH_ENTRY_PAGE_URL);
     return null;
   }
   sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
@@ -625,12 +626,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (!prof) {
     const username = 'User_' + currentUser.id.substr(0,5);
     await sbClient.from('profiles').insert({ id: currentUser.id, username, avatar_color: randomColor(), is_registered: false });
-    ({ data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single());
+    const { data: refetchedProf } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+    prof = refetchedProf || {
+      id: currentUser.id,
+      username: username,
+      avatar_color: randomColor(),
+      is_registered: false
+    };
   }
 
   currentProfile = prof;
   const localAvatar = localStorage.getItem('cc-avatar-' + currentUser.id);
-  if (localAvatar) currentProfile.avatar_url = localAvatar;
+  if (localAvatar && currentProfile) currentProfile.avatar_url = localAvatar;
   updatePresenceBaseFromProfile(currentProfile);
   startProfileRealtimeWatcher();
 
@@ -973,17 +980,24 @@ async function sendMessage() {
 
   if (!isSendingImage) input.value = '';
 
-  const { error } = await sbClient.from('messages').insert({
+  const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
     room_id:  currentRoom.id,
     user_id:  currentUser.id,
     username: currentProfile.username,
     content:  isSendingImage ? imageUrl : text,
     type:     isSendingImage ? 'image' : 'text'
-  });
+  }).select('id');
+
   if (error) {
     appendSystemMessage(isSendingImage ? 'Could not share image. Please try again.' : 'Could not send message. Please try again.');
     return;
   }
+
+  // Delete guest messages immediately from the database to keep history empty for guests
+  if (!isRegisteredUser() && insertedMsgs?.[0]?.id) {
+    void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
+  }
+
   if (isSendingImage) {
     closeRoomImageUrlInput();
     showChatToast('Image/GIF shared in chat.', 'success');
@@ -1887,16 +1901,19 @@ async function sendVoiceNote() {
       try {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
-        const { error } = await sbClient.from('messages').insert({
+        const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
           room_id: roomIdForVoiceNote,
           user_id: currentUser.id,
           username: currentProfile.username,
           content: dataUrl,
           type: 'voice'
-        });
+        }).select('id');
         if (error) {
           appendSystemMessage('Could not send voice note. Please try again.');
         } else if (!isRegisteredUser()) {
+          if (insertedMsgs?.[0]?.id) {
+            void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
+          }
           const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
           localStorage.setItem('cc-guest-voice-used', String(newCount));
           if (newCount >= GUEST_VOICE_LIMIT) {

@@ -78,7 +78,7 @@ async function loginUser() {
 
   // After a successful login we are authenticated — safe to read/write profiles.
   const { data: existingProf } = await sbClient
-    .from('profiles').select('id,email,username').eq('id', data.user.id).maybeSingle();
+    .from('profiles').select('id,email,username,is_registered').eq('id', data.user.id).maybeSingle();
 
   if (!existingProf) {
     // Profile was never saved (RLS blocked the upsert at registration time).
@@ -95,9 +95,20 @@ async function loginUser() {
     localStorage.removeItem('cc_pending_username');
     localStorage.removeItem('cc_pending_email');
   } else {
-    // Profile exists — patch missing email if needed, then clear pending keys.
+    // Profile exists — patch missing email, upgrade to registered if it was a guest profile, and clear pending keys.
+    const updatePayload = {};
+    if (!existingProf.is_registered) {
+      updatePayload.is_registered = true;
+      const pendingUsername = localStorage.getItem('cc_pending_username');
+      if (pendingUsername) {
+        updatePayload.username = pendingUsername;
+      }
+    }
     if (!existingProf.email && data.user.email) {
-      await sbClient.from('profiles').update({ email: data.user.email }).eq('id', data.user.id);
+      updatePayload.email = data.user.email;
+    }
+    if (Object.keys(updatePayload).length > 0) {
+      await sbClient.from('profiles').update(updatePayload).eq('id', data.user.id);
     }
     localStorage.removeItem('cc_pending_username');
     localStorage.removeItem('cc_pending_email');
@@ -299,8 +310,7 @@ async function logout() {
   sessionStorage.setItem('cc_logout_flag', 'true');
   
   // Use replace to prevent back button navigation to logged-in state
-  // Add a timestamp to prevent caching issues
-  window.location.replace(LOGIN_PAGE_URL + '?logout=' + Date.now());
+  window.location.replace(LOGIN_PAGE_URL);
 }
 
 function showMsg(el, text, type) {
@@ -359,10 +369,12 @@ const currentPage = window.location.pathname.split('/').pop() || '';
 const isLoginPage = currentPage === 'login.html';
 
 if (isLoginPage) {
-  // Check if we're coming from a logout action
-  const urlParams = new URLSearchParams(window.location.search);
-  const isLogoutRedirect = urlParams.has('logout');
-  const isRestoreFailure = urlParams.has('session');
+  // Check if we're coming from a logout action or restore failure (stored in sessionStorage to keep URL clean)
+  const isLogoutRedirect = sessionStorage.getItem('cc_logout_flag') === 'true';
+  const isRestoreFailure = sessionStorage.getItem('cc_session_restore_failed') === 'true';
+  if (isRestoreFailure) {
+    sessionStorage.removeItem('cc_session_restore_failed');
+  }
   
   // Re-apply cooldown state on page load (e.g. after a page refresh)
   const cooldownLeft = getRegCooldownRemaining();
