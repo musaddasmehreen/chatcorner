@@ -2,8 +2,8 @@
    Reads/writes localStorage key 'cc-theme'.
    Syncs dots in both the chat theme bar and any fixed switcher.
 ═══════════════════════════════════════════════════════════════ */
-const THEMES      = ['classic','nebula','ember','arctic','matrix','rose'];
-const THEME_NAMES = { classic:'Classic', nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arctic \u2744\ufe0f', matrix:'Matrix', rose:'Rose \ud83c\udf38' };
+const THEMES      = ['nebula','ember','arctic','matrix','rose'];
+const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arctic \u2744\ufe0f', matrix:'Matrix', rose:'Rose \ud83c\udf38' };
 const GUEST_VOICE_LIMIT = 1;
 const EMOJI_GROUPS = [
   {
@@ -37,7 +37,7 @@ const EMOJI_GROUPS = [
 ];
 
 (function initTheme() {
-  const saved = localStorage.getItem('cc-theme') || 'classic';
+  const saved = localStorage.getItem('cc-theme') || 'nebula';
   applyTheme(saved, false);
 })();
 
@@ -439,36 +439,9 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
 
 function updateCurrentUserBadge() {
   const badge = document.getElementById('user-badge');
-  const welcome = document.getElementById('welcome-nick');
-  if (!currentProfile) return;
-  let label = currentProfile.username || 'User';
-  if (currentProfile.is_owner) label += ' \ud83d\udc51';
-  else if (currentProfile.is_admin) label += ' \ud83d\udee1\ufe0f';
-  else if (currentProfile.is_registered) label += ' \u2713';
-  else label += ' \ud83d\udc64';
-  if (badge) badge.textContent = label;
-  if (welcome) welcome.textContent = currentProfile.username || 'User';
-  const adminLink = document.getElementById('btn-admin-link');
-  if (adminLink) adminLink.classList.toggle('hidden', !(currentProfile.is_admin || currentProfile.is_owner));
-}
-
-function updateRoomMeta(room = currentRoom, onlineCount = Object.keys(onlineUsers).length) {
-  const roomMetaLabel = document.getElementById('room-meta-label');
-  const roomPresencePill = document.getElementById('room-presence-pill');
-  const roomTypePill = document.getElementById('room-type-pill');
-  if (!room) {
-    if (roomMetaLabel) roomMetaLabel.textContent = 'Public room';
-    if (roomPresencePill) roomPresencePill.textContent = '0 online';
-    if (roomTypePill) roomTypePill.textContent = 'Text chat';
-    return;
+  if (badge && currentProfile) {
+    badge.textContent = currentProfile.username + (currentProfile.is_registered ? ' ✓' : ' 👤');
   }
-  if (roomMetaLabel) {
-    if (room.is_locked) roomMetaLabel.textContent = 'Read-only room';
-    else if (room.is_audio_enabled) roomMetaLabel.textContent = 'Voice-enabled room';
-    else roomMetaLabel.textContent = 'Public room';
-  }
-  if (roomPresencePill) roomPresencePill.textContent = `${onlineCount} online`;
-  if (roomTypePill) roomTypePill.textContent = room.is_audio_enabled ? 'Voice + text' : 'Text chat';
 }
 
 function disconnectRealtimeChannels() {
@@ -641,58 +614,21 @@ function getSortedOnlineUsers(users = Object.values(onlineUsers)) {
   });
 }
 
-async function ensureProfileLoaded() {
-  let { data: prof, error } = await sbClient
-    .from('profiles')
-    .select('*')
-    .eq('id', currentUser.id)
-    .maybeSingle();
-
-  if (error) console.warn('Profile fetch warning:', error.message);
-
-  if (!prof) {
-    const pendingUsername = localStorage.getItem('cc_pending_username');
-    const pendingEmail = localStorage.getItem('cc_pending_email');
-    const username = pendingUsername || ('User_' + currentUser.id.substr(0, 5));
-    const { error: upsertErr } = await sbClient.from('profiles').upsert({
-      id: currentUser.id,
-      username,
-      email: pendingEmail || currentUser.email || null,
-      avatar_color: randomColor(),
-      is_registered: !!(pendingEmail || currentUser.email)
-    });
-    if (upsertErr) console.warn('Profile upsert warning:', upsertErr.message);
-    ({ data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).maybeSingle());
-  }
-
-  if (!prof) {
-    prof = {
-      id: currentUser.id,
-      username: localStorage.getItem('cc_pending_username') || ('User_' + currentUser.id.substr(0, 5)),
-      email: currentUser.email || null,
-      avatar_color: randomColor(),
-      is_registered: !!currentUser.email,
-      is_admin: false,
-      is_mod: false,
-      is_owner: false,
-      is_vip: false
-    };
-  }
-
-  return prof;
-}
-
 window.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const session = await getActiveChatSession();
-    if (!session) {
-      appendSystemMessage?.('Session not found. Please log in again.');
-      setTimeout(() => { window.location.replace(AUTH_ENTRY_PAGE_URL); }, 1800);
-      return;
-    }
+  const session = await getActiveChatSession();
+  if (!session) return;
 
-    currentUser = session.user;
-    currentProfile = await ensureProfileLoaded();
+  currentUser = session.user;
+
+  let { data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+
+  if (!prof) {
+    const username = 'User_' + currentUser.id.substr(0,5);
+    await sbClient.from('profiles').insert({ id: currentUser.id, username, avatar_color: randomColor(), is_registered: false });
+    ({ data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single());
+  }
+
+  currentProfile = prof;
   const localAvatar = localStorage.getItem('cc-avatar-' + currentUser.id);
   if (localAvatar) currentProfile.avatar_url = localAvatar;
   updatePresenceBaseFromProfile(currentProfile);
@@ -766,7 +702,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Re-apply saved theme now that DOM is ready (syncs dots)
-  applyTheme(localStorage.getItem('cc-theme') || 'classic', false);
+  applyTheme(localStorage.getItem('cc-theme') || 'nebula', false);
   renderEmojiPicker();
 
   document.addEventListener('click', (event) => {
@@ -790,67 +726,30 @@ window.addEventListener('DOMContentLoaded', async () => {
   checkVpnOnEntry();
 
   await loadRooms();
-  } catch (initErr) {
-    console.error('[ChatCorner init error]', initErr);
-    showChatToast?.('Chat failed to initialize. Please refresh the page.', 'error', 6000);
-    appendSystemMessage?.('⚠️ Chat initialization failed. Check the browser console for details.');
-  }
 });
 
 let _roomCountInterval = null;
 
 async function loadRooms() {
-  const textList = document.getElementById('room-list');
-  const tabsList = document.getElementById('room-tabs');
   try {
     const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
-    if (error) {
-      console.error('loadRooms error', error);
-      showChatToast('Could not load rooms: ' + error.message, 'error', 6000);
-      appendSystemMessage('⚠️ Could not load rooms. Run schema.sql in Supabase and create at least one room.');
-      return;
-    }
-    if (!rooms?.length) {
-      showChatToast('No rooms found. Create one in the admin panel.', 'warning', 8000);
-      appendSystemMessage('⚠️ No chat rooms exist yet. An admin must create a room first.');
-      if (textList) textList.innerHTML = '';
-      if (tabsList) tabsList.innerHTML = '';
-      return;
-    }
+    if (error || !rooms?.length) return;
     cachedRooms = rooms;
+    const textList = document.getElementById('room-list');
     if (textList) textList.innerHTML = '';
-    if (tabsList) tabsList.innerHTML = '';
     rooms.forEach(room => {
       const icon = room.is_audio_enabled ? '🎤' : '💬';
-      if (textList) {
-        const li = document.createElement('li');
-        li.textContent = `${icon} ${room.name}`;
-        li.title = room.user_count != null ? `${room.name} — ${room.user_count} users` : room.name;
-        li.dataset.roomId = String(room.id);
-        li.onclick = () => enterRoom(room);
-        textList.appendChild(li);
-      }
-      if (tabsList) {
-        const tab = document.createElement('button');
-        tab.type = 'button';
-        tab.className = 'room-tab';
-        tab.dataset.roomId = String(room.id);
-        tab.title = room.name;
-        tab.innerHTML = `
-          <span class="room-tab-label">${escHtml(room.name)}</span>
-          <span class="room-count-badge">${Number.isFinite(room.user_count) ? room.user_count : 0}</span>
-        `;
-        tab.onclick = () => enterRoom(room);
-        tabsList.appendChild(tab);
-      }
+      const li = document.createElement('li');
+      li.textContent = `${icon} ${room.name}`;
+      li.title = room.user_count != null ? `${room.name} — ${room.user_count} users` : room.name;
+      li.dataset.roomId = String(room.id);
+      li.onclick = () => enterRoom(room);
+      if (textList) textList.appendChild(li);
     });
     renderRoomsTopbar(rooms);
     enterRoom(rooms[0]);
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
-  } catch (e) {
-    console.error('loadRooms error', e);
-    showChatToast('Failed to load rooms. Please refresh.', 'error');
-  }
+  } catch(e) { console.error('loadRooms error', e); }
 }
 
 async function refreshRoomCounts() {
@@ -866,14 +765,7 @@ async function refreshRoomCounts() {
 }
 
 function updateRoomTabCount(roomId, count) {
-  if (!roomId) return;
-  const tab = document.querySelector(`.room-tab[data-room-id="${roomId}"]`);
-  const badge = tab?.querySelector('.room-count-badge');
-  if (badge) badge.textContent = String(Math.max(0, count || 0));
-  cachedRooms = cachedRooms.map((room) =>
-    room.id === roomId ? { ...room, user_count: count } : room
-  );
-  if (currentRoom?.id === roomId) updateRoomMeta(currentRoom, count);
+  return;
 }
 
 // Rooms are shown in the left sidebar only.
@@ -902,12 +794,11 @@ async function enterRoom(room) {
   document.getElementById('messages').innerHTML = '';
   onlineUsers = {};
   cameraStates = {};
-  updateRoomMeta(room, 0);
-  document.getElementById('typing-indicator-host')?.replaceChildren();
 
-  // Update active tab in topbar and room tabs
+  // Update active tab in topbar
   document.querySelectorAll('.room-tab').forEach(t =>
     t.classList.toggle('active', t.dataset.roomId === String(currentRoom.id)));
+  // Update active item in left sidebar room list
   document.querySelectorAll('#room-list li').forEach(li =>
     li.classList.toggle('active', li.dataset.roomId === String(currentRoom.id)));
   // Update topbar room name
@@ -916,7 +807,7 @@ async function enterRoom(room) {
 
   const audioBar = document.getElementById('audio-bar');
   const msgInput = document.getElementById('msg-input');
-  const sendBtn  = document.getElementById('btn-send');
+  const sendBtn  = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
 
   if (room.is_audio_enabled) {
@@ -1155,11 +1046,9 @@ function buildMessageNode(msg) {
     <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
-      <div class="msg-head">
-        <span class="msg-username">${escHtml(msg.username || 'Unknown')}</span>
-        <span class="msg-time">${formatTime(msg.created_at)}</span>
-      </div>
+      <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
       <div class="msg-text">${escHtml(msg.content)}</div>
+      <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
   return div;
@@ -1241,28 +1130,18 @@ function renderUserList() {
   ul.innerHTML = '';
   ul.appendChild(frag);
 
-  const onlineCount = document.getElementById('online-count');
-  if (onlineCount) onlineCount.textContent = String(sortedUsers.length);
-  updateRoomMeta(currentRoom, sortedUsers.length);
-
   // Update room-users-bar
   const bar = document.getElementById('room-users-bar');
   if (bar) {
     bar.innerHTML = '';
     const bfrag = document.createDocumentFragment();
-    sortedUsers.slice(0, 6).forEach(u => {
+    sortedUsers.forEach(u => {
       const pill = document.createElement('span');
       pill.className = 'room-user-pill';
       const dot = u.registered ? '🟢' : '👤';
       pill.textContent = `${dot} ${u.username}`;
       bfrag.appendChild(pill);
     });
-    if (sortedUsers.length > 6) {
-      const more = document.createElement('span');
-      more.className = 'room-user-pill room-user-pill-muted';
-      more.textContent = `+${sortedUsers.length - 6} more`;
-      bfrag.appendChild(more);
-    }
     bar.appendChild(bfrag);
   }
 }
@@ -1368,14 +1247,13 @@ function showBlockedOverlay(message) {
 /* ── Typing indicator ── */
 function updateTypingIndicator() {
   let el = document.getElementById('typing-indicator');
-  const host = document.getElementById('typing-indicator-host');
   const others = [...typingUsers.values()].filter(u => u.userId !== currentUser?.id);
   if (!others.length) { if (el) el.remove(); return; }
   if (!el) {
     el = document.createElement('div');
     el.id = 'typing-indicator';
     el.className = 'typing-indicator';
-    host?.appendChild(el);
+    document.getElementById('messages')?.after(el);
   }
   const names = others.slice(0, 3).map(u => escHtml(u.username)).join(', ');
   el.textContent = `✏️ ${names} ${others.length === 1 ? 'is' : 'are'} typing…`;
@@ -1430,8 +1308,8 @@ function showCamInArea(userId, username) {
 
   // If audio.js has a peer stream, use it; otherwise delegate to openFloatingCamera
   let stream = null;
-  if (typeof peers !== 'undefined' && peers[userId]) {
-    const receivers = peers[userId].getReceivers?.() || [];
+  if (typeof peerConnections !== 'undefined' && peerConnections[userId]) {
+    const receivers = peerConnections[userId].getReceivers?.() || [];
     const videoReceiver = receivers.find(r => r.track?.kind === 'video');
     if (videoReceiver?.track) {
       stream = new MediaStream([videoReceiver.track]);
@@ -1605,7 +1483,7 @@ function applyGuestModeUI() {
 
 function updateComposerState() {
   const msgInput = document.getElementById('msg-input');
-  const sendBtn = document.getElementById('btn-send');
+  const sendBtn = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
   const imageBtn = document.getElementById('btn-image-url');
   const voiceBtn = document.getElementById('btn-voice-note');
@@ -2077,7 +1955,7 @@ function buildSystemMessageNode(content, createdAt) {
   const time = formatTime(createdAt);
   div.className = `msg-system${isDeletionNotice ? ' msg-system-deleted' : ''}`;
   div.innerHTML = `
-    <span class="msg-system-text">${isDeletionNotice ? escHtml(text) : `*${escHtml(text)}*`}</span>
+    <span class="msg-system-text">${isDeletionNotice ? escHtml(text) : `— ${escHtml(text)} —`}</span>
     ${time ? `<span class="msg-system-time">${escHtml(time)}</span>` : ''}
   `;
   return div;

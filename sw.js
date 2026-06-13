@@ -1,11 +1,10 @@
-const CACHE_NAME = 'chatcorner-v4';
+const CACHE_NAME = 'chatcorner-v3';
 
 const STATIC_ASSETS = [
   './',
   './chat.html',
   './css/style.css',
   './css/chat-extras.css',
-  './css/chatroom-layout.css',
   './css/resizable-layout.css',
   './js/config.js',
   './js/auth.js',
@@ -24,8 +23,7 @@ function isChatEntryPath(pathname) {
   return pathname === basePath ||
     pathname === `${basePath}/` ||
     pathname === `${basePath}/index.html` ||
-    pathname === `${basePath}/chat.html` ||
-    pathname === `${basePath}/chat`;
+    pathname === `${basePath}/chat.html`;
 }
 
 self.addEventListener('install', event => {
