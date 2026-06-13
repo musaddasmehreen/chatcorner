@@ -185,5 +185,5 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 SELECT cron.schedule(
     'purge-guest-profiles-2h',
     '0 * * * *', -- Run every hour
-    'DELETE FROM public.profiles WHERE is_registered = false AND created_at < NOW() - INTERVAL \'2 hours\''
+    'DELETE FROM public.profiles WHERE is_registered = false AND created_at < NOW() - INTERVAL ''2 hours'''
 );
