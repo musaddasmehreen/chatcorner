@@ -984,11 +984,37 @@ async function sendMessage() {
 
   if (!isSendingImage) input.value = '';
 
+  // ── Security: validate content before sending ──────────────────
+  if (!isSendingImage) {
+    const validation = window.ccValidateMessage ? window.ccValidateMessage(text) : { ok: true };
+    if (!validation.ok) {
+      showChatToast('⚠️ ' + validation.reason, 'warning');
+      return;
+    }
+  }
+  // Sanitise image URL — only allow http(s)
+  const safeImageUrl = isSendingImage && window.ccSanitize
+    ? window.ccSanitize.url(imageUrl)
+    : imageUrl;
+  if (isSendingImage && !safeImageUrl) {
+    showChatToast('⚠️ Invalid image URL blocked for security.', 'warning');
+    return;
+  }
+  // Validate room/user IDs are proper UUIDs before insert
+  if (window.ccSanitize) {
+    if (!window.ccSanitize.isUUID(currentRoom?.id) || !window.ccSanitize.isUUID(currentUser?.id)) {
+      console.warn('[CC-SEC] sendMessage: invalid room/user ID — aborting insert.');
+      return;
+    }
+  }
+  // Sanitise text content
+  const safeText = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
+
   const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
     room_id:  currentRoom.id,
     user_id:  currentUser.id,
     username: currentProfile.username,
-    content:  isSendingImage ? imageUrl : text,
+    content:  isSendingImage ? safeImageUrl : safeText,
     type:     isSendingImage ? 'image' : 'text'
   }).select('id');
 

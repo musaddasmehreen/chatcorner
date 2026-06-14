@@ -6,22 +6,27 @@
   <title>ChatCorner – Rooms</title>
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#8b6ded"/>
-  <link rel="stylesheet" href="css/style.css?v=1.1"/>
-  <link rel="stylesheet" href="css/chat-extras.css?v=1.1"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=1.1"/>
+  <!-- Security headers -->
+  <meta name="referrer" content="strict-origin-when-cross-origin"/>
+  <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
+  <meta http-equiv="X-Frame-Options" content="DENY"/>
+  <link rel="stylesheet" href="css/style.css?v=1.2"/>
+  <link rel="stylesheet" href="css/chat-extras.css?v=1.2"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=1.2"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     window.addEventListener('error', function(e) {
       var div = document.createElement('div');
       div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
-      div.innerHTML = '🚨 <strong>Runtime Error:</strong> ' + e.message + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno;
-      document.body.appendChild(div);
+      // Use textContent only — never innerHTML with user/runtime data
+      div.textContent = '🚨 Runtime Error: ' + (e.message || '') + ' at ' + (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '');
+      document.body && document.body.appendChild(div);
     });
     window.addEventListener('unhandledrejection', function(e) {
       var div = document.createElement('div');
       div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#f59e0b;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
-      div.innerHTML = '🚨 <strong>Unhandled Promise Rejection:</strong> ' + (e.reason ? (e.reason.message || e.reason) : 'Unknown reason');
-      document.body.appendChild(div);
+      div.textContent = '🚨 Promise Rejection: ' + (e.reason ? (e.reason.message || String(e.reason)) : 'Unknown reason');
+      document.body && document.body.appendChild(div);
     });
   </script>
 </head>
@@ -214,13 +219,14 @@
     <video id="floating-camera-video" autoplay playsinline></video>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js?v=1.5"></script>
-  <script src="js/auth.js?v=1.5"></script>
-  <script src="js/permissions.js?v=1.5"></script>
-  <script src="js/chat.js?v=1.5"></script>
-  <script src="js/pm.js?v=1.5"></script>
-  <script src="js/audio.js?v=1.5"></script>
-  <script src="js/resizable-layout.js?v=1.5"></script>
+  <script src="js/security.js?v=3.0"></script>
+  <script src="js/config.js?v=1.6"></script>
+  <script src="js/auth.js?v=1.6"></script>
+  <script src="js/permissions.js?v=1.6"></script>
+  <script src="js/chat.js?v=1.6"></script>
+  <script src="js/pm.js?v=1.6"></script>
+  <script src="js/audio.js?v=1.6"></script>
+  <script src="js/resizable-layout.js?v=1.6"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});

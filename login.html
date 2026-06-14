@@ -6,6 +6,10 @@
   <title>ChatCorner Login</title>
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#8b6ded" />
+  <!-- Security hardening headers -->
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
   <style>
     :root {
       --bg: #090b1f;
@@ -195,7 +199,8 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js?v=1.5"></script>
-  <script src="js/auth.js?v=1.5"></script>
+  <script src="js/security.js?v=3.0"></script>
+  <script src="js/config.js?v=1.6"></script>
+  <script src="js/auth.js?v=1.6"></script>
 </body>
 </html>
