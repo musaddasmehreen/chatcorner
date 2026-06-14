@@ -871,3 +871,16 @@ body.guest-mode .emoji-bar { display: none; }
   opacity: 0.85;
   cursor: default;
 }
+
+/* ── Guest PM Notice ── */
+.pm-guest-notice {
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: rgba(var(--accent-rgb), 0.07);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  margin: 0.3rem 0 0.5rem;
+  text-align: center;
+  line-height: 1.4;
+}

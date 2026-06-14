@@ -428,73 +428,78 @@ window.ccSecLog = (function() {
   return { record, get };
 })();
 
-/* ── 17. XHR / Fetch Intercept ─────────────────────────────────
-   Prevents rogue scripts from making requests to unknown origins.*/
-(function() {
-  const ALLOWED_ORIGINS = [
-    location.origin,
-    'https://fonts.googleapis.com',
-    'https://fonts.gstatic.com',
-    'https://cdn.jsdelivr.net'
-  ];
-  // Allow any supabase.co subdomain
+/* ── 17-18. Lazy Deferred Security Init ─────────────────────────
+   XHR/fetch intercept + idle-timeout are deferred so they NEVER
+   block rendering or first meaningful paint. They activate once
+   the browser has spare CPU time (requestIdleCallback).           */
+function _ccDeferredSecurityInit() {
+  // XHR / Fetch Intercept
+  const ALLOWED = [location.origin, 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'];
   function isAllowed(url) {
     try {
       const u = new URL(url, location.origin);
       if (u.hostname === location.hostname) return true;
       if (u.hostname.endsWith('.supabase.co')) return true;
-      return ALLOWED_ORIGINS.some(o => url.startsWith(o));
-    } catch (_) { return true; } // relative — always ok
+      return ALLOWED.some(o => url.startsWith(o));
+    } catch (_) { return true; }
   }
-
   const _origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     if (!isAllowed(url)) {
       window.ccSecLog?.record('XHR_BLOCKED', { url });
-      throw new Error('[CC-SEC] XHR to disallowed origin blocked: ' + url);
+      throw new Error('[CC-SEC] XHR blocked: ' + url);
     }
     return _origOpen.call(this, method, url, ...rest);
   };
-
   const _origFetch = window.fetch;
   window.fetch = function(input, init) {
     const url = typeof input === 'string' ? input : input?.url || '';
     if (!isAllowed(url)) {
       window.ccSecLog?.record('FETCH_BLOCKED', { url });
-      return Promise.reject(new Error('[CC-SEC] Fetch to disallowed origin blocked: ' + url));
+      return Promise.reject(new Error('[CC-SEC] Fetch blocked: ' + url));
     }
     return _origFetch.call(window, input, init);
   };
-})();
 
-/* ── 18. Idle-Timeout Protection ────────────────────────────────
-   Force re-auth after 2 hours of inactivity (registered users).  */
-(function() {
+  // Idle timeout — auto-logout registered users after 2h inactivity
   const IDLE_LIMIT_MS = 2 * 60 * 60 * 1000;
-  let _lastActivity  = Date.now();
-  let _idleTimer     = null;
-
+  let _idleTimer = null;
   function resetIdleTimer() {
-    _lastActivity = Date.now();
     clearTimeout(_idleTimer);
     _idleTimer = setTimeout(() => {
-      // Only auto-logout registered users, guests can stay
       if (window.currentProfile?.is_registered) {
         window.ccSecLog?.record('IDLE_TIMEOUT', {});
         if (typeof logout === 'function') logout();
       }
     }, IDLE_LIMIT_MS);
   }
-
-  ['mousemove','keydown','touchstart','click','scroll'].forEach(ev => {
+  ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'].forEach(ev => {
     document.addEventListener(ev, resetIdleTimer, { passive: true });
   });
-
   resetIdleTimer();
-})();
+
+  // Fingerprint store (async, non-blocking)
+  window.ccFingerprint?.store?.();
+
+  // Boot log
+  window.ccSecLog?.record('SECURITY_BOOT', {
+    https: location.protocol === 'https:',
+    bot: window.ccBotDetect?.isBot?.(),
+    sessionOk: window.ccSession?.isValid?.()
+  });
+
+  console.log('%c🛡️ ChatCorner Security v3.0 Active', 'color:#4ade80;font-weight:bold;font-size:13px;');
+}
+
+// Fire deferred init during browser idle time — zero impact on page load
+if (typeof requestIdleCallback === 'function') {
+  requestIdleCallback(_ccDeferredSecurityInit, { timeout: 3000 });
+} else {
+  window.addEventListener('load', () => setTimeout(_ccDeferredSecurityInit, 400));
+}
 
 /* ── 19. Message Content Validator ─────────────────────────────
-   Called before any message insert to validate content.          */
+   Synchronous — called per-message before DB insert.             */
 window.ccValidateMessage = function(text) {
   if (!text || typeof text !== 'string') return { ok: false, reason: 'Empty message' };
   if (text.length > 500) return { ok: false, reason: 'Message too long' };
@@ -505,12 +510,3 @@ window.ccValidateMessage = function(text) {
   }
   return { ok: true };
 };
-
-/* ── 20. Final Boot Log ─────────────────────────────────────────*/
-window.ccSecLog?.record('SECURITY_BOOT', {
-  https: location.protocol === 'https:',
-  bot: window.ccBotDetect?.isBot(),
-  sessionOk: window.ccSession?.isValid()
-});
-
-console.log('%c🛡️ ChatCorner Security v3.0 Active', 'color:#4ade80;font-weight:bold;font-size:13px;');

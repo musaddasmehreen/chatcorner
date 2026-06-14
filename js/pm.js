@@ -148,9 +148,16 @@ async function ensurePmRealtime() {
 
 async function openPrivateChat(userId, username) {
   if (!userId || !currentUser?.id || userId === currentUser.id) return;
+  // Guests can RECEIVE/reply to PMs but cannot initiate new ones
   if (!currentProfile?.is_registered) {
-    alert('🔒 Register to use private chat.');
-    return;
+    // Only allow opening if it was triggered by an incoming PM (caller passes fromIncoming=true)
+    // or if a window already exists
+    if (!pmWindows[userId] && !openPrivateChat._allowedForGuest) {
+      if (typeof showChatToast === 'function') {
+        showChatToast('Register to start private chats. You can reply to messages sent to you.', 'info');
+      }
+      return;
+    }
   }
   await ensurePmRealtime();
 
@@ -290,8 +297,32 @@ async function openPrivateChat(userId, username) {
   updatePmCallUi(userId);
   positionPmWindows();
 
-  if (pmTableAvailable !== false) {
+  if (pmTableAvailable !== false && currentProfile?.is_registered) {
     await loadPmHistoryFromDb(userId);
+  }
+
+  // Show a soft notice for guests so they know they're in reply-only mode
+  if (!currentProfile?.is_registered) {
+    const box = getPmMessagesBox(userId);
+    if (box) {
+      const notice = document.createElement('div');
+      notice.className = 'pm-guest-notice';
+      notice.innerHTML = `🔓 Guest mode — you can reply to this message. <a href="login.html" style="color:var(--accent);text-decoration:underline">Register</a> for full private chat.`;
+      box.prepend(notice);
+    }
+  }
+}
+
+/**
+ * Opens a PM window for an INCOMING message.
+ * Temporarily allows the window to open for guests, then clears the flag.
+ */
+async function openPrivateChatIncoming(userId, username) {
+  openPrivateChat._allowedForGuest = true;
+  try {
+    await openPrivateChat(userId, username);
+  } finally {
+    openPrivateChat._allowedForGuest = false;
   }
 }
 
@@ -471,9 +502,13 @@ async function sendPrivateText(userId) {
     const allowed = await enforceCurrentUserModerationState({ refresh: true });
     if (!allowed) return;
   }
+  // Guests can send replies ONLY inside an already-open PM window (received from a registered user)
   if (!currentProfile?.is_registered) {
-    alert('🔒 Register to send private messages.');
-    return;
+    if (!pmWindows[userId]) {
+      if (typeof showChatToast === 'function') showChatToast('🔒 Register to send private messages.', 'info');
+      return;
+    }
+    // Allowed: guest is replying inside an open PM window — fall through
   }
   const input = getPmInput(userId);
   if (!input) return;
@@ -499,8 +534,11 @@ async function sendPrivateText(userId) {
   if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
   pmTextHistory[userId].push(message);
 
-  await persistPmToDb(userId, isSendingImage ? imageUrl : text, isSendingImage ? 'image' : 'text');
   await sendPmBroadcast(isSendingImage ? { to: userId, type: 'image', imageUrl } : { to: userId, type: 'text', text });
+  // Registered users also persist to DB for history
+  if (currentProfile?.is_registered) {
+    await persistPmToDb(userId, isSendingImage ? imageUrl : text, isSendingImage ? 'image' : 'text');
+  }
   if (isSendingImage) {
     closePmImageInput(userId);
     if (typeof showChatToast === 'function') showChatToast('Image/GIF sent in private message.', 'success');
@@ -508,13 +546,18 @@ async function sendPrivateText(userId) {
 }
 
 async function handleIncomingPm(payload) {
-  if (!currentProfile?.is_registered) return;
+  // Guests CAN receive PMs from registered users
   const fromUserId = payload.from;
   if (!fromUserId) return;
   if (typeof canProcessIncomingPayload === 'function' && !canProcessIncomingPayload(fromUserId)) return;
 
   const username = payload.username || getUsernameById(fromUserId);
-  await openPrivateChat(fromUserId, username);
+
+  // For guests: temporarily set the flag to allow the PM window to open for incoming messages
+  if (!currentProfile?.is_registered) {
+    openPrivateChat._allowedForGuest = true;
+  }
+  await openPrivateChatIncoming(fromUserId, username);
 
   if (payload.type === 'voice' && payload.voiceDataUrl) {
     const blob = dataUrlToBlob(payload.voiceDataUrl);
