@@ -2194,34 +2194,53 @@ async function clearMyMessagesFromScreen() {
     clearBtn.disabled = true;
     clearBtn.textContent = 'Deleting…';
   }
-  const archivedCount = archiveClearedMessageRows(mine, 'clear-my-messages-db');
-  const { error } = await sbClient.from('messages').delete().in('id', messageIds).eq('room_id', currentRoom?.id);
-  if (error) {
-    showChatToast(`Could not delete messages: ${error.message}`, 'warning', 3200);
-    console.warn('Failed to clear messages permanently', {
-      userId: currentUser?.id,
-      roomId: currentRoom?.id,
-      count: messageIds.length,
-      error: error.message
+
+  const isModOrAbove = getViewerRoleLevel() >= 3;
+
+  if (isModOrAbove) {
+    const archivedCount = archiveClearedMessageRows(mine, 'clear-my-messages-db');
+    const { error } = await sbClient.from('messages').delete().in('id', messageIds).eq('room_id', currentRoom?.id);
+    if (error) {
+      showChatToast(`Could not delete messages: ${error.message}`, 'warning', 3200);
+      console.warn('Failed to clear messages permanently', {
+        userId: currentUser?.id,
+        roomId: currentRoom?.id,
+        count: messageIds.length,
+        error: error.message
+      });
+      if (clearBtn) {
+        clearBtn.disabled = false;
+        clearBtn.textContent = 'Clear My Messages';
+      }
+      return;
+    }
+    mine.forEach(node => {
+      node.classList.add('is-deleting');
+      setTimeout(() => node.remove(), 240);
     });
     if (clearBtn) {
-      clearBtn.disabled = false;
-      clearBtn.textContent = 'Clear My Messages';
+      clearBtn.textContent = 'Deleted ✓';
+      setTimeout(() => {
+        clearBtn.disabled = false;
+        clearBtn.textContent = 'Clear My Messages';
+      }, 1800);
     }
-    return;
+    showChatToast(`Deleted ${mine.length} message${mine.length === 1 ? '' : 's'} for everyone${archivedCount ? ' and saved to your archive.' : '.'}`, 'success');
+  } else {
+    // Normal/VIP users: Local clear only
+    mine.forEach(node => {
+      node.classList.add('is-deleting');
+      setTimeout(() => node.remove(), 240);
+    });
+    if (clearBtn) {
+      clearBtn.textContent = 'Cleared ✓';
+      setTimeout(() => {
+        clearBtn.disabled = false;
+        clearBtn.textContent = 'Clear My Messages';
+      }, 1800);
+    }
+    showChatToast(`Cleared your ${mine.length} message${mine.length === 1 ? '' : 's'} locally from your screen.`, 'success');
   }
-  mine.forEach(node => {
-    node.classList.add('is-deleting');
-    setTimeout(() => node.remove(), 240);
-  });
-  if (clearBtn) {
-    clearBtn.textContent = 'Deleted ✓';
-    setTimeout(() => {
-      clearBtn.disabled = false;
-      clearBtn.textContent = 'Clear My Messages';
-    }, 1800);
-  }
-  showChatToast(`Deleted ${mine.length} message${mine.length === 1 ? '' : 's'} for everyone${archivedCount ? ' and saved to your archive.' : '.'}`, 'success');
 }
 
 function clearMyMessages() {
