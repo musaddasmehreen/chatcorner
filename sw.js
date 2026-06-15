@@ -4,13 +4,13 @@ const STATIC_ASSETS = [
   './',
   './chat.html',
   './css/style.css',
-  './css/chat-extras.css',
+  './css/chat-extras-v2.css',
   './css/resizable-layout.css',
   './js/config.js',
   './js/auth.js',
-  './js/chat.js',
+  './js/chat-v2.js',
   './js/pm.js',
-  './js/audio.js',
+  './js/audio-v2.js',
   './manifest.json'
 ];
 
