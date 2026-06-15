@@ -482,47 +482,65 @@ body.guest-mode .emoji-bar { display: none; }
 .pc-ip { word-break: break-all; }
 
 .pc-actions {
-  display: flex;
-  gap: 0.4rem;
-  margin-top: 0.65rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.38rem;
+  margin-top: 0.7rem;
 }
 
-.pc-ban-btn, .pc-vip-btn, .pc-kick-btn, .pc-ignore-btn {
-  padding: 0.28rem 0.6rem;
-  border-radius: 999px;
+/* All profile card action buttons share the same base style */
+.pc-ban-btn, .pc-vip-btn, .pc-kick-btn,
+.pc-ignore-btn, .pc-pm-btn {
+  padding: 0.38rem 0.5rem;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
   font-family: inherit;
   border: 1px solid;
-  transition: background 0.15s;
+  text-align: center;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-ban-btn:hover, .pc-vip-btn:hover,
+.pc-kick-btn:hover, .pc-ignore-btn:hover, .pc-pm-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+}
+.pc-ban-btn:active, .pc-vip-btn:active,
+.pc-kick-btn:active, .pc-ignore-btn:active, .pc-pm-btn:active {
+  transform: scale(0.97);
 }
 
-.pc-ban-btn {
-  border-color: rgba(248,113,113,0.45);
-  background: rgba(248,113,113,0.1);
-  color: var(--red);
-}
-.pc-ban-btn:hover { background: rgba(248,113,113,0.24); }
-
+/* Individual colour themes */
 .pc-kick-btn {
   border-color: rgba(245,158,11,0.45);
   background: rgba(245,158,11,0.1);
   color: #f59e0b;
 }
-.pc-kick-btn:hover { background: rgba(245,158,11,0.24); }
+.pc-kick-btn:hover { background: rgba(245,158,11,0.22); }
+
+.pc-ban-btn {
+  border-color: rgba(248,113,113,0.45);
+  background: rgba(248,113,113,0.1);
+  color: #f87171;
+}
+.pc-ban-btn:hover { background: rgba(248,113,113,0.22); }
 
 .pc-vip-btn {
   border-color: rgba(251,191,36,0.45);
   background: rgba(251,191,36,0.1);
   color: #fbbf24;
+  grid-column: 1 / -1; /* VIP spans full width when alone at bottom */
 }
-.pc-vip-btn:hover { background: rgba(251,191,36,0.24); }
+.pc-vip-btn:hover { background: rgba(251,191,36,0.22); }
 
 .pc-ignore-btn {
   border-color: rgba(var(--accent-rgb),0.35);
   background: rgba(var(--accent-rgb),0.08);
-  color: var(--text);
+  color: var(--muted);
 }
 .pc-ignore-btn:hover { background: rgba(var(--accent-rgb),0.18); }
 
@@ -555,19 +573,14 @@ body.guest-mode .emoji-bar { display: none; }
 }
 .pc-close-btn:hover { background: rgba(239,68,68,0.2); color: #f87171; border-color: rgba(239,68,68,0.4); }
 
-/* PM button in profile card */
+/* PM button colour theme (base styles in shared rule above) */
 .pc-pm-btn {
-  padding: 0.28rem 0.6rem;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-family: inherit;
-  border: 1px solid rgba(99,102,241,0.45);
+  border-color: rgba(99,102,241,0.45);
   background: rgba(99,102,241,0.1);
   color: #a5b4fc;
-  transition: background 0.15s;
 }
-.pc-pm-btn:hover { background: rgba(99,102,241,0.24); }
+.pc-pm-btn:hover { background: rgba(99,102,241,0.22); }
+
 
 .chat-action-sheet {
   position: fixed;
