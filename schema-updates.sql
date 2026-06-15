@@ -171,3 +171,8 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bold_text boolean DEFAULT f
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS total_online_time integer DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS monthly_online_time integer DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_month integer;
+
+-- =====================================================================
+-- UPDATE: COINS SYSTEM
+-- =====================================================================
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS coins integer DEFAULT 150;

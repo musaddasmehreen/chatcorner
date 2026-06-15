@@ -2811,10 +2811,10 @@ async function showProfileModal(userId, startTab = 'profile') {
       </div>
       <div class="cc-profile-body">
         <aside class="cc-profile-sidebar">
-          <button class="cc-profile-tab-btn" data-tab="profile">👤 My profile</button>
+          <button class="cc-profile-tab-btn" data-tab="profile">${isMe ? '👤 My profile' : '👤 Profile'}</button>
           ${isMe ? `<button class="cc-profile-tab-btn" data-tab="vip">⭐ VIP</button>` : ''}
           ${isMe ? `<button class="cc-profile-tab-btn" data-tab="ignore">🚫 Ignore list</button>` : ''}
-          ${isMe ? `<button class="cc-profile-tab-btn" data-tab="coins">🪙 Coins</button>` : ''}
+          ${isMe || (getViewerRoleLevel() >= 3) ? `<button class="cc-profile-tab-btn" data-tab="coins">🪙 Coins</button>` : ''}
           ${isMe ? `<button class="cc-profile-tab-btn" data-tab="account">⚙️ Account</button>` : ''}
         </aside>
         <main class="cc-profile-content" id="cc-profile-content-pane">
@@ -3036,7 +3036,12 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
                 </label>
                 <button class="btn-edit" onclick="renderProfileTab('profile', currentProfile, true, true)">🔧 Edit profile</button>
               </div>
-            ` : ''}
+            ` : (getViewerRoleLevel() >= 3 ? `
+              <div class="cc-profile-btn-vertical">
+                <button class="btn-edit" id="cc-btn-toggle-user-vip" onclick="toggleUserVipFromProfile('${profile.id}', ${!isVip})">${isVip ? '⭐ Revoke VIP' : '⭐ Grant VIP'}</button>
+                <button class="btn-photo" onclick="renderProfileTab('coins', senderProfilesCache.get('${profile.id}') || currentProfile, false)">🪙 Allot Coins</button>
+              </div>
+            ` : '')}
           </div>
           <div class="cc-profile-view-right">
             <div class="cc-profile-view-header">
@@ -3170,16 +3175,67 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
   } 
   
   else if (tab === 'coins') {
-    container.innerHTML = `
-      <div class="cc-profile-coins-card">
-        <span class="cc-profile-coin-spinner">🪙</span>
-        <div class="cc-profile-coins-bal">150 Coins</div>
-        <p class="cc-profile-coins-desc">
-          Coins can be spent on premium emojis, voice note filters, background styles, and virtual gifts.
-        </p>
-        <button class="cc-profile-btn primary" onclick="showChatToast('🪙 Coins store is currently in sandbox mode. You have been credited +50 coins!', 'success')">Get Free Coins</button>
-      </div>
-    `;
+    const coinsVal = profile.coins !== undefined ? profile.coins : 150;
+    
+    if (isMe) {
+      container.innerHTML = `
+        <div class="cc-profile-coins-card" style="padding: 20px 10px;">
+          <span class="cc-profile-coin-spinner">🪙</span>
+          <div class="cc-profile-coins-bal">${coinsVal} Coins</div>
+          <p class="cc-profile-coins-desc" style="margin-bottom:12px;">
+            Coins can be spent on premium emojis, voice note filters, background styles, and virtual gifts.
+          </p>
+          
+          <h4 style="color:#fff; margin:20px 0 10px; font-family:'Exo 2',sans-serif; text-align:left; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">🛒 Purchase Coins</h4>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; text-align: left;">
+            <div style="background: rgba(10, 12, 32, 0.5); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <div style="font-weight: 700; color: #fff; font-size: 1.1rem; margin-bottom: 4px;">🪙 150 Coins</div>
+                <span style="font-size: 0.75rem; color: var(--muted);">Starter coin package for chat items.</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+                <span style="font-weight: 700; color: #f59e0b; font-family: 'Orbitron';">100 PKR</span>
+                <button class="cc-profile-btn primary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="contactAdminForCoins(150, 100)">Buy Now</button>
+              </div>
+            </div>
+            
+            <div style="background: rgba(10, 12, 32, 0.5); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <div style="font-weight: 700; color: #fff; font-size: 1.1rem; margin-bottom: 4px;">🪙 250 Coins</div>
+                <span style="font-size: 0.75rem; color: var(--muted);">Popular coin package with extra value.</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+                <span style="font-weight: 700; color: #f59e0b; font-family: 'Orbitron';">150 PKR</span>
+                <button class="cc-profile-btn primary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="contactAdminForCoins(250, 150)">Buy Now</button>
+              </div>
+            </div>
+          </div>
+          
+          <div style="margin-top:16px; font-size:0.8rem; color:var(--muted); text-align:center; background:rgba(10, 12, 32, 0.3); padding:10px; border-radius:8px;">
+            ℹ️ Payments are accepted via JazzCash / EasyPaisa / Bank Transfer. Clicking "Buy Now" will open a private message with the Admin to complete your purchase.
+          </div>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="cc-profile-coins-card" style="padding: 20px 10px;">
+          <span class="cc-profile-coin-spinner">🪙</span>
+          <div class="cc-profile-coins-bal">${coinsVal} Coins</div>
+          <p style="color:var(--muted);font-size:0.9rem;margin-bottom:12px;">This is the coin balance for user ${escHtml(profile.username || 'User')}.</p>
+          
+          <div style="margin-top:20px; background:rgba(10,12,32,0.4); border:1px solid rgba(255,255,255,0.05); padding:20px; border-radius:12px; text-align:left;">
+            <h4 style="margin:0 0 12px;color:#fff;">🛡️ Admin Coins Control</h4>
+            <p style="font-size:0.8rem;color:var(--muted);margin:0 0 14px;">Allot any amount of coins to this user by entering the quantity below.</p>
+            
+            <div style="display:flex;gap:12px;align-items:center;">
+              <input type="number" id="cc-allot-coins-val" class="cc-profile-input" style="width:120px;" value="${coinsVal}" min="0" />
+              <button class="cc-profile-btn primary" onclick="allotCoinsToUser('${profile.id}')">💾 Allot Coins</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
   } 
   
   else if (tab === 'account') {
@@ -3543,5 +3599,98 @@ function formatOnlineTime(totalSeconds) {
   parts.push(`${s}s`);
   return parts.join(' ');
 }
+
+/* 🪙 Admin Coins & VIP Control Logic */
+async function toggleUserVipFromProfile(userId, grant) {
+  try {
+    const { error } = await sbClient.from('profiles').update({ is_vip: grant }).eq('id', userId);
+    if (error) throw error;
+    
+    const cached = senderProfilesCache.get(userId);
+    if (cached) {
+      cached.is_vip = grant;
+    }
+    if (onlineUsers[userId]) {
+      onlineUsers[userId].isVip = grant;
+    }
+    
+    showChatToast(grant ? '⭐ VIP status granted!' : '⭐ VIP status revoked!', 'success');
+    showProfileModal(userId, 'profile');
+  } catch (err) {
+    showChatToast('Failed to update VIP: ' + err.message, 'error');
+  }
+}
+
+async function allotCoinsToUser(userId) {
+  const input = document.getElementById('cc-allot-coins-val');
+  if (!input) return;
+  
+  const amount = parseInt(input.value, 10);
+  if (isNaN(amount) || amount < 0) {
+    showChatToast('Please enter a valid coin amount.', 'error');
+    return;
+  }
+  
+  try {
+    const { error } = await sbClient.from('profiles').update({ coins: amount }).eq('id', userId);
+    if (error) throw error;
+    
+    const cached = senderProfilesCache.get(userId);
+    if (cached) {
+      cached.coins = amount;
+    }
+    if (userId === currentUser?.id) {
+      currentProfile.coins = amount;
+    }
+    
+    showChatToast(`🪙 Successfully allotted ${amount} coins!`, 'success');
+    
+    const updatedProfile = cached || (userId === currentUser?.id ? currentProfile : null);
+    if (updatedProfile) {
+      renderProfileTab('coins', updatedProfile, userId === currentUser?.id);
+    }
+  } catch (err) {
+    showChatToast('Failed to allot coins: ' + err.message, 'error');
+  }
+}
+
+async function contactAdminForCoins(coins, price) {
+  closeProfileModal();
+  
+  const adminUser = Object.values(onlineUsers).find(u => u.isOwner || u.is_owner || u.isAdmin || u.is_admin);
+  
+  if (adminUser) {
+    showChatToast(`Opening chat with Admin ${adminUser.username} to purchase coins...`, 'success');
+    if (typeof openPrivateChat === 'function') {
+      openPrivateChat(adminUser.userId, adminUser.username);
+      setTimeout(() => {
+        const pmInput = document.querySelector('.pm-window-input');
+        if (pmInput) {
+          pmInput.value = `Hi, I would like to buy the ${coins} Coins package for ${price} PKR.`;
+          pmInput.focus();
+        }
+      }, 500);
+    }
+  } else {
+    try {
+      const { data } = await sbClient.from('profiles').select('id, username').eq('is_owner', true).limit(1).maybeSingle();
+      if (data) {
+        showChatToast(`Opening chat with Admin ${data.username} to purchase coins...`, 'success');
+        if (typeof openPrivateChat === 'function') {
+          openPrivateChat(data.id, data.username);
+        }
+      } else {
+        showChatToast('No administrators are currently online. Please check back later or contact SleepyOak.', 'info');
+      }
+    } catch (_) {
+      showChatToast('No administrators are currently online. Please check back later.', 'info');
+    }
+  }
+}
+
+window.toggleUserVipFromProfile = toggleUserVipFromProfile;
+window.allotCoinsToUser = allotCoinsToUser;
+window.contactAdminForCoins = contactAdminForCoins;
+
 
 
