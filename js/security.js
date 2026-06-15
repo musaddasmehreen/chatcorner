@@ -65,7 +65,7 @@
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     "media-src 'self' data: blob: https:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com https:",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com https: stun: turn: turns:",
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
     "frame-ancestors 'none'",
@@ -437,6 +437,8 @@ function _ccDeferredSecurityInit() {
   const ALLOWED = [location.origin, 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'];
   function isAllowed(url) {
     try {
+      const urlStr = String(url || '');
+      if (urlStr.startsWith('blob:') || urlStr.startsWith('data:')) return true;
       const u = new URL(url, location.origin);
       if (u.hostname === location.hostname) return true;
       if (u.hostname.endsWith('.supabase.co')) return true;

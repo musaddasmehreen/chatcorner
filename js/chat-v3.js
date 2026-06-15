@@ -2016,6 +2016,7 @@ async function sendVoiceNote() {
 
       const chunks = roomVoiceNoteChunks.slice();
       roomVoiceNoteChunks = [];
+      const mimeType = roomVoiceNoteRecorder?.mimeType || 'audio/webm';
       roomVoiceNoteRecorder = null;
       const roomIdForVoiceNote = roomVoiceNoteRoomId;
       roomVoiceNoteRoomId = null;
@@ -2031,7 +2032,6 @@ async function sendVoiceNote() {
       }
 
       try {
-        const mimeType = roomVoiceNoteRecorder?.mimeType || 'audio/webm';
         const blob = new Blob(chunks, { type: mimeType });
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
         const { data: insertedMsgs, error } = await sbClient.from('messages').insert({

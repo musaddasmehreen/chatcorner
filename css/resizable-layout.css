@@ -461,7 +461,21 @@
   font-family: inherit;
 }
 .btn-join-voice.hidden,
+.btn-mute.hidden,
+.btn-toggle-camera.hidden,
 .btn-leave-voice.hidden { display: none; }
+.btn-mute,
+.btn-toggle-camera {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.78rem;
+  padding: 0.25rem 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
 .btn-leave-voice {
   background: rgba(220,50,50,0.12);
   border: 1px solid rgba(220,50,50,0.25);

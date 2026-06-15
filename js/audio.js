@@ -42,17 +42,11 @@ async function joinVoice() {
   if (!currentRoom?.is_audio_enabled || inVoice) return;
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-    isCameraOn = true;
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    isCameraOn = false;
   } catch (e) {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      isCameraOn = false;
-      alert('Camera access denied. Joined in audio-only mode.');
-    } catch (audioErr) {
-      alert('Microphone access denied. Please allow microphone in your browser settings.');
-      return;
-    }
+    alert('Microphone access denied. Please allow microphone in your browser settings.');
+    return;
   }
 
   inVoice = true;
@@ -330,7 +324,7 @@ function createPeerConnection(peerId, username) {
     const stream = streams[0];
     peerStreams[peerId] = stream;
     const videoEl = ensurePeerTile(peerId, username);
-    if (videoEl.srcObject !== stream) {
+    if (videoEl && videoEl.srcObject !== stream) {
       videoEl.srcObject = stream;
     }
     ensurePeerAudioElement(peerId, stream);

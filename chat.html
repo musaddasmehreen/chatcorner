@@ -16,7 +16,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v15';
+    const CURRENT_VERSION = 'v16';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -166,6 +166,10 @@
 
       <!-- CENTER -->
       <main class="chat-main">
+        <!-- Video elements for voice room -->
+        <div id="video-grid" class="video-grid hidden"></div>
+        <video id="local-video" class="local-video hidden" autoplay playsinline muted></video>
+
         <!-- Private chats top bar -->
         <div class="rooms-topbar hidden" id="rooms-topbar" aria-label="Private chats"></div>
 
@@ -224,6 +228,8 @@
         <canvas class="voice-visualizer hidden" id="voice-visualizer" width="60" height="24"></canvas>
         <div class="peers-list" id="peers-list"></div>
         <button class="btn-join-voice hidden" id="btn-join-voice" onclick="joinVoice()">Join Voice</button>
+        <button class="btn-mute hidden" id="btn-mute" onclick="toggleMute()">🔇 Mute</button>
+        <button class="btn-toggle-camera hidden" id="btn-toggle-camera" onclick="toggleCamera()">📷 Camera Off</button>
         <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
       </div>
 
