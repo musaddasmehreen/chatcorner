@@ -66,8 +66,10 @@
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
-    "media-src 'self' data: blob:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com",
+    "media-src 'self' data: blob: https:",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com https:",
+    "worker-src 'self' blob:",
+    "child-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -440,6 +442,7 @@ function _ccDeferredSecurityInit() {
       const u = new URL(url, location.origin);
       if (u.hostname === location.hostname) return true;
       if (u.hostname.endsWith('.supabase.co')) return true;
+      if (u.protocol === 'https:') return true;
       return ALLOWED.some(o => url.startsWith(o));
     } catch (_) { return true; }
   }
