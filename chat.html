@@ -11,12 +11,12 @@
   <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
   <meta http-equiv="X-Frame-Options" content="DENY"/>
   <link rel="stylesheet" href="css/style.css?v=1.2"/>
-  <link rel="stylesheet" href="css/chat-extras-v2.css"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css"/>
   <link rel="stylesheet" href="css/resizable-layout.css?v=1.2"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v8';
+    const CURRENT_VERSION = 'v9';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -234,11 +234,16 @@
           <select id="radio-country-select" class="radio-select" onchange="onRadioCountryChange(this.value)">
             <option value="">-- Country --</option>
             <option value="PK">Pakistan 🇵🇰</option>
-            <option value="US">United States 🇺🇸</option>
-            <option value="UK">United Kingdom 🇬🇧</option>
             <option value="IN">India 🇮🇳</option>
-            <option value="FR">France 🇫🇷</option>
-            <option value="DE">Germany 🇩🇪</option>
+          </select>
+          
+          <select id="radio-category-select" class="radio-select" onchange="onRadioCategoryChange(this.value)" disabled>
+            <option value="">-- Category --</option>
+            <option value="all">All Categories</option>
+            <option value="music">🎵 Music & Hits</option>
+            <option value="news">📰 News & Talk</option>
+            <option value="sports">⚽ Sports Live</option>
+            <option value="devotional">🕌 Devotional / Sufi</option>
           </select>
           
           <select id="radio-channel-select" class="radio-select" onchange="onRadioChannelChange(this.value)" disabled>
@@ -280,9 +285,10 @@
   <script src="js/config.js?v=1.6"></script>
   <script src="js/auth.js?v=1.6"></script>
   <script src="js/permissions.js?v=1.6"></script>
-  <script src="js/chat-v2.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <script src="js/chat-v3.js"></script>
   <script src="js/pm.js?v=1.6"></script>
-  <script src="js/audio-v2.js"></script>
+  <script src="js/audio-v3.js"></script>
   <script src="js/resizable-layout.js?v=1.6"></script>
   <script>
     if ('serviceWorker' in navigator) {

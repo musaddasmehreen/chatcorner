@@ -2063,6 +2063,7 @@ body.guest-mode .emoji-bar { display: none; }
   outline: none;
   font-family: inherit;
   transition: border-color 0.15s;
+  max-width: 180px;
 }
 .radio-select:hover:not(:disabled) {
   border-color: rgba(var(--accent-rgb), 0.5);

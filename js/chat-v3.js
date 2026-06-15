@@ -3723,63 +3723,79 @@ window.allotCoinsToUser = allotCoinsToUser;
 window.contactAdminForCoins = contactAdminForCoins;
 
 /* ════════════════════════════════════════════════════════════════
-   Online Radio System
+   Online Radio System (v3)
    ════════════════════════════════════════════════════════════════ */
 
-const RADIO_PLAYLISTS = {
-  PK: {
-    name: "Pakistan 🇵🇰",
-    channels: [
-      { name: "Samaa FM 107.4", url: "https://samaapew107-itelservices.radioca.st/stream" },
-      { name: "Mast FM 103", url: "https://stream.zeno.fm/7x3bfa0zu0hvv" },
-      { name: "FM 100 Karachi", url: "https://stream.zeno.fm/9a7d3hpyu0hvv" }
-    ]
-  },
-  US: {
-    name: "United States 🇺🇸",
-    channels: [
-      { name: "Chilltrax (Ambient/Chill)", url: "https://ice64.securenetsystems.net/CHILLTRAX" },
-      { name: "Jazz24 (Seattle)", url: "https://live.jazz24.org/jazz24-mp3" },
-      { name: "KEXP 90.3 FM (Alternative)", url: "https://kexp-mp3-128.streamguys1.com/kexp128.mp3" },
-      { name: "WNYC News (New York)", url: "https://wnyc-am.wnyc.org/wnycam-web" }
-    ]
-  },
-  UK: {
-    name: "United Kingdom 🇬🇧",
-    channels: [
-      { name: "Capital FM London", url: "https://icecast.global.com/capitalmp3" },
-      { name: "Classic FM", url: "https://icecast.global.com/classicmp3" },
-      { name: "LBC London News", url: "https://icecast.global.com/lbcmp3" }
-    ]
-  },
-  IN: {
-    name: "India 🇮🇳",
-    channels: [
-      { name: "Radio Mirchi Love", url: "https://stream.zeno.fm/a87g1p7320hvv" },
-      { name: "Bollywood Retro Hits", url: "https://stream.zeno.fm/6wz38f1h20hvv" },
-      { name: "Radio City Hindi", url: "https://stream.zeno.fm/f8z7c7q20hvv" }
-    ]
-  },
-  FR: {
-    name: "France 🇫🇷",
-    channels: [
-      { name: "FIP Radio (Eclectic)", url: "https://stream.radiofrance.fr/fip/fip.mp3" },
-      { name: "France Inter", url: "https://stream.radiofrance.fr/franceinter/franceinter.mp3" },
-      { name: "NRJ Hits", url: "https://direct.nrj.fr/live/nrj-128.mp3" }
-    ]
-  },
-  DE: {
-    name: "Germany 🇩🇪",
-    channels: [
-      { name: "Deutschlandfunk", url: "https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3" },
-      { name: "TechnoBase.FM", url: "https://listen.technobase.fm/tunein-mp3-hd" },
-      { name: "WDR 1Live", url: "https://wdr-1live-live.sslstream.wdr.de/wdr/1live/live/mp3/128/stream.mp3" }
-    ]
-  }
+// Radio-Browser API Round-Robin Servers
+const RADIO_SERVERS = [
+  'https://de1.api.radio-browser.info',
+  'https://at1.api.radio-browser.info',
+  'https://nl1.api.radio-browser.info',
+  'https://fr1.api.radio-browser.info'
+];
+
+// Curated high-quality fallback stations (Pakistan and India)
+const CURATED_PLAYLISTS = {
+  PK: [
+    { name: "[Sports] Radio Pakistan Sports", url: "https://whmsonic.radio.gov.pk:7003/stream", category: "sports" },
+    { name: "[News] Samaa FM 107.4", url: "https://samaakhi107-itelservices.radioca.st/stream", category: "news" },
+    { name: "[News] Radio Pakistan Lahore News (AM 1332)", url: "https://whmsonic.radio.gov.pk:7004/stream?type=http&nocache=12", category: "news" },
+    { name: "[News] FM 101 Islamabad", url: "https://whmsonic.radio.gov.pk:7008/stream", category: "news" },
+    { name: "[News] FM 101 Karachi", url: "https://whmsonic.radio.gov.pk:8048/stream", category: "news" },
+    { name: "[News] City FM 89", url: "https://radio.cityfm89.com/stream", category: "news" },
+    { name: "[Music] Hum FM 106.2", url: "https://server.mediacast4u.stream/8002/stream", category: "music" },
+    { name: "[Devotional] Mishal Radio (Sufi/Islamic)", url: "https://stream.zeno.fm/yv2k0dp18vzuv", category: "devotional" }
+  ],
+  IN: [
+    { name: "[Music] Radio Mirchi Hindi", url: "https://eu8.fastcast4u.com/proxy/clyedupq/stream", category: "music" },
+    { name: "[Music] Bollywood Gaane Purane", url: "https://stream.zeno.fm/6n6ewddtad0uv", category: "music" },
+    { name: "[Music] Hindi Gold Radio", url: "https://azuracast.vibesounds.in:8010/radio.mp3", category: "music" },
+    { name: "[Music] Retro Bollywood 90s Hits", url: "https://stream.zeno.fm/rm4i9pdex3cuv", category: "music" },
+    { name: "[Music] Lata Mangeshkar Hits", url: "https://stream.zeno.fm/87xam8pf7tzuv", category: "music" },
+    { name: "[Music] Kishore Kumar Radio", url: "https://stream.zeno.fm/0ghtfp8ztm0uv", category: "music" },
+    { name: "[Music] Mohammad Rafi Hits", url: "https://stream.zeno.fm/v2zfmxef798uv", category: "music" },
+    { name: "[Music] Mirchi Top 20", url: "https://drive.uber.radio/uber/bollywoodnow/icecast.audio", category: "music" },
+    { name: "[News] Vividh Bharati (HLS)", url: "https://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", category: "news" }
+  ]
 };
 
+// Global Radio Player Instance
 window.radioPlayer = new Audio();
 window.radioPlayer.preload = "none";
+window.hlsInstance = null; // hls.js instance
+
+// Loaded channels cache in memory
+let loadedRadioChannels = [];
+
+// Helper to fetch from Radio-Browser API with fallback round-robin
+async function fetchRadioBrowser(endpoint) {
+  // Shuffle servers to load-balance
+  const shuffledServers = [...RADIO_SERVERS].sort(() => Math.random() - 0.5);
+  
+  for (const server of shuffledServers) {
+    try {
+      const url = `${server}/json${endpoint}`;
+      console.log(`[Radio] Attempting fetch from: ${url}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
+      
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'ChatCornerRadioApp/3.0' },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.warn(`[Radio] Server ${server} failed:`, err);
+    }
+  }
+  return null;
+}
 
 function toggleRadioControls() {
   const container = document.getElementById('radio-selectors');
@@ -3788,40 +3804,128 @@ function toggleRadioControls() {
   }
 }
 
-function onRadioCountryChange(countryCode) {
+// Categorize a station dynamically using its name and tags
+function categorizeStation(station) {
+  const name = (station.name || '').toLowerCase();
+  const tags = (station.tags || '').toLowerCase();
+  const combined = `${name} ${tags}`;
+
+  if (combined.includes('sport') || combined.includes('cricket') || combined.includes('commentary') || combined.includes('khel')) {
+    return 'sports';
+  }
+  if (combined.includes('news') || combined.includes('khabar') || combined.includes('samaa') || combined.includes('politics') || combined.includes('talk') || combined.includes('current affairs') || combined.includes('government') || combined.includes('public')) {
+    return 'news';
+  }
+  if (combined.includes('islamic') || combined.includes('quran') || combined.includes('naat') || combined.includes('hamd') || combined.includes('sufi') || combined.includes('ghazal') || combined.includes('devotional') || combined.includes('bhajan') || combined.includes('shabad') || combined.includes('kirtan') || combined.includes('temple')) {
+    return 'devotional';
+  }
+  // Default category is music for general channels
+  return 'music';
+}
+
+async function onRadioCountryChange(countryCode) {
+  const categorySelect = document.getElementById('radio-category-select');
+  const channelSelect = document.getElementById('radio-channel-select');
+  if (!channelSelect || !categorySelect) return;
+
+  // Reset dropdowns
+  categorySelect.disabled = true;
+  categorySelect.value = "all";
+  channelSelect.disabled = true;
+  channelSelect.innerHTML = '<option value="">-- Loading Channels... --</option>';
+
+  if (!countryCode) {
+    channelSelect.innerHTML = '<option value="">-- Set Channel --</option>';
+    return;
+  }
+
+  showChatToast("Loading radio channels...", "info");
+
+  // Fetch stations from Radio-Browser API
+  const apiEndpoint = `/stations/search?countrycode=${countryCode}&hidebroken=true&order=clickcount&reverse=true&limit=80`;
+  const rawStations = await fetchRadioBrowser(apiEndpoint);
+
+  let apiChannels = [];
+  if (rawStations && Array.isArray(rawStations)) {
+    // Filter and map only secure HTTPS streams, avoiding .pls playlist wrappers
+    apiChannels = rawStations
+      .filter(s => {
+        const streamUrl = s.url_resolved || s.url || '';
+        const isSecure = streamUrl.startsWith('https://');
+        const isPlaylist = streamUrl.endsWith('.pls') || streamUrl.endsWith('.asx');
+        return isSecure && !isPlaylist;
+      })
+      .map(s => {
+        const cat = categorizeStation(s);
+        const namePrefix = cat === 'sports' ? '[Sports]' : cat === 'news' ? '[News]' : cat === 'devotional' ? '[Devotional]' : '[Music]';
+        return {
+          name: `${namePrefix} ${s.name}`,
+          url: s.url_resolved || s.url,
+          category: cat
+        };
+      });
+  } else {
+    console.warn("[Radio] API unreachable or empty. Using curated fallbacks only.");
+  }
+
+  // Combine curated fallback channels with API channels (removing duplicates by name)
+  const curated = CURATED_PLAYLISTS[countryCode] || [];
+  const uniqueNames = new Set(curated.map(c => c.name));
+  
+  // Merge and prioritize curated channels
+  loadedRadioChannels = [
+    ...curated,
+    ...apiChannels.filter(ac => !uniqueNames.has(ac.name))
+  ];
+
+  categorySelect.disabled = false;
+  populateChannels("all");
+}
+
+function onRadioCategoryChange(categoryCode) {
+  populateChannels(categoryCode);
+}
+
+function populateChannels(categoryCode) {
   const channelSelect = document.getElementById('radio-channel-select');
   if (!channelSelect) return;
-  
-  // Clear previous options
+
   channelSelect.innerHTML = '<option value="">-- Set Channel --</option>';
-  
-  if (!countryCode || !RADIO_PLAYLISTS[countryCode]) {
+
+  // Filter channels based on selected category
+  const filtered = loadedRadioChannels.filter(ch => {
+    if (!categoryCode || categoryCode === "all") return true;
+    return ch.category === categoryCode;
+  });
+
+  if (filtered.length === 0) {
+    channelSelect.innerHTML = '<option value="">-- No channels found --</option>';
     channelSelect.disabled = true;
     return;
   }
-  
-  const data = RADIO_PLAYLISTS[countryCode];
-  data.channels.forEach((ch, idx) => {
+
+  filtered.forEach((ch, idx) => {
     const opt = document.createElement('option');
-    opt.value = idx;
+    // Store original index in loadedRadioChannels to make retrieval simple
+    opt.value = loadedRadioChannels.indexOf(ch);
     opt.textContent = ch.name;
     channelSelect.appendChild(opt);
   });
-  
+
   channelSelect.disabled = false;
 }
 
 async function onRadioChannelChange(channelIdx) {
-  const countryCode = document.getElementById('radio-country-select').value;
+  const countrySelect = document.getElementById('radio-country-select');
   const statusArea = document.getElementById('radio-status-area');
   const statusText = document.getElementById('radio-status-text');
   
-  if (!countryCode || channelIdx === "" || !RADIO_PLAYLISTS[countryCode]) {
+  if (!countrySelect || channelIdx === "" || !loadedRadioChannels[parseInt(channelIdx, 10)]) {
     return;
   }
   
-  const channel = RADIO_PLAYLISTS[countryCode].channels[parseInt(channelIdx, 10)];
-  const countryName = RADIO_PLAYLISTS[countryCode].name.split(" ")[0];
+  const channel = loadedRadioChannels[parseInt(channelIdx, 10)];
+  const countryName = countrySelect.value === 'PK' ? 'Pakistan 🇵🇰' : 'India 🇮🇳';
   
   // Prevent WebRTC Voice Chat from playing at the same time
   if (typeof leaveVoice === 'function') {
@@ -3832,11 +3936,66 @@ async function onRadioChannelChange(channelIdx) {
     statusArea.classList.remove('hidden');
     statusText.textContent = `Playing: ${channel.name} - ${countryName}`;
     
-    window.radioPlayer.src = channel.url;
-    await window.radioPlayer.play();
+    // Clean up any existing HLS player instance
+    if (window.hlsInstance) {
+      window.hlsInstance.destroy();
+      window.hlsInstance = null;
+    }
+
+    const streamUrl = channel.url;
+    console.log(`[Radio] Attempting to play stream: ${streamUrl}`);
+
+    // If stream is HLS (.m3u8), load it via hls.js
+    if (streamUrl.includes('.m3u8') && typeof Hls !== 'undefined') {
+      if (Hls.isSupported()) {
+        window.hlsInstance = new Hls({
+          maxMaxBufferLength: 10,
+          enableWorker: true
+        });
+        window.hlsInstance.loadSource(streamUrl);
+        window.hlsInstance.attachMedia(window.radioPlayer);
+        
+        window.hlsInstance.on(Hls.Events.MANIFEST_PARSED, async () => {
+          try {
+            await window.radioPlayer.play();
+          } catch (playErr) {
+            console.error("[Radio] HLS play start error:", playErr);
+            throw playErr;
+          }
+        });
+
+        window.hlsInstance.on(Hls.Events.ERROR, function (event, data) {
+          if (data.fatal) {
+            console.warn("[Radio] Fatal HLS error encountered, retrying...", data.type);
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                window.hlsInstance.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                window.hlsInstance.recoverMediaError();
+                break;
+              default:
+                stopRadioPlayer();
+                showChatToast("Fatal radio stream playback error.", "error");
+                break;
+            }
+          }
+        });
+      } else if (window.radioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari/iOS)
+        window.radioPlayer.src = streamUrl;
+        await window.radioPlayer.play();
+      } else {
+        throw new Error("HLS streaming not supported by this browser.");
+      }
+    } else {
+      // Standard progressive audio stream (MP3/AAC)
+      window.radioPlayer.src = streamUrl;
+      await window.radioPlayer.play();
+    }
   } catch (err) {
     console.error("Radio play failed:", err);
-    showChatToast("Could not load radio stream: " + err.message, "error");
+    showChatToast("Could not load radio stream: " + (err.message || "playback blocked"), "error");
     stopRadioPlayer();
   }
 }
@@ -3847,6 +4006,13 @@ function stopRadioPlayer() {
     window.radioPlayer.src = "";
     try { window.radioPlayer.load(); } catch(_) {}
   }
+  
+  // Destroy HLS instance if it exists
+  if (window.hlsInstance) {
+    window.hlsInstance.destroy();
+    window.hlsInstance = null;
+  }
+
   const statusArea = document.getElementById('radio-status-area');
   if (statusArea) {
     statusArea.classList.add('hidden');
@@ -3859,6 +4025,7 @@ function stopRadioPlayer() {
 
 window.toggleRadioControls = toggleRadioControls;
 window.onRadioCountryChange = onRadioCountryChange;
+window.onRadioCategoryChange = onRadioCategoryChange;
 window.onRadioChannelChange = onRadioChannelChange;
 window.stopRadioPlayer = stopRadioPlayer;
 

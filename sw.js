@@ -1,16 +1,16 @@
-const CACHE_NAME = 'chatcorner-v8';
+const CACHE_NAME = 'chatcorner-v9';
 
 const STATIC_ASSETS = [
   './',
   './chat.html',
   './css/style.css',
-  './css/chat-extras-v2.css',
+  './css/chat-extras-v3.css',
   './css/resizable-layout.css',
   './js/config.js',
   './js/auth.js',
-  './js/chat-v2.js',
+  './js/chat-v3.js',
   './js/pm.js',
-  './js/audio-v2.js',
+  './js/audio-v3.js',
   './manifest.json'
 ];
 
