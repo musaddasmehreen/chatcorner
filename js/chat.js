@@ -558,13 +558,24 @@ async function promptUserRosterAction(user, isGuest) {
     return;
   }
   const ignored = isUserIgnored(user.userId);
+  const canMod = canRunQuickModeration();
+  const viewerLevel = getViewerRoleLevel();
+  const targetLevel = getRoleLevel(user);
+  const canAct = canMod && viewerLevel > targetLevel && user.userId !== currentUser?.id;
+
+  const actions = [
+    { value: 'pm', label: '💬 Private Message', variant: 'primary' },
+    { value: ignored ? 'unignore' : 'ignore', label: ignored ? '👁 Unignore' : '🙈 Ignore', variant: ignored ? 'default' : 'danger' }
+  ];
+  if (canAct) {
+    actions.push({ value: 'kick', label: '⚡ Kick', variant: 'danger' });
+    actions.push({ value: 'ban',  label: '🚫 Ban',  variant: 'danger' });
+  }
+
   const action = await showActionSheet({
     title: user.username || 'User',
     message: 'Choose an action',
-    actions: [
-      { value: 'pm', label: 'Private Message', variant: 'primary' },
-      { value: ignored ? 'unignore' : 'ignore', label: ignored ? 'Unignore' : 'Ignore', variant: ignored ? 'default' : 'danger' }
-    ]
+    actions
   });
   if (action === 'pm' && typeof openPrivateChat === 'function') {
     openPrivateChat(user.userId, user.username);
@@ -572,6 +583,10 @@ async function promptUserRosterAction(user, isGuest) {
     setUserIgnored(user.userId, true);
   } else if (action === 'unignore') {
     setUserIgnored(user.userId, false);
+  } else if (action === 'kick') {
+    quickKickUser(user.userId, user.username);
+  } else if (action === 'ban') {
+    quickBanUser(user.userId, user.username);
   }
 }
 
@@ -590,6 +605,7 @@ function bindRosterInteraction(li, nameBtn, user, isGuest) {
     openPm();
   });
 
+  // Mobile: touchstart → action sheet (includes kick/ban for mods)
   nameBtn?.addEventListener('touchstart', (event) => {
     lastRosterTouchAt = Date.now();
     if (!isMobileRosterInteraction(event)) return;
@@ -598,12 +614,23 @@ function bindRosterInteraction(li, nameBtn, user, isGuest) {
     promptUserRosterAction(user, isGuest);
   }, { passive: false });
 
+  // Mobile fallback click
   nameBtn?.addEventListener('click', (event) => {
     if (!isMobileRosterInteraction(event)) return;
     if (Date.now() - lastRosterTouchAt < 650) return;
     event.preventDefault();
     event.stopPropagation();
     promptUserRosterAction(user, isGuest);
+  });
+
+  // Desktop single click → pin the profile card (stays open for clicking buttons)
+  nameBtn?.addEventListener('click', (event) => {
+    if (isMobileRosterInteraction(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearTimeout(_pcTimer);
+    clearTimeout(_pcHide);
+    showProfileCard(user, nameBtn, true); // true = pinned mode
   });
 }
 
@@ -2223,7 +2250,7 @@ function hideProfileCard() {
   }
 }
 
-async function showProfileCard(u, anchor) {
+async function showProfileCard(u, anchor, pinned = false) {
   hideProfileCard();
 
   // Fetch full profile for join date, IP, avatar, VIP status
@@ -2239,7 +2266,7 @@ async function showProfileCard(u, anchor) {
   const canSeeIp     = viewerLevel >= 3;
   const canBan       = viewerLevel > targetLevel && u.userId !== currentUser?.id;
   const canKick      = canBan;
-  const canGrantVip  = viewerLevel >= 3 && targetLevel === 1; // Admin/Owner → regular Users only
+  const canGrantVip  = viewerLevel >= 3 && targetLevel === 1;
   const isVip        = !!(profile.is_vip);
   const ignoreLabel  = isUserIgnored(u.userId) ? 'Unignore' : 'Ignore';
 
@@ -2269,11 +2296,18 @@ async function showProfileCard(u, anchor) {
   const ignoreBtn = u.userId !== currentUser?.id
     ? `<button class="pc-ignore-btn" type="button" data-uid="${escHtml(u.userId)}" data-action="${ignoreLabel.toLowerCase()}">${ignoreLabel}</button>`
     : '';
+  const pmBtn = u.userId !== currentUser?.id && isRegisteredUser()
+    ? `<button class="pc-pm-btn" type="button" data-uid="${escHtml(u.userId)}">💬 Message</button>`
+    : '';
+  const closeBtnHtml = pinned
+    ? `<button class="pc-close-btn" type="button" aria-label="Close">✕</button>`
+    : '';
 
   const card = document.createElement('div');
   card.id = 'profile-card';
-  card.className = 'profile-card';
+  card.className = 'profile-card' + (pinned ? ' pinned' : '');
   card.innerHTML = `
+    ${closeBtnHtml}
     <div class="pc-header">
       ${avatarHtml}
       <div class="pc-info">
@@ -2283,7 +2317,7 @@ async function showProfileCard(u, anchor) {
     </div>
     <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
     ${ipRow}
-    <div class="pc-actions">${kickBtn}${banBtn}${vipBtn}${ignoreBtn}</div>
+    <div class="pc-actions">${pmBtn}${kickBtn}${banBtn}${vipBtn}${ignoreBtn}</div>
   `;
 
   document.body.appendChild(card);
@@ -2301,14 +2335,41 @@ async function showProfileCard(u, anchor) {
     const cr = card.getBoundingClientRect();
     if (cr.right  > window.innerWidth  - 8) left = rect.left - cr.width - 8;
     if (cr.bottom > window.innerHeight - 8) top  = window.innerHeight - cr.height - 8;
-    card.style.left = left + 'px';
-    card.style.top  = top  + 'px';
+    card.style.left = Math.max(8, left) + 'px';
+    card.style.top  = Math.max(8, top)  + 'px';
     card.style.visibility = 'visible';
   });
 
-  // Keep card alive when mouse enters it
-  card.addEventListener('mouseenter', () => { clearTimeout(_pcHide); });
-  card.addEventListener('mouseleave', () => hideProfileCard());
+  if (pinned) {
+    // Pinned mode: close on ✕ button, Escape key, or click outside
+    card.querySelector('.pc-close-btn')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      hideProfileCard();
+    });
+    const outsideClick = (ev) => {
+      if (!card.contains(ev.target)) {
+        hideProfileCard();
+        document.removeEventListener('click', outsideClick, true);
+      }
+    };
+    // Delay so the triggering click doesn't immediately close it
+    setTimeout(() => document.addEventListener('click', outsideClick, true), 50);
+    const escHandler = (ev) => {
+      if (ev.key === 'Escape') { hideProfileCard(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+  } else {
+    // Hover mode: keep alive while mouse is inside
+    card.addEventListener('mouseenter', () => { clearTimeout(_pcHide); });
+    card.addEventListener('mouseleave', () => hideProfileCard());
+  }
+
+  // Action buttons — same for both modes
+  card.querySelector('.pc-pm-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    hideProfileCard();
+    if (typeof openPrivateChat === 'function') openPrivateChat(u.userId, u.username);
+  });
 
   card.querySelector('.pc-kick-btn')?.addEventListener('click', (ev) => {
     ev.stopPropagation();
