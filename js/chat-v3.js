@@ -3759,17 +3759,17 @@ const CURATED_PLAYLISTS = {
   ],
   GB: [
     { name: "[Music] BBC Asian Network (HLS)", url: "https://as-hls-uk-live.akamaized.net/pool_904/live/uk/bbc_asian_network/bbc_asian_network.isml/bbc_asian_network-audio%3d96000.norewind.m3u8", category: "music" },
-    { name: "[Music] Panjab Radio London", url: "https://stream.zeno.fm/84h97t3ewg0uv", category: "music" },
+    { name: "[Punjabi] Panjab Radio London", url: "https://stream.zeno.fm/84h97t3ewg0uv", category: "punjabi" },
     { name: "[Music] Asian Star Radio", url: "https://stream.zeno.fm/eyxg23ky4x8uv", category: "music" },
     { name: "[Music] Lyca Radio (Bollywood)", url: "https://stream.zeno.fm/6wz38f1h20hvv", category: "music" }
   ],
   CA: [
     { name: "[News/Talk] CIRF Radio Humsafar (Desi)", url: "https://stream.zeno.fm/f8z7c7q20hvv", category: "news" },
-    { name: "[Music] Sher E Punjab AM 600", url: "https://stream.zeno.fm/a87g1p7320hvv", category: "music" },
-    { name: "[Music] Red FM CKYE 93.1 Vancouver", url: "https://stream.zeno.fm/7x3bfa0zu0hvv", category: "music" }
+    { name: "[Punjabi] Sher E Punjab AM 600", url: "https://stream.zeno.fm/a87g1p7320hvv", category: "punjabi" },
+    { name: "[Punjabi] Red FM CKYE 93.1 Vancouver", url: "https://stream.zeno.fm/7x3bfa0zu0hvv", category: "punjabi" }
   ],
   US: [
-    { name: "[Music] Radio Punjabi USA", url: "https://stream.zeno.fm/n2fd0edh9k8uv", category: "music" },
+    { name: "[Punjabi] Radio Punjabi USA", url: "https://stream.zeno.fm/n2fd0edh9k8uv", category: "punjabi" },
     { name: "[Music] Bolly 102.9 FM", url: "https://stream.zeno.fm/87xam8pf7tzuv", category: "music" },
     { name: "[Music] Desi World Radio USA", url: "https://stream.zeno.fm/0ghtfp8ztm0uv", category: "music" }
   ],
@@ -3833,6 +3833,9 @@ function categorizeStation(station) {
   const tags = (station.tags || '').toLowerCase();
   const combined = `${name} ${tags}`;
 
+  if (combined.includes('punjabi') || combined.includes('panjabi') || combined.includes('bhangra') || combined.includes('singh') || combined.includes('khalsa')) {
+    return 'punjabi';
+  }
   if (combined.includes('sport') || combined.includes('cricket') || combined.includes('commentary') || combined.includes('khel')) {
     return 'sports';
   }
@@ -3902,7 +3905,7 @@ async function onRadioCountryChange(countryCode) {
       })
       .map(s => {
         const cat = categorizeStation(s);
-        const namePrefix = cat === 'sports' ? '[Sports]' : cat === 'news' ? '[News]' : cat === 'devotional' ? '[Devotional]' : '[Music]';
+        const namePrefix = cat === 'sports' ? '[Sports]' : cat === 'news' ? '[News]' : cat === 'devotional' ? '[Devotional]' : cat === 'punjabi' ? '[Punjabi]' : '[Music]';
         return {
           name: `${namePrefix} ${s.name}`,
           url: s.url_resolved || s.url,
