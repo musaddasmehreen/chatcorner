@@ -2314,6 +2314,10 @@ function scheduleProfileCard(u, anchor) {
 
 function cancelProfileCard() {
   clearTimeout(_pcTimer);
+  // Do NOT close the profile card if it is in pinned mode
+  if (_pcActive && _pcActive.classList.contains('pinned')) {
+    return;
+  }
   // Small grace period so user can move cursor into the card
   _pcHide = setTimeout(() => hideProfileCard(), 220);
 }

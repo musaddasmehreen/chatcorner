@@ -570,6 +570,8 @@ body.guest-mode .emoji-bar { display: none; }
   justify-content: center;
   transition: background 0.15s, color 0.15s;
   line-height: 1;
+  z-index: 99;
+  pointer-events: auto;
 }
 .pc-close-btn:hover { background: rgba(239,68,68,0.2); color: #f87171; border-color: rgba(239,68,68,0.4); }
 

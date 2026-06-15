@@ -2313,6 +2313,10 @@ function scheduleProfileCard(u, anchor) {
 
 function cancelProfileCard() {
   clearTimeout(_pcTimer);
+  // Do NOT close the profile card if it is in pinned mode
+  if (_pcActive && _pcActive.classList.contains('pinned')) {
+    return;
+  }
   // Small grace period so user can move cursor into the card
   _pcHide = setTimeout(() => hideProfileCard(), 220);
 }
@@ -4094,21 +4098,28 @@ function onRadioVolumeChange(val) {
     window.radioPlayer.volume = isRadioMuted ? 0 : vol;
   }
   updateVolumeIcon(val);
+  const valText = document.getElementById('radio-volume-val');
+  if (valText) {
+    valText.textContent = isRadioMuted ? 'Mute' : `${val}%`;
+  }
 }
 
 function toggleRadioMute() {
   isRadioMuted = !isRadioMuted;
   const btn = document.getElementById('btn-radio-mute');
   const slider = document.getElementById('radio-volume-slider');
+  const valText = document.getElementById('radio-volume-val');
   
   if (isRadioMuted) {
     if (window.radioPlayer) window.radioPlayer.volume = 0;
     if (btn) btn.textContent = '🔇';
     if (slider) slider.style.opacity = 0.5;
+    if (valText) valText.textContent = 'Mute';
   } else {
     if (window.radioPlayer) window.radioPlayer.volume = radioVolume;
     if (btn) btn.textContent = getVolumeIconForValue(radioVolume * 100);
     if (slider) slider.style.opacity = 1;
+    if (valText) valText.textContent = `${Math.round(radioVolume * 100)}%`;
   }
 }
 
