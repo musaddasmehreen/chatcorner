@@ -441,7 +441,8 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     nickColor: profile?.nick_color,
     boldNick: !!profile?.bold_nick,
     msgColor: profile?.msg_color,
-    boldText: !!profile?.bold_text
+    boldText: !!profile?.bold_text,
+    avatarUrl: profile?.avatar_url
   };
 }
 
@@ -858,16 +859,21 @@ async function enterRoom(room) {
   const el = document.getElementById('current-room-name');
   if (el) el.textContent = '# ' + currentRoom.name;
 
-  const audioBar = document.getElementById('audio-bar');
+  const voiceControls = document.getElementById('voice-controls');
+  const barDivider = document.getElementById('bar-divider');
+  if (voiceControls) {
+    if (room.is_audio_enabled) {
+      voiceControls.classList.remove('hidden');
+      if (barDivider) barDivider.classList.remove('hidden');
+    } else {
+      voiceControls.classList.add('hidden');
+      if (barDivider) barDivider.classList.add('hidden');
+    }
+  }
+
   const msgInput = document.getElementById('msg-input');
   const sendBtn  = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
-
-  if (room.is_audio_enabled) {
-    audioBar.classList.remove('hidden');
-  } else {
-    audioBar.classList.add('hidden');
-  }
 
   if (room.is_locked) {
     msgInput.disabled = true;
@@ -1230,8 +1236,13 @@ function renderUserList() {
     li.dataset.userId = u.userId;
     const roleBadge = getRoleBadgeHtml(u);
     const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
+    const avatarHtml = u.avatarUrl
+      ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt=""/>`
+      : `<div class="roster-avatar-init" style="background:${escHtml(u.color || '#7c3aed')}">${(u.username || '?')[0].toUpperCase()}</div>`;
+    
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
+      ${avatarHtml}
       ${roleBadge}
       <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${escHtml(u.username)}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
@@ -2370,6 +2381,12 @@ async function showProfileCard(u, anchor, pinned = false) {
     ? `<button class="pc-profile-btn pm-btn" type="button" data-uid="${escHtml(u.userId)}">👤 Edit Profile</button>`
     : `<button class="pc-profile-btn" type="button" data-uid="${escHtml(u.userId)}">👤 View Profile</button>`;
 
+  const row1Html = (pmBtn || ignoreBtn) ? `<div class="pc-action-row">${pmBtn}${ignoreBtn}</div>` : '';
+  const row2Html = (kickBtn || banBtn) ? `<div class="pc-action-row">${kickBtn}${banBtn}</div>` : '';
+  const actionsHtml = (row1Html || row2Html || vipBtn)
+    ? `<div class="pc-actions">${row1Html}${row2Html}${vipBtn}</div>`
+    : '';
+
   const card = document.createElement('div');
   card.id = 'profile-card';
   card.className = 'profile-card' + (pinned ? ' pinned' : '');
@@ -2380,11 +2397,12 @@ async function showProfileCard(u, anchor, pinned = false) {
       <div class="pc-info">
         <div class="pc-name">${escHtml(profile.username || 'Unknown')} ${vipBadge}</div>
         <div class="pc-role">${roleBadge} ${escHtml(roleLabel)}</div>
+        ${profileBtn}
       </div>
     </div>
     <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
     ${ipRow}
-    <div class="pc-actions">${profileBtn}${pmBtn}${kickBtn}${banBtn}${vipBtn}${ignoreBtn}</div>
+    ${actionsHtml}
   `;
 
   document.body.appendChild(card);
@@ -2742,13 +2760,25 @@ async function saveAvatar() {
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
   try {
     localStorage.setItem('cc-avatar-' + currentUser.id, dataUrl);
+    
+    // Save to database
+    const { error } = await sbClient.from('profiles').update({ avatar_url: dataUrl }).eq('id', currentUser.id);
+    if (error) throw error;
+
     currentProfile.avatar_url = dataUrl;
+    updatePresenceBaseFromProfile(currentProfile);
+    if (presenceChannel) {
+      presenceChannel.track(presenceBaseData).catch(() => {});
+    }
+
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     closeAvatarUpload();
     appendSystemMessage('✅ Avatar updated!');
-  } catch (_) {
+    updateCurrentUserBadge();
+    scheduleRenderUserList();
+  } catch (err) {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
-    setAvatarUploadError('❌ Could not save avatar. Please try again.');
+    setAvatarUploadError('❌ Could not save avatar: ' + (err.message || err));
   }
 }
 
@@ -3691,6 +3721,147 @@ async function contactAdminForCoins(coins, price) {
 window.toggleUserVipFromProfile = toggleUserVipFromProfile;
 window.allotCoinsToUser = allotCoinsToUser;
 window.contactAdminForCoins = contactAdminForCoins;
+
+/* ════════════════════════════════════════════════════════════════
+   Online Radio System
+   ════════════════════════════════════════════════════════════════ */
+
+const RADIO_PLAYLISTS = {
+  PK: {
+    name: "Pakistan 🇵🇰",
+    channels: [
+      { name: "Samaa FM 107.4", url: "https://stream.zeno.fm/08m0e1s2t0hvv" },
+      { name: "Mast FM 103", url: "https://stream.zeno.fm/7x3bfa0zu0hvv" },
+      { name: "FM 100 Karachi", url: "https://stream.zeno.fm/9a7d3hpyu0hvv" }
+    ]
+  },
+  US: {
+    name: "United States 🇺🇸",
+    channels: [
+      { name: "Chilltrax (Ambient/Chill)", url: "https://ice64.securenetsystems.net/CHILLTRAX" },
+      { name: "Jazz24 (Seattle)", url: "https://live.jazz24.org/jazz24-mp3" },
+      { name: "KEXP 90.3 FM (Alternative)", url: "https://kexp-mp3-128.streamguys1.com/kexp128.mp3" },
+      { name: "WNYC News (New York)", url: "https://wnyc-am.wnyc.org/wnycam-web" }
+    ]
+  },
+  UK: {
+    name: "United Kingdom 🇬🇧",
+    channels: [
+      { name: "Capital FM London", url: "https://icecast.global.com/capitalmp3" },
+      { name: "Classic FM", url: "https://icecast.global.com/classicmp3" },
+      { name: "LBC London News", url: "https://icecast.global.com/lbcmp3" }
+    ]
+  },
+  IN: {
+    name: "India 🇮🇳",
+    channels: [
+      { name: "Radio Mirchi Love", url: "https://stream.zeno.fm/a87g1p7320hvv" },
+      { name: "Bollywood Retro Hits", url: "https://stream.zeno.fm/6wz38f1h20hvv" },
+      { name: "Radio City Hindi", url: "https://stream.zeno.fm/f8z7c7q20hvv" }
+    ]
+  },
+  FR: {
+    name: "France 🇫🇷",
+    channels: [
+      { name: "FIP Radio (Eclectic)", url: "https://stream.radiofrance.fr/fip/fip.mp3" },
+      { name: "France Inter", url: "https://stream.radiofrance.fr/franceinter/franceinter.mp3" },
+      { name: "NRJ Hits", url: "https://direct.nrj.fr/live/nrj-128.mp3" }
+    ]
+  },
+  DE: {
+    name: "Germany 🇩🇪",
+    channels: [
+      { name: "Deutschlandfunk", url: "https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3" },
+      { name: "TechnoBase.FM", url: "https://listen.technobase.fm/tunein-mp3-hd" },
+      { name: "WDR 1Live", url: "https://wdr-1live-live.sslstream.wdr.de/wdr/1live/live/mp3/128/stream.mp3" }
+    ]
+  }
+};
+
+window.radioPlayer = new Audio();
+window.radioPlayer.preload = "none";
+window.radioPlayer.crossOrigin = "anonymous";
+
+function toggleRadioControls() {
+  const container = document.getElementById('radio-selectors');
+  if (container) {
+    container.classList.toggle('hidden');
+  }
+}
+
+function onRadioCountryChange(countryCode) {
+  const channelSelect = document.getElementById('radio-channel-select');
+  if (!channelSelect) return;
+  
+  // Clear previous options
+  channelSelect.innerHTML = '<option value="">-- Set Channel --</option>';
+  
+  if (!countryCode || !RADIO_PLAYLISTS[countryCode]) {
+    channelSelect.disabled = true;
+    return;
+  }
+  
+  const data = RADIO_PLAYLISTS[countryCode];
+  data.channels.forEach((ch, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = ch.name;
+    channelSelect.appendChild(opt);
+  });
+  
+  channelSelect.disabled = false;
+}
+
+async function onRadioChannelChange(channelIdx) {
+  const countryCode = document.getElementById('radio-country-select').value;
+  const statusArea = document.getElementById('radio-status-area');
+  const statusText = document.getElementById('radio-status-text');
+  
+  if (!countryCode || channelIdx === "" || !RADIO_PLAYLISTS[countryCode]) {
+    return;
+  }
+  
+  const channel = RADIO_PLAYLISTS[countryCode].channels[parseInt(channelIdx, 10)];
+  const countryName = RADIO_PLAYLISTS[countryCode].name.split(" ")[0];
+  
+  // Prevent WebRTC Voice Chat from playing at the same time
+  if (typeof leaveVoice === 'function') {
+    leaveVoice();
+  }
+  
+  try {
+    statusArea.classList.remove('hidden');
+    statusText.textContent = `Playing: ${channel.name} - ${countryName}`;
+    
+    window.radioPlayer.src = channel.url;
+    await window.radioPlayer.play();
+  } catch (err) {
+    console.error("Radio play failed:", err);
+    showChatToast("Could not load radio stream: " + err.message, "error");
+    stopRadioPlayer();
+  }
+}
+
+function stopRadioPlayer() {
+  if (window.radioPlayer) {
+    window.radioPlayer.pause();
+    window.radioPlayer.src = "";
+    try { window.radioPlayer.load(); } catch(_) {}
+  }
+  const statusArea = document.getElementById('radio-status-area');
+  if (statusArea) {
+    statusArea.classList.add('hidden');
+  }
+  const channelSelect = document.getElementById('radio-channel-select');
+  if (channelSelect) {
+    channelSelect.value = "";
+  }
+}
+
+window.toggleRadioControls = toggleRadioControls;
+window.onRadioCountryChange = onRadioCountryChange;
+window.onRadioChannelChange = onRadioChannelChange;
+window.stopRadioPlayer = stopRadioPlayer;
 
 
 

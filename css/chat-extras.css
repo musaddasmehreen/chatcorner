@@ -1930,4 +1930,211 @@ body.guest-mode .emoji-bar { display: none; }
   letter-spacing: 0.5px;
 }
 
+/* ── SIDEBAR ROSTER AVATARS ── */
+.roster-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+}
+.roster-avatar-init {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* ── SMALLER PROFILE BUTTON IN INFO CARD ── */
+.pc-info .pc-profile-btn {
+  margin-top: 0.38rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--text);
+  transition: background 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: auto;
+}
+.pc-info .pc-profile-btn:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.55);
+}
+.pc-info .pc-profile-btn:active {
+  transform: scale(0.97);
+}
+
+/* ── PROFILE CARD GRID ROWS ── */
+.pc-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.38rem;
+  margin-top: 0.38rem;
+}
+.pc-action-row > button:only-child {
+  grid-column: 1 / -1;
+}
+
+/* ── BOTTOM RADIO PLAYER UI ── */
+.audio-bar {
+  display: flex !important;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.45rem 1rem;
+}
+
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.voice-controls.hidden {
+  display: none !important;
+}
+
+.bar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  opacity: 0.6;
+}
+.bar-divider.hidden {
+  display: none !important;
+}
+
+.radio-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.radio-toggle-btn {
+  padding: 0.28rem 0.75rem;
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.79rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.radio-toggle-btn:hover {
+  background: rgba(var(--accent-rgb), 0.22);
+  border-color: rgba(var(--accent-rgb), 0.45);
+}
+
+.radio-selectors {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+}
+.radio-selectors.hidden {
+  display: none !important;
+}
+
+.radio-select {
+  padding: 0.25rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.radio-select:hover:not(:disabled) {
+  border-color: rgba(var(--accent-rgb), 0.5);
+}
+.radio-select:focus {
+  border-color: rgba(var(--accent-rgb), 0.8);
+}
+.radio-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.radio-status-area {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  padding: 0.25rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  animation: pcFadeIn 0.2s ease-out;
+}
+.radio-status-area.hidden {
+  display: none !important;
+}
+
+.radio-status-text {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.radio-sound-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  width: 14px;
+}
+.radio-sound-wave span {
+  display: block;
+  width: 2px;
+  height: 12px;
+  background: #22c55e;
+  border-radius: 1px;
+  transform-origin: bottom;
+  animation: radioBounce 0.8s ease infinite alternate;
+}
+.radio-sound-wave span:nth-child(1) { animation-delay: 0.1s; transform: scaleY(0.8); }
+.radio-sound-wave span:nth-child(2) { animation-delay: 0.3s; transform: scaleY(0.4); }
+.radio-sound-wave span:nth-child(3) { animation-delay: 0.2s; transform: scaleY(0.6); }
+.radio-sound-wave span:nth-child(4) { animation-delay: 0.4s; transform: scaleY(0.3); }
+
+@keyframes radioBounce {
+  0% { transform: scaleY(0.1); }
+  100% { transform: scaleY(1); }
+}
+
+.btn-stop-radio {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-stop-radio:hover {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
 

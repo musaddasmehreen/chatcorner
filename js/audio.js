@@ -28,6 +28,9 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 async function joinVoice() {
+  if (typeof stopRadioPlayer === 'function') {
+    stopRadioPlayer();
+  }
   if (!currentUser) {
     alert('🔒 Please log in to use voice chat.');
     return;
