@@ -3744,7 +3744,9 @@ const CURATED_PLAYLISTS = {
     { name: "[News] FM 101 Karachi", url: "https://whmsonic.radio.gov.pk:8048/stream", category: "news" },
     { name: "[News] City FM 89", url: "https://radio.cityfm89.com/stream", category: "news" },
     { name: "[Music] Hum FM 106.2", url: "https://server.mediacast4u.stream/8002/stream", category: "music" },
-    { name: "[Devotional] Mishal Radio (Sufi/Islamic)", url: "https://stream.zeno.fm/yv2k0dp18vzuv", category: "devotional" }
+    { name: "[Devotional] Mishal Radio (Sufi/Islamic)", url: "https://stream.zeno.fm/yv2k0dp18vzuv", category: "devotional" },
+    { name: "[Punjabi] Radio Awaz FM 105", url: "https://stream.zeno.fm/8ty8szwpwfeuv", category: "punjabi" },
+    { name: "[Punjabi] Suno FM Punjabi", url: "https://stream.zeno.fm/6wz38f1h20hvv", category: "punjabi" }
   ],
   IN: [
     { name: "[Music] Radio Mirchi Hindi", url: "https://eu8.fastcast4u.com/proxy/clyedupq/stream", category: "music" },
@@ -3755,7 +3757,9 @@ const CURATED_PLAYLISTS = {
     { name: "[Music] Kishore Kumar Radio", url: "https://stream.zeno.fm/0ghtfp8ztm0uv", category: "music" },
     { name: "[Music] Mohammad Rafi Hits", url: "https://stream.zeno.fm/v2zfmxef798uv", category: "music" },
     { name: "[Music] Mirchi Top 20", url: "https://drive.uber.radio/uber/bollywoodnow/icecast.audio", category: "music" },
-    { name: "[News] Vividh Bharati (HLS)", url: "https://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", category: "news" }
+    { name: "[News] Vividh Bharati (HLS)", url: "https://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", category: "news" },
+    { name: "[Punjabi] Dhol Radio Punjabi", url: "https://stream.zeno.fm/n2fd0edh9k8uv", category: "punjabi" },
+    { name: "[Punjabi] Radio City Punjabi", url: "https://stream.zeno.fm/f8z7c7q20hvv", category: "punjabi" }
   ],
   GB: [
     { name: "[Music] BBC Asian Network (HLS)", url: "https://as-hls-uk-live.akamaized.net/pool_904/live/uk/bbc_asian_network/bbc_asian_network.isml/bbc_asian_network-audio%3d96000.norewind.m3u8", category: "music" },
