@@ -16,7 +16,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v13';
+    const CURRENT_VERSION = 'v14';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -131,6 +131,11 @@
         <button class="search-clear-btn" onclick="clearSearch()" title="Clear search" aria-label="Clear search">✕</button>
       </div>
       <div class="topbar-actions">
+        <div class="topbar-clears-stack" id="topbar-clears-stack">
+          <button class="topbar-clear-btn" id="btn-clear-my-messages" onclick="clearMyMessages()" title="Delete my messages for everyone in this room">Clear My Messages</button>
+          <button class="topbar-clear-btn" id="btn-clear-screen" onclick="clearScreenLocally()" title="Clear screen locally for me">Clear Screen</button>
+          <button class="topbar-clear-btn hidden" id="btn-clear-all" onclick="clearAllRoomMessages()" title="Delete all messages in this room (Admins/Mods)">Clear For All</button>
+        </div>
         <span id="user-badge" class="user-badge" aria-label="Current user"></span>
         <button class="topbar-btn" id="btn-edit-avatar" onclick="showProfileModal(currentUser.id, 'profile')" style="display:none" aria-label="Update avatar">🖼️</button>
         <button class="topbar-btn" onclick="logout()" aria-label="Log out">Logout</button>
@@ -207,7 +212,6 @@
       </div>
       <div class="input-strip-right">
         <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
-        <button class="btn-clear-msgs" id="btn-clear-my-messages" onclick="clearMyMessages()" aria-label="Clear your messages from view">Clear My Messages</button>
       </div>
     </div>
 

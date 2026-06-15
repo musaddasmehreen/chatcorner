@@ -2144,4 +2144,46 @@ body.guest-mode .emoji-bar { display: none; }
   border-color: rgba(239, 68, 68, 0.55);
 }
 
-
+/* Topbar Clear Buttons Stack */
+.topbar-clears-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  align-items: stretch;
+  height: 38px;
+}
+.topbar-clear-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.1;
+  text-align: center;
+  transition: all 0.15s ease;
+  height: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.topbar-clear-btn:hover {
+  background: rgba(var(--accent-rgb), 0.15);
+  border-color: rgba(var(--accent-rgb), 0.45);
+}
+.topbar-clear-btn#btn-clear-all {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+.topbar-clear-btn#btn-clear-all:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+.topbar-clear-btn.hidden {
+  display: none !important;
+}

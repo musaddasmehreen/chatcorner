@@ -451,6 +451,14 @@ function updateCurrentUserBadge() {
   if (badge && currentProfile) {
     badge.textContent = currentProfile.username + (currentProfile.is_registered ? ' ✓' : ' 👤');
   }
+  const clearAllBtn = document.getElementById('btn-clear-all');
+  if (clearAllBtn) {
+    if (getViewerRoleLevel() >= 3) {
+      clearAllBtn.classList.remove('hidden');
+    } else {
+      clearAllBtn.classList.add('hidden');
+    }
+  }
 }
 
 function disconnectRealtimeChannels() {
@@ -718,7 +726,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (event.key === 'Escape') closeRoomImageUrlInput();
   });
   document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
-  document.getElementById('btn-clear-my-messages')?.addEventListener('click', clearMyMessagesFromScreen);
+
 
   // Character counter for message input
   document.getElementById('msg-input')?.addEventListener('input', () => {
@@ -4137,6 +4145,49 @@ function updateVolumeIcon(val) {
   }
 }
 
+function clearScreenLocally() {
+  const container = document.getElementById('messages');
+  if (container) {
+    container.innerHTML = '';
+    showChatToast('Chat screen cleared locally.', 'success');
+  }
+}
+
+async function clearAllRoomMessages() {
+  if (!currentRoom?.id) return;
+  if (getViewerRoleLevel() < 3) {
+    showChatToast('You do not have permission to clear this room.', 'error');
+    return;
+  }
+
+  const confirmed = confirm('⚠️ WARNING: This will permanently delete ALL messages in this room for everyone. Proceed?');
+  if (!confirmed) return;
+
+  const btn = document.getElementById('btn-clear-all');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Clearing…';
+  }
+
+  try {
+    const { error } = await sbClient.from('messages').delete().eq('room_id', currentRoom.id);
+    if (error) throw error;
+    showChatToast('All messages cleared successfully.', 'success');
+    
+    // Clear screen locally
+    const container = document.getElementById('messages');
+    if (container) container.innerHTML = '';
+  } catch (err) {
+    console.error('Clear all failed:', err);
+    showChatToast('Failed to clear messages: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Clear For All';
+    }
+  }
+}
+
 window.toggleRadioControls = toggleRadioControls;
 window.onRadioCountryChange = onRadioCountryChange;
 window.onRadioCategoryChange = onRadioCategoryChange;
@@ -4144,6 +4195,8 @@ window.onRadioChannelChange = onRadioChannelChange;
 window.stopRadioPlayer = stopRadioPlayer;
 window.onRadioVolumeChange = onRadioVolumeChange;
 window.toggleRadioMute = toggleRadioMute;
+window.clearScreenLocally = clearScreenLocally;
+window.clearAllRoomMessages = clearAllRoomMessages;
 
 
 
