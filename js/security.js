@@ -9,12 +9,10 @@
 'use strict';
 
 /* ── 1. Prototype Pollution Hardening ──────────────────────────
-   Freeze Object prototype so no one can inject __proto__ tricks. */
+   Object.freeze of Object.prototype is disabled to maintain compatibility with 
+   third-party libraries (like hls.js) that override standard methods (like toString). */
 (function freezePrototypes() {
-  try {
-    Object.freeze(Object.prototype);
-    Object.freeze(Array.prototype);
-  } catch (_) { /* already frozen or non-configurable */ }
+  // Disabled prototype freezing to ensure full compatibility with modern web components
 })();
 
 /* ── 2. Dangerous Global Overrides ─────────────────────────────
