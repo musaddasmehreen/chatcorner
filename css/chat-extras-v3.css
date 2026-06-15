@@ -2163,4 +2163,72 @@ body.guest-mode .emoji-bar { display: none; }
   box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 4px var(--accent) !important;
 }
 
+/* Radio Volume Controls */
+.radio-volume-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  height: 28px;
+  transition: all 0.2s ease;
+}
+.radio-volume-container.hidden {
+  display: none !important;
+}
+.volume-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease;
+}
+.volume-btn:hover {
+  transform: scale(1.15);
+}
+.radio-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 70px;
+  height: 4px;
+  background: rgba(var(--accent-rgb), 0.3);
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.radio-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  background: var(--text);
+  border-radius: 50%;
+  transition: transform 0.1s ease, background-color 0.2s;
+}
+.radio-volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+  background: var(--accent);
+}
+.radio-volume-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: none;
+  background: var(--text);
+  border-radius: 50%;
+  transition: transform 0.1s ease, background-color 0.2s;
+}
+.radio-volume-slider::-moz-range-thumb:hover {
+  transform: scale(1.3);
+  background: var(--accent);
+}
+
 

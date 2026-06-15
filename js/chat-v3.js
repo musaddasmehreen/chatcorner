@@ -3788,6 +3788,7 @@ const CURATED_PLAYLISTS = {
 // Global Radio Player Instance
 window.radioPlayer = new Audio();
 window.radioPlayer.preload = "none";
+window.radioPlayer.volume = 0.8; // Set default volume to 80%
 window.hlsInstance = null; // hls.js instance
 
 // Loaded channels cache in memory
@@ -3825,8 +3826,12 @@ async function fetchRadioBrowser(endpoint) {
 
 function toggleRadioControls() {
   const container = document.getElementById('radio-selectors');
+  const volContainer = document.getElementById('radio-volume-container');
   if (container) {
     container.classList.toggle('hidden');
+  }
+  if (volContainer) {
+    volContainer.classList.toggle('hidden');
   }
 }
 
@@ -4074,11 +4079,60 @@ function stopRadioPlayer() {
   }
 }
 
+let radioVolume = 0.8;
+let isRadioMuted = false;
+
+function onRadioVolumeChange(val) {
+  const vol = parseFloat(val) / 100;
+  radioVolume = vol;
+  if (isRadioMuted && vol > 0) {
+    isRadioMuted = false;
+    const slider = document.getElementById('radio-volume-slider');
+    if (slider) slider.style.opacity = 1;
+  }
+  if (window.radioPlayer) {
+    window.radioPlayer.volume = isRadioMuted ? 0 : vol;
+  }
+  updateVolumeIcon(val);
+}
+
+function toggleRadioMute() {
+  isRadioMuted = !isRadioMuted;
+  const btn = document.getElementById('btn-radio-mute');
+  const slider = document.getElementById('radio-volume-slider');
+  
+  if (isRadioMuted) {
+    if (window.radioPlayer) window.radioPlayer.volume = 0;
+    if (btn) btn.textContent = '🔇';
+    if (slider) slider.style.opacity = 0.5;
+  } else {
+    if (window.radioPlayer) window.radioPlayer.volume = radioVolume;
+    if (btn) btn.textContent = getVolumeIconForValue(radioVolume * 100);
+    if (slider) slider.style.opacity = 1;
+  }
+}
+
+function getVolumeIconForValue(val) {
+  if (val == 0) return '🔇';
+  if (val < 30) return '🔈';
+  if (val < 70) return '🔉';
+  return '🔊';
+}
+
+function updateVolumeIcon(val) {
+  const btn = document.getElementById('btn-radio-mute');
+  if (btn && !isRadioMuted) {
+    btn.textContent = getVolumeIconForValue(val);
+  }
+}
+
 window.toggleRadioControls = toggleRadioControls;
 window.onRadioCountryChange = onRadioCountryChange;
 window.onRadioCategoryChange = onRadioCategoryChange;
 window.onRadioChannelChange = onRadioChannelChange;
 window.stopRadioPlayer = stopRadioPlayer;
+window.onRadioVolumeChange = onRadioVolumeChange;
+window.toggleRadioMute = toggleRadioMute;
 
 
 
