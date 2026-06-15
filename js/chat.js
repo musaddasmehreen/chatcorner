@@ -3730,7 +3730,7 @@ const RADIO_PLAYLISTS = {
   PK: {
     name: "Pakistan 🇵🇰",
     channels: [
-      { name: "Samaa FM 107.4", url: "https://stream.zeno.fm/08m0e1s2t0hvv" },
+      { name: "Samaa FM 107.4", url: "https://samaapew107-itelservices.radioca.st/stream" },
       { name: "Mast FM 103", url: "https://stream.zeno.fm/7x3bfa0zu0hvv" },
       { name: "FM 100 Karachi", url: "https://stream.zeno.fm/9a7d3hpyu0hvv" }
     ]
@@ -3780,7 +3780,6 @@ const RADIO_PLAYLISTS = {
 
 window.radioPlayer = new Audio();
 window.radioPlayer.preload = "none";
-window.radioPlayer.crossOrigin = "anonymous";
 
 function toggleRadioControls() {
   const container = document.getElementById('radio-selectors');
