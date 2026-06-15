@@ -15,6 +15,25 @@
   <link rel="stylesheet" href="css/resizable-layout.css?v=1.2"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
+    // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
+    const CURRENT_VERSION = 'v8';
+    if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          let p = [];
+          for (let r of registrations) {
+            p.push(r.unregister());
+          }
+          Promise.all(p).then(() => {
+            localStorage.setItem('cc-sw-version', CURRENT_VERSION);
+            location.reload(true);
+          });
+        });
+      } else {
+        localStorage.setItem('cc-sw-version', CURRENT_VERSION);
+      }
+    }
+
     window.addEventListener('error', function(e) {
       var div = document.createElement('div');
       div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
