@@ -151,3 +151,16 @@ SELECT cron.schedule(
     '0 * * * *', -- Run every hour
     'DELETE FROM public.profiles WHERE is_registered = false AND created_at < NOW() - INTERVAL ''2 hours'''
 );
+
+-- =====================================================================
+-- UPDATE: PROFILE DETAILS AND STYLING (MIGRATION FOR PROFILE MODAL)
+-- =====================================================================
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS sex text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS birthdate date;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS relationship_status text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS nick_color text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bold_nick boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS msg_color text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bold_text boolean DEFAULT false;

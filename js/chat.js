@@ -437,7 +437,11 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     isOwner: !!profile?.is_owner,
     isVip: !!profile?.is_vip,
     cameraOn: !!presenceBaseData.cameraOn,
-    viewingCam: !!presenceBaseData.viewingCam
+    viewingCam: !!presenceBaseData.viewingCam,
+    nickColor: profile?.nick_color,
+    boldNick: !!profile?.bold_nick,
+    msgColor: profile?.msg_color,
+    boldText: !!profile?.bold_text
   };
 }
 
@@ -680,6 +684,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   updateCurrentUserBadge();
+  const userBadge = document.getElementById('user-badge');
+  if (userBadge) {
+    userBadge.style.cursor = 'pointer';
+    userBadge.title = 'Click to view/edit profile';
+    userBadge.addEventListener('click', () => {
+      showProfileModal(currentUser.id, 'profile');
+    });
+  }
   if (typeof ensurePmRealtime === 'function') {
     ensurePmRealtime();
   }
@@ -880,6 +892,10 @@ async function enterRoom(room) {
     .limit(50);
 
   oldestMessageTimestamp = messages?.length ? messages[0].created_at : null;
+  if (messages?.length) {
+    const senderIds = Array.from(new Set(messages.map(m => m.user_id).filter(Boolean)));
+    await cacheSenderProfiles(senderIds);
+  }
   const loadMoreBtn = document.getElementById('btn-load-older');
   if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !messages || messages.length < 50);
 
@@ -902,10 +918,13 @@ async function enterRoom(room) {
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'messages',
       filter: `room_id=eq.${room.id}`
-    }, payload => {
+    }, async payload => {
       if (!canProcessIncomingPayload(payload.new?.user_id)) return;
       // Skip system (deletion notice) messages from DB realtime — they are shown locally and auto-expire
       if (payload.new?.type === 'system') return;
+      if (payload.new?.user_id) {
+        await cacheSenderProfiles([payload.new.user_id]);
+      }
       appendMessage(payload.new);
       scrollToBottom();
     })
@@ -1081,14 +1100,28 @@ function buildMessageNode(msg) {
   // FIX 2 — Voice note messages: show locked placeholder for guests
   if (msg.type === 'voice') {
     const isMe  = msg.user_id === currentUser?.id;
+    const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
     const div   = document.createElement('div');
     div.className = 'msg-row' + (isMe ? ' self' : '');
     setMessageRowData(div, msg, sanitizeAudioSource(msg));
     const initial = (msg.username || '?')[0].toUpperCase();
     const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
-    const avatarInner = isMe && currentProfile?.avatar_url
-      ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
+    
+    const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
+    const avatarInner = avatarUrl
+      ? `<img src="${escHtml(avatarUrl)}" alt=""/>`
       : initial;
+      
+    let nickStyle = '';
+    if (senderProf?.nick_color) {
+      nickStyle += `color: ${escHtml(senderProf.nick_color)};`;
+    }
+    if (senderProf?.bold_nick) {
+      if (senderProf.is_vip || senderProf.isVip || senderProf.is_admin || senderProf.isAdmin || senderProf.is_mod || senderProf.isMod || senderProf.is_owner || senderProf.isOwner) {
+        nickStyle += `font-weight: bold;`;
+      }
+    }
+    
     const audioHtml = currentProfile?.is_registered
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
       : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
@@ -1097,7 +1130,7 @@ function buildMessageNode(msg) {
       <div class="avatar" style="background:${color}">${avatarInner}</div>
       <div class="msg-bubble">
         ${deleteButton}
-        <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
+        <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
         ${audioHtml}
         <div class="msg-time">${formatTime(msg.created_at)}</div>
       </div>`;
@@ -1114,17 +1147,41 @@ function buildMessageNode(msg) {
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
-  const avatarInner = isMe && currentProfile?.avatar_url
-    ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
+  
+  const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
+  const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
+  const avatarInner = avatarUrl
+    ? `<img src="${escHtml(avatarUrl)}" alt=""/>`
     : initial;
+    
+  let nickStyle = '';
+  if (senderProf?.nick_color) {
+    nickStyle += `color: ${escHtml(senderProf.nick_color)};`;
+  }
+  if (senderProf?.bold_nick) {
+    if (senderProf.is_vip || senderProf.isVip || senderProf.is_admin || senderProf.isAdmin || senderProf.is_mod || senderProf.isMod || senderProf.is_owner || senderProf.isOwner) {
+      nickStyle += `font-weight: bold;`;
+    }
+  }
+
+  let msgStyle = '';
+  if (senderProf?.msg_color) {
+    msgStyle += `color: ${escHtml(senderProf.msg_color)};`;
+  }
+  if (senderProf?.bold_text) {
+    if (senderProf.is_vip || senderProf.isVip || senderProf.is_admin || senderProf.isAdmin || senderProf.is_mod || senderProf.isMod || senderProf.is_owner || senderProf.isOwner) {
+      msgStyle += `font-weight: bold;`;
+    }
+  }
+
   const deleteButton = buildDeleteButtonHtml(msg.user_id);
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
-      <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-text">${escHtml(msg.content)}</div>
+      <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
+      <div class="msg-text" style="${msgStyle}">${escHtml(msg.content)}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -1249,6 +1306,9 @@ async function loadOlderMessages() {
     if (btn) { btn.classList.add('hidden'); btn.textContent = 'No more messages'; }
     return;
   }
+
+  const senderIds = Array.from(new Set(older.map(m => m.user_id).filter(Boolean)));
+  await cacheSenderProfiles(senderIds);
 
   const container = document.getElementById('messages');
   const prevScrollHeight = container.scrollHeight;
@@ -2305,6 +2365,9 @@ async function showProfileCard(u, anchor, pinned = false) {
   const closeBtnHtml = pinned
     ? `<button class="pc-close-btn" type="button" aria-label="Close">✕</button>`
     : '';
+  const profileBtn = u.userId === currentUser?.id
+    ? `<button class="pc-profile-btn pm-btn" type="button" data-uid="${escHtml(u.userId)}">👤 Edit Profile</button>`
+    : `<button class="pc-profile-btn" type="button" data-uid="${escHtml(u.userId)}">👤 View Profile</button>`;
 
   const card = document.createElement('div');
   card.id = 'profile-card';
@@ -2320,7 +2383,7 @@ async function showProfileCard(u, anchor, pinned = false) {
     </div>
     <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
     ${ipRow}
-    <div class="pc-actions">${pmBtn}${kickBtn}${banBtn}${vipBtn}${ignoreBtn}</div>
+    <div class="pc-actions">${profileBtn}${pmBtn}${kickBtn}${banBtn}${vipBtn}${ignoreBtn}</div>
   `;
 
   document.body.appendChild(card);
@@ -2368,6 +2431,12 @@ async function showProfileCard(u, anchor, pinned = false) {
   }
 
   // Action buttons — same for both modes
+  card.querySelector('.pc-profile-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    hideProfileCard();
+    showProfileModal(u.userId, 'profile');
+  });
+
   card.querySelector('.pc-pm-btn')?.addEventListener('click', (ev) => {
     ev.stopPropagation();
     hideProfileCard();
@@ -2681,3 +2750,691 @@ async function saveAvatar() {
     setAvatarUploadError('❌ Could not save avatar. Please try again.');
   }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Profile Modal & Advanced Settings
+   ════════════════════════════════════════════════════════════════ */
+let senderProfilesCache = new Map();
+let pendingAvatarDataUrl = null;
+
+async function cacheSenderProfiles(userIds) {
+  const uncached = userIds.filter(id => id && !senderProfilesCache.has(id));
+  if (!uncached.length) return;
+  
+  try {
+    const { data, error } = await sbClient
+      .from('profiles')
+      .select('id, username, avatar_color, avatar_url, is_vip, is_admin, is_mod, is_owner, nick_color, bold_nick, msg_color, bold_text, sex, birthdate, country, relationship_status, bio, created_at, email')
+      .in('id', uncached);
+    if (data) {
+      data.forEach(p => senderProfilesCache.set(p.id, p));
+    }
+  } catch (err) {
+    console.error('Failed to cache sender profiles:', err);
+  }
+}
+
+async function showProfileModal(userId, startTab = 'profile') {
+  document.getElementById('cc-profile-modal-overlay')?.remove();
+  
+  let targetProfile = null;
+  if (userId === currentUser?.id) {
+    targetProfile = currentProfile;
+  } else {
+    try {
+      const { data } = await sbClient.from('profiles').select('*').eq('id', userId).single();
+      targetProfile = data;
+    } catch (_) {}
+  }
+  
+  if (!targetProfile) {
+    showChatToast('Could not load profile.', 'error');
+    return;
+  }
+  
+  const isMe = userId === currentUser?.id;
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'cc-profile-modal-overlay';
+  overlay.className = 'cc-profile-modal-overlay';
+  
+  overlay.innerHTML = `
+    <div class="cc-profile-modal" role="dialog" aria-modal="true">
+      <div class="cc-profile-header">
+        <div class="cc-profile-title">
+          <span>💬 LIVE CHAT ROOM - Profile</span>
+        </div>
+        <div class="cc-profile-controls">
+          <button class="cc-profile-ctrl-btn close-btn" onclick="closeProfileModal()">✕</button>
+        </div>
+      </div>
+      <div class="cc-profile-body">
+        <aside class="cc-profile-sidebar">
+          <button class="cc-profile-tab-btn" data-tab="profile">👤 My profile</button>
+          ${isMe ? `<button class="cc-profile-tab-btn" data-tab="vip">⭐ VIP</button>` : ''}
+          ${isMe ? `<button class="cc-profile-tab-btn" data-tab="ignore">🚫 Ignore list</button>` : ''}
+          ${isMe ? `<button class="cc-profile-tab-btn" data-tab="coins">🪙 Coins</button>` : ''}
+          ${isMe ? `<button class="cc-profile-tab-btn" data-tab="account">⚙️ Account</button>` : ''}
+        </aside>
+        <main class="cc-profile-content" id="cc-profile-content-pane">
+        </main>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  const tabButtons = overlay.querySelectorAll('.cc-profile-tab-btn');
+  tabButtons.forEach(btn => {
+    btn.onclick = () => {
+      tabButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProfileTab(btn.dataset.tab, targetProfile, isMe);
+    };
+  });
+  
+  const initialBtn = overlay.querySelector(`.cc-profile-tab-btn[data-tab="${startTab}"]`) || overlay.querySelector('.cc-profile-tab-btn');
+  initialBtn?.classList.add('active');
+  renderProfileTab(initialBtn?.dataset.tab || 'profile', targetProfile, isMe);
+  
+  const escClose = (ev) => {
+    if (ev.key === 'Escape') {
+      closeProfileModal();
+      document.removeEventListener('keydown', escClose);
+    }
+  };
+  document.addEventListener('keydown', escClose);
+}
+
+function closeProfileModal() {
+  document.getElementById('cc-profile-modal-overlay')?.remove();
+}
+
+function renderProfileTab(tab, profile, isMe, editMode = false) {
+  const container = document.getElementById('cc-profile-content-pane');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  if (tab === 'profile') {
+    if (editMode && isMe) {
+      const checkColumns = profile.bio !== undefined;
+      const birthdateStr = profile.birthdate || '';
+      let bDay = '', bMonth = '', bYear = '';
+      if (birthdateStr.includes('-')) {
+        const parts = birthdateStr.split('-');
+        bYear = parts[0];
+        bMonth = parts[1];
+        bDay = parts[2];
+      }
+      
+      let daysOptions = '<option value="">Day</option>';
+      for (let i = 1; i <= 31; i++) {
+        const val = String(i).padStart(2, '0');
+        daysOptions += `<option value="${val}" ${bDay === val ? 'selected' : ''}>${i}</option>`;
+      }
+      
+      const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      let monthsOptions = '<option value="">Month</option>';
+      months.forEach((m, idx) => {
+        const val = String(idx + 1).padStart(2, '0');
+        monthsOptions += `<option value="${val}" ${bMonth === val ? 'selected' : ''}>${m}</option>`;
+      });
+      
+      let yearsOptions = '<option value="">Year</option>';
+      const currentYear = new Date().getFullYear();
+      for (let i = currentYear; i >= 1900; i--) {
+        yearsOptions += `<option value="${i}" ${bYear === String(i) ? 'selected' : ''}>${i}</option>`;
+      }
+      
+      container.innerHTML = `
+        <div class="cc-profile-edit-layout">
+          <div class="cc-profile-edit-header">
+            <h3 class="cc-profile-edit-title">Edit profile</h3>
+            <button class="cc-profile-back-link" onclick="renderProfileTab('profile', currentProfile, true, false)">← Return to profile</button>
+          </div>
+          
+          ${!checkColumns ? `
+            <div style="background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.4); padding:12px; border-radius:8px; color:#ff8b8b; font-size:0.85rem; margin-bottom:10px;">
+              ⚠️ Profile database columns are missing. Please execute the SQL updates in <code>schema-updates.sql</code> in your Supabase SQL editor to enable all editing features.
+            </div>
+          ` : ''}
+          
+          <form id="cc-profile-edit-form" class="cc-profile-form-grid" onsubmit="saveProfileChanges(event)">
+            <div class="cc-profile-form-group">
+              <label class="cc-profile-label">Name in this chat / Default profile name</label>
+              <input type="text" id="cc-edit-username" class="cc-profile-input" value="${escHtml(profile.username || '')}" required />
+              <span style="font-size:0.75rem;color:var(--muted)">Other people in this chat will see this name.</span>
+            </div>
+            
+            <div class="cc-profile-form-group">
+              <label class="cc-profile-label">Sex</label>
+              <select id="cc-edit-sex" class="cc-profile-select" ${!checkColumns ? 'disabled' : ''}>
+                <option value="">Choose...</option>
+                <option value="Male" ${profile.sex === 'Male' ? 'selected' : ''}>Male</option>
+                <option value="Female" ${profile.sex === 'Female' ? 'selected' : ''}>Female</option>
+                <option value="Other" ${profile.sex === 'Other' ? 'selected' : ''}>Other</option>
+              </select>
+            </div>
+            
+            <div class="cc-profile-form-group">
+              <label class="cc-profile-label">Birthdate</label>
+              <div class="cc-profile-birthdate-row">
+                <select id="cc-edit-bday" class="cc-profile-select" ${!checkColumns ? 'disabled' : ''}>${daysOptions}</select>
+                <select id="cc-edit-bmonth" class="cc-profile-select" ${!checkColumns ? 'disabled' : ''}>${monthsOptions}</select>
+                <select id="cc-edit-byear" class="cc-profile-select" ${!checkColumns ? 'disabled' : ''}>${yearsOptions}</select>
+              </div>
+            </div>
+            
+            <div class="cc-profile-form-group">
+              <label class="cc-profile-label">Country</label>
+              <select id="cc-edit-country" class="cc-profile-select" ${!checkColumns ? 'disabled' : ''}>
+                <option value="">Choose...</option>
+                <option value="United States" ${profile.country === 'United States' ? 'selected' : ''}>United States</option>
+                <option value="United Kingdom" ${profile.country === 'United Kingdom' ? 'selected' : ''}>United Kingdom</option>
+                <option value="Canada" ${profile.country === 'Canada' ? 'selected' : ''}>Canada</option>
+                <option value="Australia" ${profile.country === 'Australia' ? 'selected' : ''}>Australia</option>
+                <option value="Germany" ${profile.country === 'Germany' ? 'selected' : ''}>Germany</option>
+                <option value="France" ${profile.country === 'France' ? 'selected' : ''}>France</option>
+                <option value="Pakistan" ${profile.country === 'Pakistan' ? 'selected' : ''}>Pakistan</option>
+                <option value="India" ${profile.country === 'India' ? 'selected' : ''}>India</option>
+                <option value="Other" ${profile.country === 'Other' ? 'selected' : ''}>Other</option>
+              </select>
+            </div>
+            
+            <div class="cc-profile-form-group">
+              <label class="cc-profile-label">Relationship status</label>
+              <select id="cc-edit-relationship" class="cc-profile-select" ${!checkColumns ? 'disabled' : ''}>
+                <option value="">Choose...</option>
+                <option value="Single" ${profile.relationship_status === 'Single' ? 'selected' : ''}>Single</option>
+                <option value="In a relationship" ${profile.relationship_status === 'In a relationship' ? 'selected' : ''}>In a relationship</option>
+                <option value="Married" ${profile.relationship_status === 'Married' ? 'selected' : ''}>Married</option>
+                <option value="It's complicated" ${profile.relationship_status === "It's complicated" ? 'selected' : ''}>It's complicated</option>
+              </select>
+            </div>
+            
+            <div class="cc-profile-form-group full-width">
+              <label class="cc-profile-label">About me</label>
+              <textarea id="cc-edit-bio" class="cc-profile-textarea" placeholder="Write a short bio..." maxlength="300" ${!checkColumns ? 'disabled' : ''}>${escHtml(profile.bio || '')}</textarea>
+            </div>
+            
+            <div class="cc-profile-form-group">
+              <label class="cc-profile-label">Nick color (HEX code)</label>
+              <div class="cc-profile-color-row">
+                <input type="text" id="cc-edit-nickcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.nick_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="updateColorPreview(this, 'cc-edit-nickcolor-picker')" />
+                <div class="cc-profile-color-picker-btn">
+                  <input type="color" id="cc-edit-nickcolor-picker" value="${profile.nick_color || '#ffffff'}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-nickcolor')" />
+                </div>
+              </div>
+              <div class="cc-profile-checkbox-row">
+                <input type="checkbox" id="cc-edit-boldnick" ${profile.bold_nick ? 'checked' : ''} ${!checkColumns ? 'disabled' : ''} />
+                <label for="cc-edit-boldnick">Bold nick <span class="role-badge vip" style="font-size: 0.65rem;">VIP</span></label>
+              </div>
+            </div>
+            
+            <div class="cc-profile-form-group">
+              <label class="cc-profile-label">Messages color (HEX code)</label>
+              <div class="cc-profile-color-row">
+                <input type="text" id="cc-edit-msgcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.msg_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="updateColorPreview(this, 'cc-edit-msgcolor-picker')" />
+                <div class="cc-profile-color-picker-btn">
+                  <input type="color" id="cc-edit-msgcolor-picker" value="${profile.msg_color || '#ffffff'}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-msgcolor')" />
+                </div>
+              </div>
+              <div class="cc-profile-checkbox-row">
+                <input type="checkbox" id="cc-edit-boldtext" ${profile.bold_text ? 'checked' : ''} ${!checkColumns ? 'disabled' : ''} />
+                <label for="cc-edit-boldtext">Bold text <span class="role-badge vip" style="font-size: 0.65rem;">VIP</span></label>
+              </div>
+            </div>
+            
+            <div class="cc-profile-actions full-width">
+              <button type="button" class="cc-profile-btn secondary" onclick="renderProfileTab('profile', currentProfile, true, false)">Cancel</button>
+              <button type="submit" class="cc-profile-btn primary" id="btn-save-profile">Save changes</button>
+            </div>
+          </form>
+          
+          <div class="cc-profile-delete-section">
+            <h4>Danger Zone</h4>
+            <div class="cc-profile-delete-row">
+              ${!profile.is_registered ? `
+                <button class="cc-profile-btn danger-sm" onclick="unregisterCurrentProfile()">Unregister profile from this chat</button>
+              ` : ''}
+              <button class="cc-profile-btn danger-sm" onclick="fullyDeleteCurrentProfile()">Fully delete this profile</button>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      const joinDate = profile.created_at
+        ? new Date(profile.created_at).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })
+        : 'Unknown';
+      const roleLabel = getRoleLabel(profile);
+      const roleBadge = getRoleBadgeHtml(profile);
+      
+      const avatarHtml = profile.avatar_url
+        ? `<img src="${escHtml(profile.avatar_url)}" alt=""/>`
+        : `<span style="font-size:3.5rem;font-weight:700;">${(profile.username || '?')[0].toUpperCase()}</span>`;
+      
+      const bioText = profile.bio ? escHtml(profile.bio) : '<em style="color:var(--muted)">No biography set.</em>';
+      
+      container.innerHTML = `
+        <div class="cc-profile-view-layout">
+          <div class="cc-profile-view-left">
+            <div class="cc-profile-large-avatar" id="cc-profile-avatar-container" style="background:${escHtml(profile.avatar_color || '#7c3aed')}">
+              ${avatarHtml}
+            </div>
+            
+            ${isMe ? `
+              <div class="cc-profile-btn-vertical">
+                <label class="btn-photo">
+                  📷 Change photo
+                  <input type="file" accept="image/*" onchange="onProfileAvatarSelect(event)" />
+                </label>
+                <button class="btn-edit" onclick="renderProfileTab('profile', currentProfile, true, true)">🔧 Edit profile</button>
+              </div>
+            ` : ''}
+          </div>
+          <div class="cc-profile-view-right">
+            <div class="cc-profile-view-header">
+              <span class="cc-profile-view-name">${escHtml(profile.username || 'Unknown')}</span>
+              <span class="cc-profile-status-badge">ONLINE</span>
+            </div>
+            <div class="cc-profile-view-role">
+              ${roleBadge} <span>${escHtml(roleLabel)}</span>
+            </div>
+            
+            <table class="cc-profile-details-table">
+              <tr>
+                <td class="label-col">📅 Joined</td>
+                <td class="val-col">${escHtml(joinDate)}</td>
+              </tr>
+              <tr>
+                <td class="label-col">🚻 Sex</td>
+                <td class="val-col">${profile.sex ? escHtml(profile.sex) : 'Not specified'}</td>
+              </tr>
+              <tr>
+                <td class="label-col">🎂 Birthdate</td>
+                <td class="val-col">${profile.birthdate ? formatDateString(profile.birthdate) : 'Not specified'}</td>
+              </tr>
+              <tr>
+                <td class="label-col">🌐 Country</td>
+                <td class="val-col">${profile.country ? escHtml(profile.country) : 'Not specified'}</td>
+              </tr>
+              <tr>
+                <td class="label-col">❤️ Relationship</td>
+                <td class="val-col">${profile.relationship_status ? escHtml(profile.relationship_status) : 'Not specified'}</td>
+              </tr>
+              <tr>
+                <td class="label-col">📝 About me</td>
+                <td class="val-col">${bioText}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+  } 
+  
+  else if (tab === 'vip') {
+    const isVip = profile.is_vip || profile.is_admin || profile.is_mod || profile.is_owner;
+    
+    container.innerHTML = `
+      <div>
+        <div class="cc-profile-vip-card">
+          <h3 class="cc-profile-vip-title">⭐ VIP Privileges</h3>
+          <p class="cc-profile-vip-text">
+            Unlock exclusive custom styling and rise above the rest in the chat. Customize how your name and messages appear in the main chat room.
+          </p>
+        </div>
+        
+        <div class="cc-profile-vip-features">
+          <div class="cc-profile-vip-feature-item">
+            <span class="cc-profile-vip-icon">🎨</span>
+            <div>
+              <div class="cc-profile-vip-lbl">Custom Nickname Color</div>
+              <span style="font-size:0.75rem;color:var(--muted)">Pick any hex color for your nickname.</span>
+            </div>
+          </div>
+          
+          <div class="cc-profile-vip-feature-item">
+            <span class="cc-profile-vip-icon">✍️</span>
+            <div>
+              <div class="cc-profile-vip-lbl">Custom Message Color</div>
+              <span style="font-size:0.75rem;color:var(--muted)">Change color of all messages you send.</span>
+            </div>
+          </div>
+          
+          <div class="cc-profile-vip-feature-item">
+            <span class="cc-profile-vip-icon">🔤</span>
+            <div>
+              <div class="cc-profile-vip-lbl">Bold Nickname & Text</div>
+              <span style="font-size:0.75rem;color:var(--muted)">Make your name and messages stand out in bold.</span>
+            </div>
+          </div>
+          
+          <div class="cc-profile-vip-feature-item">
+            <span class="cc-profile-vip-icon">👑</span>
+            <div>
+              <div class="cc-profile-vip-lbl">VIP Badge Highlight</div>
+              <span style="font-size:0.75rem;color:var(--muted)">A shiny VIP badge displayed next to your name.</span>
+            </div>
+          </div>
+        </div>
+        
+        <div style="margin-top:24px;text-align:center;background:rgba(10,12,32,0.4);border:1px solid rgba(255,255,255,0.05);padding:20px;border-radius:12px;">
+          <h4 style="margin:0 0 10px;color:#fff;">Your VIP Status</h4>
+          ${isVip ? `
+            <div style="color:#4ade80;font-weight:700;font-size:1.1rem;display:flex;align-items:center;justify-content:center;gap:6px;">
+              <span>✅ VIP Privileges Active</span>
+            </div>
+            <p style="font-size:0.8rem;color:var(--muted);margin:6px 0 0;">You can customize your styles in the "My profile" edit section.</p>
+          ` : `
+            <div style="color:#f59e0b;font-weight:700;font-size:1.1rem;margin-bottom:12px;">
+              <span>❌ Inactive</span>
+            </div>
+            <button class="cc-profile-btn primary" onclick="claimFreeVipDeveloperMode()">Activate VIP (Developer Mode)</button>
+          `}
+        </div>
+      </div>
+    `;
+  } 
+  
+  else if (tab === 'ignore') {
+    container.innerHTML = `
+      <h3 style="color:#fff;margin:0 0 16px;font-family:'Exo 2',sans-serif;">🚫 Blocked Users</h3>
+      <div id="cc-profile-ignore-list-container">
+        <div class="cc-profile-empty">Loading ignore list...</div>
+      </div>
+    `;
+    loadIgnoreListTab();
+  } 
+  
+  else if (tab === 'coins') {
+    container.innerHTML = `
+      <div class="cc-profile-coins-card">
+        <span class="cc-profile-coin-spinner">🪙</span>
+        <div class="cc-profile-coins-bal">150 Coins</div>
+        <p class="cc-profile-coins-desc">
+          Coins can be spent on premium emojis, voice note filters, background styles, and virtual gifts.
+        </p>
+        <button class="cc-profile-btn primary" onclick="showChatToast('🪙 Coins store is currently in sandbox mode. You have been credited +50 coins!', 'success')">Get Free Coins</button>
+      </div>
+    `;
+  } 
+  
+  else if (tab === 'account') {
+    container.innerHTML = `
+      <h3 style="color:#fff;margin:0 0 18px;font-family:'Exo 2',sans-serif;">⚙️ Account Settings</h3>
+      <div class="cc-profile-form-grid">
+        <div class="cc-profile-form-group">
+          <label class="cc-profile-label">Registration Type</label>
+          <input type="text" class="cc-profile-input" value="${profile.is_registered ? 'Registered Account' : 'Guest Profile'}" disabled />
+        </div>
+        
+        <div class="cc-profile-form-group">
+          <label class="cc-profile-label">Email Address</label>
+          <input type="text" class="cc-profile-input" value="${escHtml(profile.email || 'None (Guest)')}" disabled />
+        </div>
+        
+        ${profile.is_registered ? `
+          <div class="cc-profile-form-group full-width" style="border-top:1px solid rgba(255,255,255,0.06);padding-top:18px;margin-top:10px;">
+            <h4 style="margin:0 0 12px;color:#fff;">Change Password</h4>
+          </div>
+          
+          <div class="cc-profile-form-group">
+            <label class="cc-profile-label">New Password</label>
+            <input type="password" id="cc-account-newpass" class="cc-profile-input" placeholder="Min 6 characters" />
+          </div>
+          
+          <div class="cc-profile-form-group" style="justify-content:flex-end;">
+            <button class="cc-profile-btn primary" onclick="updateAccountPassword()">Update Password</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+}
+
+function updateColorPreview(input, pickerId) {
+  const picker = document.getElementById(pickerId);
+  if (picker && /^#[0-9A-F]{6}$/i.test(input.value)) {
+    picker.value = input.value;
+  }
+}
+
+function updateColorText(picker, inputId) {
+  const input = document.getElementById(inputId);
+  if (input) {
+    input.value = picker.value.toUpperCase();
+  }
+}
+
+function formatDateString(dateStr) {
+  try {
+    return new Date(dateStr).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
+  } catch (_) {
+    return dateStr;
+  }
+}
+
+function onProfileAvatarSelect(event) {
+  const file = event.target.files?.[0];
+  if (!file || !file.type.startsWith('image/')) {
+    showChatToast('Please select a valid image.', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const SIZE = 100;
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      const srcAspect = img.naturalWidth / img.naturalHeight;
+      let sx, sy, sw, sh;
+      if (srcAspect >= 1) {
+        sh = img.naturalHeight;
+        sw = img.naturalHeight;
+        sx = (img.naturalWidth - sw) / 2;
+        sy = 0;
+      } else {
+        sw = img.naturalWidth;
+        sh = img.naturalWidth;
+        sx = 0;
+        sy = (img.naturalHeight - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
+      
+      const croppedUrl = canvas.toDataURL('image/jpeg', 0.85);
+      pendingAvatarDataUrl = croppedUrl;
+      
+      const container = document.getElementById('cc-profile-avatar-container');
+      if (container) {
+        container.innerHTML = `<img src="${croppedUrl}" alt=""/>`;
+      }
+      showChatToast('Avatar preview updated. Click "Edit Profile" and then "Save Changes" to finalize!', 'info');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveProfileChanges(event) {
+  event.preventDefault();
+  
+  const saveBtn = document.getElementById('btn-save-profile');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+  
+  const newUsername = document.getElementById('cc-edit-username').value.trim();
+  if (!newUsername) {
+    showChatToast('Username cannot be empty.', 'error');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
+    return;
+  }
+  
+  const payload = {
+    username: newUsername
+  };
+  
+  const sexEl = document.getElementById('cc-edit-sex');
+  if (sexEl && !sexEl.disabled) {
+    payload.sex = sexEl.value;
+    
+    const day = document.getElementById('cc-edit-bday').value;
+    const month = document.getElementById('cc-edit-bmonth').value;
+    const year = document.getElementById('cc-edit-byear').value;
+    if (day && month && year) {
+      payload.birthdate = `${year}-${month}-${day}`;
+    } else {
+      payload.birthdate = null;
+    }
+    
+    payload.country = document.getElementById('cc-edit-country').value;
+    payload.relationship_status = document.getElementById('cc-edit-relationship').value;
+    payload.bio = document.getElementById('cc-edit-bio').value.trim();
+    payload.nick_color = document.getElementById('cc-edit-nickcolor').value.trim() || null;
+    payload.bold_nick = document.getElementById('cc-edit-boldnick').checked;
+    payload.msg_color = document.getElementById('cc-edit-msgcolor').value.trim() || null;
+    payload.bold_text = document.getElementById('cc-edit-boldtext').checked;
+  }
+  
+  try {
+    if (pendingAvatarDataUrl) {
+      localStorage.setItem('cc-avatar-' + currentUser.id, pendingAvatarDataUrl);
+      payload.avatar_url = pendingAvatarDataUrl;
+      currentProfile.avatar_url = pendingAvatarDataUrl;
+      pendingAvatarDataUrl = null;
+    }
+    
+    const { error } = await sbClient.from('profiles').update(payload).eq('id', currentUser.id);
+    if (error) throw error;
+    
+    currentProfile = { ...currentProfile, ...payload };
+    updatePresenceBaseFromProfile(currentProfile);
+    updateCurrentUserBadge();
+    
+    if (presenceChannel) {
+      presenceChannel.track(presenceBaseData).catch(() => {});
+    }
+    
+    showChatToast('Profile saved successfully!', 'success');
+    renderProfileTab('profile', currentProfile, true, false);
+  } catch (err) {
+    showChatToast('Error saving profile: ' + (err.message || err), 'error');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
+  }
+}
+
+async function claimFreeVipDeveloperMode() {
+  try {
+    const { error } = await sbClient.from('profiles').update({ is_vip: true }).eq('id', currentUser.id);
+    if (error) throw error;
+    currentProfile.is_vip = true;
+    updatePresenceBaseFromProfile(currentProfile);
+    if (presenceChannel) presenceChannel.track(presenceBaseData).catch(() => {});
+    showChatToast('⭐ VIP Activated! Enjoy exclusive nickname/message styles.', 'success');
+    renderProfileTab('vip', currentProfile, true);
+  } catch (err) {
+    showChatToast('Failed to activate VIP: ' + err.message, 'error');
+  }
+}
+
+async function unregisterCurrentProfile() {
+  if (!confirm('Are you sure you want to unregister? This will log you out.')) return;
+  try {
+    await logout();
+  } catch (err) {
+    showChatToast('Failed to unregister: ' + err.message, 'error');
+  }
+}
+
+async function fullyDeleteCurrentProfile() {
+  if (!confirm('⚠️ WARNING: This will permanently delete your profile and account. This cannot be undone. Proceed?')) return;
+  try {
+    const { error } = await sbClient.from('profiles').delete().eq('id', currentUser.id);
+    if (error) throw error;
+    await sbClient.auth.signOut();
+    window.location.replace('login.html');
+  } catch (err) {
+    showChatToast('Failed to delete account: ' + err.message, 'error');
+  }
+}
+
+async function loadIgnoreListTab() {
+  const container = document.getElementById('cc-profile-ignore-list-container');
+  if (!container) return;
+  
+  const ids = Array.from(ignoredUserIds);
+  if (!ids.length) {
+    container.innerHTML = '<div class="cc-profile-empty">Your ignore list is empty.</div>';
+    return;
+  }
+  
+  try {
+    const { data, error } = await sbClient
+      .from('profiles')
+      .select('id, username, avatar_color, avatar_url')
+      .in('id', ids);
+    if (error) throw error;
+    
+    if (!data || !data.length) {
+      container.innerHTML = '<div class="cc-profile-empty">Your ignore list is empty.</div>';
+      return;
+    }
+    
+    let html = '<div class="cc-profile-ignore-list">';
+    data.forEach(user => {
+      const avatarHtml = user.avatar_url
+        ? `<img src="${escHtml(user.avatar_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"/>`
+        : (user.username || '?')[0].toUpperCase();
+      const color = user.avatar_color || '#7c3aed';
+      
+      html += `
+        <div class="cc-profile-ignore-row" id="cc-ignore-row-${user.id}">
+          <div class="cc-profile-ignore-user">
+            <div class="cc-profile-ignore-avatar" style="background:${color}">${avatarHtml}</div>
+            <span class="cc-profile-ignore-uname">${escHtml(user.username || 'User')}</span>
+          </div>
+          <button class="cc-profile-btn danger-sm" style="padding:6px 12px;font-size:0.75rem;" onclick="unignoreFromTab('${user.id}')">Unignore</button>
+        </div>
+      `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="cc-profile-empty" style="color:#ff8b8b;">Error loading ignore list: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function unignoreFromTab(userId) {
+  setUserIgnored(userId, false);
+  const row = document.getElementById(`cc-ignore-row-${userId}`);
+  if (row) {
+    row.remove();
+  }
+  if (ignoredUserIds.size === 0) {
+    const container = document.getElementById('cc-profile-ignore-list-container');
+    if (container) {
+      container.innerHTML = '<div class="cc-profile-empty">Your ignore list is empty.</div>';
+    }
+  }
+}
+
+async function updateAccountPassword() {
+  const newPass = document.getElementById('cc-account-newpass').value;
+  if (!newPass || newPass.length < 6) {
+    showChatToast('Password must be at least 6 characters.', 'error');
+    return;
+  }
+  try {
+    const { error } = await sbClient.auth.updateUser({ password: newPass });
+    if (error) throw error;
+    showChatToast('Password updated successfully!', 'success');
+    document.getElementById('cc-account-newpass').value = '';
+  } catch (err) {
+    showChatToast('Failed to update password: ' + err.message, 'error');
+  }
+}
+
