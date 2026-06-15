@@ -3756,6 +3756,29 @@ const CURATED_PLAYLISTS = {
     { name: "[Music] Mohammad Rafi Hits", url: "https://stream.zeno.fm/v2zfmxef798uv", category: "music" },
     { name: "[Music] Mirchi Top 20", url: "https://drive.uber.radio/uber/bollywoodnow/icecast.audio", category: "music" },
     { name: "[News] Vividh Bharati (HLS)", url: "https://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", category: "news" }
+  ],
+  GB: [
+    { name: "[Music] BBC Asian Network (HLS)", url: "https://as-hls-uk-live.akamaized.net/pool_904/live/uk/bbc_asian_network/bbc_asian_network.isml/bbc_asian_network-audio%3d96000.norewind.m3u8", category: "music" },
+    { name: "[Music] Panjab Radio London", url: "https://stream.zeno.fm/84h97t3ewg0uv", category: "music" },
+    { name: "[Music] Asian Star Radio", url: "https://stream.zeno.fm/eyxg23ky4x8uv", category: "music" },
+    { name: "[Music] Lyca Radio (Bollywood)", url: "https://stream.zeno.fm/6wz38f1h20hvv", category: "music" }
+  ],
+  CA: [
+    { name: "[News/Talk] CIRF Radio Humsafar (Desi)", url: "https://stream.zeno.fm/f8z7c7q20hvv", category: "news" },
+    { name: "[Music] Sher E Punjab AM 600", url: "https://stream.zeno.fm/a87g1p7320hvv", category: "music" },
+    { name: "[Music] Red FM CKYE 93.1 Vancouver", url: "https://stream.zeno.fm/7x3bfa0zu0hvv", category: "music" }
+  ],
+  US: [
+    { name: "[Music] Radio Punjabi USA", url: "https://stream.zeno.fm/n2fd0edh9k8uv", category: "music" },
+    { name: "[Music] Bolly 102.9 FM", url: "https://stream.zeno.fm/87xam8pf7tzuv", category: "music" },
+    { name: "[Music] Desi World Radio USA", url: "https://stream.zeno.fm/0ghtfp8ztm0uv", category: "music" }
+  ],
+  AE: [
+    { name: "[Music] City 101.6 Dubai (Bollywood)", url: "https://stream.zeno.fm/v2zfmxef798uv", category: "music" },
+    { name: "[Music] Hum FM 106.2 Dubai", url: "https://server.mediacast4u.stream/8002/stream", category: "music" }
+  ],
+  AU: [
+    { name: "[Music] SBS PopDesi (Bollywood HLS)", url: "https://sbs-live-audio.akamaized.net/popdesi/popdesi.m3u8", category: "music" }
   ]
 };
 
@@ -3841,9 +3864,31 @@ async function onRadioCountryChange(countryCode) {
 
   showChatToast("Loading radio channels...", "info");
 
-  // Fetch stations from Radio-Browser API
-  const apiEndpoint = `/stations/search?countrycode=${countryCode}&hidebroken=true&order=clickcount&reverse=true&limit=80`;
-  const rawStations = await fetchRadioBrowser(apiEndpoint);
+  // Fetch stations from Radio-Browser API (handling diaspora countries differently)
+  let rawStations = [];
+  try {
+    if (countryCode === 'PK' || countryCode === 'IN') {
+      const apiEndpoint = `/stations/search?countrycode=${countryCode}&hidebroken=true&order=clickcount&reverse=true&limit=80`;
+      rawStations = await fetchRadioBrowser(apiEndpoint);
+    } else {
+      // Fetch Hindi, Urdu, and Punjabi streams globally in parallel
+      const promises = ['hindi', 'urdu', 'punjabi'].map(lang => 
+        fetchRadioBrowser(`/stations/search?language=${lang}&hidebroken=true&order=clickcount&reverse=true&limit=100`)
+      );
+      const results = await Promise.all(promises);
+      const allStations = results.filter(r => r !== null).flat();
+      
+      // Filter in-memory for the diaspora country (e.g. GB/UK, US, CA, AE, AU)
+      rawStations = allStations.filter(s => {
+        const cc = (s.countrycode || '').toUpperCase();
+        if (countryCode === 'GB' && cc === 'UK') return true;
+        if (countryCode === 'UK' && cc === 'GB') return true;
+        return cc === countryCode;
+      });
+    }
+  } catch (apiErr) {
+    console.error("[Radio] API fetching threw exception:", apiErr);
+  }
 
   let apiChannels = [];
   if (rawStations && Array.isArray(rawStations)) {
