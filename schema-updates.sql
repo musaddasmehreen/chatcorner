@@ -164,3 +164,10 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS nick_color text;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bold_nick boolean DEFAULT false;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS msg_color text;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bold_text boolean DEFAULT false;
+
+-- =====================================================================
+-- UPDATE: ONLINE TIME TRACKING (SESSION, MONTHLY, LIFETIME)
+-- =====================================================================
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS total_online_time integer DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS monthly_online_time integer DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_month integer;

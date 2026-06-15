@@ -674,6 +674,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (localAvatar && currentProfile) currentProfile.avatar_url = localAvatar;
   updatePresenceBaseFromProfile(currentProfile);
   startProfileRealtimeWatcher();
+  startOnlineTimeTracking(currentProfile);
 
   if (!currentProfile.is_registered && !sessionStorage.getItem('cc-nick-prompt-shown')) {
     sessionStorage.setItem('cc-nick-prompt-shown', '1');
@@ -3016,6 +3017,10 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
       
       const bioText = profile.bio ? escHtml(profile.bio) : '<em style="color:var(--muted)">No biography set.</em>';
       
+      const sessionSecs = isMe ? Math.floor((Date.now() - sessionStart) / 1000) : 0;
+      const totalSecs = profile.total_online_time || 0;
+      const monthlySecs = profile.monthly_online_time || 0;
+
       container.innerHTML = `
         <div class="cc-profile-view-layout">
           <div class="cc-profile-view-left">
@@ -3068,6 +3073,22 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
                 <td class="val-col">${bioText}</td>
               </tr>
             </table>
+
+            <div class="cc-profile-online-time-card">
+              <h4 style="margin:0 0 12px;color:#c0b0ff;font-size:0.95rem;font-family:'Exo 2',sans-serif;">⏱️ Time Spent in Chatroom</h4>
+              <div class="cc-profile-time-row">
+                <span class="lbl">🕒 This Session:</span>
+                <span class="val" id="cc-time-session">${isMe ? formatOnlineTime(sessionSecs) : 'Active'}</span>
+              </div>
+              <div class="cc-profile-time-row">
+                <span class="lbl">📆 This Month:</span>
+                <span class="val" id="cc-time-month">${formatOnlineTime(monthlySecs)}</span>
+              </div>
+              <div class="cc-profile-time-row">
+                <span class="lbl">🌐 All Time:</span>
+                <span class="val" id="cc-time-all">${formatOnlineTime(totalSecs)}</span>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -3437,4 +3458,90 @@ async function updateAccountPassword() {
     showChatToast('Failed to update password: ' + err.message, 'error');
   }
 }
+
+/* ⏱️ Online Time spent tracking logic */
+let sessionStart = Date.now();
+let displayTotalOnline = 0;
+let displayMonthlyOnline = 0;
+let onlineTimeTickInterval = null;
+let onlineTimeFlushInterval = null;
+
+function startOnlineTimeTracking(profile) {
+  if (!profile) return;
+  
+  sessionStart = Date.now();
+  displayTotalOnline = profile.total_online_time || 0;
+  displayMonthlyOnline = profile.monthly_online_time || 0;
+  
+  clearInterval(onlineTimeTickInterval);
+  clearInterval(onlineTimeFlushInterval);
+  
+  onlineTimeTickInterval = setInterval(() => {
+    displayTotalOnline++;
+    displayMonthlyOnline++;
+    
+    const sessionEl = document.getElementById('cc-time-session');
+    const monthEl = document.getElementById('cc-time-month');
+    const allEl = document.getElementById('cc-time-all');
+    
+    if (sessionEl) {
+      const sessionSecs = Math.floor((Date.now() - sessionStart) / 1000);
+      sessionEl.textContent = formatOnlineTime(sessionSecs);
+    }
+    if (monthEl) {
+      monthEl.textContent = formatOnlineTime(displayMonthlyOnline);
+    }
+    if (allEl) {
+      allEl.textContent = formatOnlineTime(displayTotalOnline);
+    }
+  }, 1000);
+  
+  onlineTimeFlushInterval = setInterval(flushOnlineTime, 15000);
+  window.addEventListener('beforeunload', flushOnlineTime);
+}
+
+async function flushOnlineTime() {
+  if (!currentUser?.id) return;
+  
+  const now = new Date();
+  const monthCode = now.getFullYear() * 100 + (now.getMonth() + 1);
+  
+  const payload = {
+    total_online_time: displayTotalOnline,
+    monthly_online_time: displayMonthlyOnline,
+    last_active_month: monthCode
+  };
+  
+  if (currentProfile?.last_active_month && currentProfile.last_active_month !== monthCode) {
+    displayMonthlyOnline = 0;
+    payload.monthly_online_time = 0;
+  }
+  
+  try {
+    await sbClient.from('profiles').update(payload).eq('id', currentUser.id);
+    if (currentProfile) {
+      currentProfile.total_online_time = payload.total_online_time;
+      currentProfile.monthly_online_time = payload.monthly_online_time;
+      currentProfile.last_active_month = monthCode;
+    }
+  } catch (err) {
+    console.error('Error flushing online time:', err);
+  }
+}
+
+function formatOnlineTime(totalSeconds) {
+  if (!totalSeconds || totalSeconds < 0) return '0s';
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  
+  let parts = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0 || d > 0) parts.push(`${h}h`);
+  if (m > 0 || h > 0 || d > 0) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
 

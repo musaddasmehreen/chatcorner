@@ -1891,3 +1891,43 @@ body.guest-mode .emoji-bar { display: none; }
   }
 }
 
+/* Time Spent Online Indicator Styles */
+.cc-profile-online-time-card {
+  background: rgba(139, 109, 237, 0.04);
+  border: 1px solid rgba(139, 109, 237, 0.22);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-top: 15px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+.cc-profile-time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.cc-profile-time-row:last-child {
+  border-bottom: none;
+}
+
+.cc-profile-time-row .lbl {
+  color: var(--muted, #a7afd5);
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cc-profile-time-row .val {
+  color: #fff;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+
