@@ -350,6 +350,9 @@ const QUICK_KICK_OPTIONS = {
   '10m': 10
 };
 const QUICK_BAN_OPTIONS = {
+  '30m': 0.5,
+  '1h': 1,
+  '3h': 3,
   '6h': 6,
   '12h': 12,
   '1d': 24,
@@ -2445,6 +2448,9 @@ function showBanModal(username) {
         <h3 class="cc-modal-title">Ban <span class="cc-modal-uname">${escHtml(username || 'User')}</span>?</h3>
         <p class="cc-modal-sub">Select suspension duration</p>
         <div class="cc-modal-grid ban-grid">
+          <button class="cc-modal-opt ban" data-val="30m"><span class="cc-opt-label">30 Min</span></button>
+          <button class="cc-modal-opt ban" data-val="1h"><span class="cc-opt-label">1 Hour</span></button>
+          <button class="cc-modal-opt ban" data-val="3h"><span class="cc-opt-label">3 Hours</span></button>
           <button class="cc-modal-opt ban" data-val="6h"><span class="cc-opt-label">6 Hours</span></button>
           <button class="cc-modal-opt ban" data-val="12h"><span class="cc-opt-label">12 Hours</span></button>
           <button class="cc-modal-opt ban" data-val="1d"><span class="cc-opt-label">1 Day</span></button>
