@@ -345,15 +345,18 @@ let _renderTimer = null;
 const activeCamViewers = new Set(); // userIds currently viewing a cam
 const typingUsers = new Map();      // userId → { userId, username }
 const QUICK_KICK_OPTIONS = {
-  '10m': 10,
-  '30m': 30,
-  '1h': 60
+  'immediate': 0,
+  '1m': 1,
+  '10m': 10
 };
 const QUICK_BAN_OPTIONS = {
+  '6h': 6,
+  '12h': 12,
   '1d': 24,
   '3d': 72,
   '7d': 168,
-  permanent: null
+  '1mo': 720,
+  'permanent': null
 };
 let lastRosterTouchAt = 0;
 
@@ -1130,28 +1133,22 @@ function scheduleRenderUserList() {
 function renderUserList() {
   const ul   = document.getElementById('user-list');
   const frag = document.createDocumentFragment();
-  const canModerate = canRunQuickModeration();
   const isGuest = !isRegisteredUser();
-  const viewerLevel = getViewerRoleLevel();
   const sortedUsers = getSortedOnlineUsers();
 
   sortedUsers.forEach(u => {
     const li = document.createElement('li');
     li.className = 'user-item';
     li.dataset.userId = u.userId;
-    const targetLevel = getRoleLevel(u);
-    const showModeration = canModerate && u.userId !== currentUser?.id && viewerLevel > targetLevel;
     const roleBadge = getRoleBadgeHtml(u);
     const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
       ${roleBadge}
-      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" ${isGuest ? 'title="🔒 Register to start private chats"' : 'title="Double-click for private message"'}>${escHtml(u.username)}</button>
+      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${escHtml(u.username)}</button>
       <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
-      ${showModeration ? `<button type="button" class="user-mod-btn kick" data-user-id="${u.userId}" title="Kick user">\u26a1</button>` : ''}
-      ${showModeration ? `<button type="button" class="user-mod-btn ban" data-user-id="${u.userId}" title="Ban user">\ud83d\udeab</button>` : ''}
     `;
 
     const nameBtn = li.querySelector('.user-name-btn');
@@ -1169,14 +1166,7 @@ function renderUserList() {
         openFloatingCamera(u.userId, u.username);
       }
     });
-    li.querySelector('.user-mod-btn.kick')?.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      quickKickUser(u.userId, u.username);
-    });
-    li.querySelector('.user-mod-btn.ban')?.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      quickBanUser(u.userId, u.username);
-    });
+    // Kick/ban buttons in sidebar are removed — only available in profile card (opened by clicking name)
 
     frag.appendChild(li);
   });
@@ -1723,39 +1713,22 @@ function appendVoiceNoteMessage(msg, isMe) {
 
 async function quickKickUser(userId, username) {
   if (!canRunQuickModeration() || !userId) return;
-  const token = await showActionSheet({
-    title: `Kick ${username || 'user'}?`,
-    message: 'Temporary timeout duration',
-    actions: [
-      { value: '10m', label: '10 minutes', variant: 'warning' },
-      { value: '30m', label: '30 minutes', variant: 'warning' },
-      { value: '1h', label: '1 hour', variant: 'warning' }
-    ]
-  });
+  const token = await showKickModal(username);
   if (!token || !Object.prototype.hasOwnProperty.call(QUICK_KICK_OPTIONS, token)) return;
   const durationMinutes = QUICK_KICK_OPTIONS[token];
-  const kickedUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+  // immediate = 10 second timeout (just enough to flush their connection)
+  const kickedUntil = durationMinutes === 0
+    ? new Date(Date.now() + 10 * 1000).toISOString()
+    : new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
   const { error } = await sbClient.from('profiles').update({ kicked_until: kickedUntil }).eq('id', userId);
-  if (error) {
-    appendSystemMessage(`Kick failed for ${username || 'user'}: ${error.message}`);
-    return;
-  }
-  appendSystemMessage(`⚡ ${username || 'User'} has been kicked for ${token}.`);
+  if (error) { appendSystemMessage(`Kick failed for ${username || 'user'}: ${error.message}`); return; }
+  const label = token === 'immediate' ? 'immediately' : `for ${token}`;
+  appendSystemMessage(`⚡ ${username || 'User'} was kicked ${label}.`);
 }
 
 async function quickBanUser(userId, username) {
   if (!canRunQuickModeration() || !userId) return;
-
-  const token = await showActionSheet({
-    title: `Ban ${username || 'user'}?`,
-    message: 'Suspension duration',
-    actions: [
-      { value: '1d', label: '1 day', variant: 'danger' },
-      { value: '3d', label: '3 days', variant: 'danger' },
-      { value: '7d', label: '7 days', variant: 'danger' },
-      { value: 'permanent', label: 'Permanent', variant: 'danger' }
-    ]
-  });
+  const token = await showBanModal(username);
   if (!token || !Object.prototype.hasOwnProperty.call(QUICK_BAN_OPTIONS, token)) return;
 
   const durationHours = QUICK_BAN_OPTIONS[token];
@@ -1763,19 +1736,27 @@ async function quickBanUser(userId, username) {
     ? null
     : new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
 
-  const { error } = await sbClient.from('profiles').update({
+  // For permanent bans: collect advanced fingerprint and store it
+  let deviceFingerprint = null;
+  if (token === 'permanent' && window.ccFingerprint) {
+    try { deviceFingerprint = await window.ccFingerprint.generate(); } catch (_) {}
+  }
+
+  const updateObj = {
     is_banned: true,
     banned_at: new Date().toISOString(),
     banned_by: currentUser.id,
     ban_reason: 'In-chat moderation',
     ban_expires_at: banExpiresAt
-  }).eq('id', userId);
+  };
+  // Store fingerprint for permanent bans (if column exists)
+  if (deviceFingerprint) updateObj.device_fingerprint = deviceFingerprint;
 
-  if (error) {
-    appendSystemMessage(`Ban failed for ${username || 'user'}: ${error.message}`);
-    return;
-  }
-  appendSystemMessage(`🚫 ${username || 'User'} has been banned (${durationHours === null ? 'permanent' : token}).`);
+  const { error } = await sbClient.from('profiles').update(updateObj).eq('id', userId);
+  if (error) { appendSystemMessage(`Ban failed for ${username || 'user'}: ${error.message}`); return; }
+
+  const label = durationHours === null ? 'permanently' : `for ${token}`;
+  appendSystemMessage(`🚫 ${username || 'User'} has been banned ${label}.`);
 }
 
 function pruneGuestMessageTimes(roomId) {
@@ -2356,6 +2337,77 @@ async function showProfileCard(u, anchor) {
   });
 }
 
+/* ════════════════════════════════════════════════════════════════
+   Kick Modal — premium animated dialog
+════════════════════════════════════════════════════════════════ */
+function showKickModal(username) {
+  return new Promise((resolve) => {
+    document.getElementById('cc-kick-modal')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'cc-kick-modal';
+    overlay.className = 'cc-modal-overlay';
+    overlay.innerHTML = `
+      <div class="cc-modal kick" role="dialog" aria-modal="true">
+        <div class="cc-modal-icon">⚡</div>
+        <h3 class="cc-modal-title">Kick <span class="cc-modal-uname">${escHtml(username || 'User')}</span>?</h3>
+        <p class="cc-modal-sub">Choose timeout duration</p>
+        <div class="cc-modal-grid">
+          <button class="cc-modal-opt kick" data-val="immediate"><span class="cc-opt-icon">💨</span><span class="cc-opt-label">Immediate</span><span class="cc-opt-note">Can return instantly</span></button>
+          <button class="cc-modal-opt kick" data-val="1m"><span class="cc-opt-icon">🕑</span><span class="cc-opt-label">1 Minute</span><span class="cc-opt-note">Short timeout</span></button>
+          <button class="cc-modal-opt kick" data-val="10m"><span class="cc-opt-icon">⏰</span><span class="cc-opt-label">10 Minutes</span><span class="cc-opt-note">Cooling-off period</span></button>
+        </div>
+        <button class="cc-modal-cancel">Cancel</button>
+      </div>
+    `;
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { overlay.remove(); resolve(null); } });
+    overlay.querySelector('.cc-modal-cancel').onclick = () => { overlay.remove(); resolve(null); };
+    overlay.querySelectorAll('.cc-modal-opt').forEach(btn => {
+      btn.onclick = () => { const v = btn.dataset.val; overlay.remove(); resolve(v); };
+    });
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Ban Modal — premium animated dialog
+════════════════════════════════════════════════════════════════ */
+function showBanModal(username) {
+  return new Promise((resolve) => {
+    document.getElementById('cc-ban-modal')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'cc-ban-modal';
+    overlay.className = 'cc-modal-overlay';
+    overlay.innerHTML = `
+      <div class="cc-modal ban" role="dialog" aria-modal="true">
+        <div class="cc-modal-icon">🚫</div>
+        <h3 class="cc-modal-title">Ban <span class="cc-modal-uname">${escHtml(username || 'User')}</span>?</h3>
+        <p class="cc-modal-sub">Select suspension duration</p>
+        <div class="cc-modal-grid ban-grid">
+          <button class="cc-modal-opt ban" data-val="6h"><span class="cc-opt-label">6 Hours</span></button>
+          <button class="cc-modal-opt ban" data-val="12h"><span class="cc-opt-label">12 Hours</span></button>
+          <button class="cc-modal-opt ban" data-val="1d"><span class="cc-opt-label">1 Day</span></button>
+          <button class="cc-modal-opt ban" data-val="3d"><span class="cc-opt-label">3 Days</span></button>
+          <button class="cc-modal-opt ban" data-val="7d"><span class="cc-opt-label">7 Days</span></button>
+          <button class="cc-modal-opt ban" data-val="1mo"><span class="cc-opt-label">1 Month</span></button>
+          <button class="cc-modal-opt ban permanent" data-val="permanent"><span class="cc-opt-icon">♾️</span><span class="cc-opt-label">Permanent</span><span class="cc-opt-note">Fingerprint recorded — no return</span></button>
+        </div>
+        <button class="cc-modal-cancel">Cancel</button>
+      </div>
+    `;
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { overlay.remove(); resolve(null); } });
+    overlay.querySelector('.cc-modal-cancel').onclick = () => { overlay.remove(); resolve(null); };
+    overlay.querySelectorAll('.cc-modal-opt').forEach(btn => {
+      btn.onclick = () => { const v = btn.dataset.val; overlay.remove(); resolve(v); };
+    });
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Legacy showActionSheet (kept for any other callers)
+════════════════════════════════════════════════════════════════ */
 let actionSheetResolver = null;
 
 function ensureActionSheet() {
@@ -2383,10 +2435,7 @@ function ensureActionSheet() {
 function closeActionSheet(value) {
   const overlay = document.getElementById('chat-action-sheet');
   if (overlay) overlay.classList.add('hidden');
-  if (actionSheetResolver) {
-    actionSheetResolver(value);
-    actionSheetResolver = null;
-  }
+  if (actionSheetResolver) { actionSheetResolver(value); actionSheetResolver = null; }
 }
 
 function showActionSheet({ title = '', message = '', actions = [] } = {}) {
@@ -2395,11 +2444,9 @@ function showActionSheet({ title = '', message = '', actions = [] } = {}) {
   const messageEl = overlay.querySelector('.chat-action-sheet-message');
   const actionsEl = overlay.querySelector('.chat-action-sheet-actions');
   if (!titleEl || !messageEl || !actionsEl) return Promise.resolve(null);
-
   titleEl.textContent = title;
   messageEl.textContent = message;
   actionsEl.innerHTML = '';
-
   actions.forEach((action) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -2408,11 +2455,8 @@ function showActionSheet({ title = '', message = '', actions = [] } = {}) {
     button.addEventListener('click', () => closeActionSheet(action.value));
     actionsEl.appendChild(button);
   });
-
   overlay.classList.remove('hidden');
-  return new Promise((resolve) => {
-    actionSheetResolver = resolve;
-  });
+  return new Promise((resolve) => { actionSheetResolver = resolve; });
 }
 
 /* ════════════════════════════════════════════════════════════════
