@@ -19,9 +19,9 @@ class ResizableLayout {
     this.RIGHT_WIDTH_KEY = 'chatcorner_right_sidebar_width';
 
     // Default widths (in pixels)
-    this.DEFAULT_LEFT_WIDTH = 200;
-    this.DEFAULT_RIGHT_WIDTH = 260;
-    this.MIN_WIDTH = 180;
+    this.DEFAULT_LEFT_WIDTH = 150;
+    this.DEFAULT_RIGHT_WIDTH = 230;
+    this.MIN_WIDTH = 120;
     this.MAX_WIDTH = 400;
 
     // Dragging state

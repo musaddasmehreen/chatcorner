@@ -72,8 +72,8 @@
 
 /* ── SIDEBARS ── */
 .sidebar {
-  width: 220px;
-  min-width: 150px;
+  width: 150px;
+  min-width: 120px;
   flex-shrink: 0;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -88,8 +88,8 @@
 .sidebar-right {
   border-left-width: 0;
   border-radius: 0;
-  width: 260px;
-  min-width: 180px;
+  width: 230px;
+  min-width: 160px;
 }
 
 /* Section labels */
@@ -483,8 +483,8 @@
   background: var(--surface);
 }
 .input-strip-left {
-  width: 220px;
-  min-width: 150px;
+  width: 150px;
+  min-width: 120px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -502,7 +502,7 @@
   border-right: 1px solid var(--border);
 }
 .input-strip-right {
-  width: 170px;
+  width: 150px;
   min-width: 120px;
   flex-shrink: 0;
   display: flex;

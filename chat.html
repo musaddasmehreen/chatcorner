@@ -16,7 +16,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v12';
+    const CURRENT_VERSION = 'v13';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -228,7 +228,7 @@
 
       <!-- Radio controls -->
       <div class="radio-controls" id="radio-controls">
-        <button class="input-btn radio-toggle-btn" id="btn-radio-toggle" onclick="toggleRadioControls()" title="Toggle Online Radio">📻 Radio</button>
+        <button class="radio-toggle-btn" id="btn-radio-toggle" onclick="toggleRadioControls()" title="Toggle Online Radio">📻 Radio</button>
         
         <!-- Volume Control -->
         <div class="radio-volume-container hidden" id="radio-volume-container">
