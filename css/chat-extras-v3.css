@@ -2138,4 +2138,29 @@ body.guest-mode .emoji-bar { display: none; }
   border-color: rgba(239, 68, 68, 0.55);
 }
 
+/* Header theme dots styling (smaller size and layout alignment) */
+#theme-bar.theme-bar {
+  display: flex !important;
+  align-items: center;
+  gap: 4px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+#theme-bar .theme-dot {
+  width: 12px !important;
+  height: 12px !important;
+  border-width: 1px !important;
+  margin: 0 !important;
+}
+#theme-bar .theme-dot.active {
+  transform: scale(1.15) !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.7), 0 0 4px var(--accent) !important;
+}
+[data-theme="arctic"] #theme-bar .theme-dot.active {
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 4px var(--accent) !important;
+}
+
 

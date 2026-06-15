@@ -504,7 +504,7 @@ body {
 .sidebar.left,
 .sidebar-left  { border-right: 1px solid var(--border); width: 160px; }
 .sidebar.right,
-.sidebar-right { border-left: 1px solid var(--border); width: 240px; }
+.sidebar-right { border-left: 1px solid var(--border); width: 260px; }
 
 /* ── Theme bar (inside left sidebar) ── */
 .theme-bar {

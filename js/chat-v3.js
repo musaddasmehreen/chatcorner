@@ -1245,7 +1245,6 @@ function renderUserList() {
       ${avatarHtml}
       ${roleBadge}
       <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${escHtml(u.username)}</button>
-      <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
     `;

@@ -16,7 +16,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v9';
+    const CURRENT_VERSION = 'v10';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -106,7 +106,16 @@
 
     <!-- TOPBAR -->
     <header class="topbar">
-      <div class="topbar-logo">💬 ChatCorner</div>
+      <div class="topbar-logo-area" style="display:flex; align-items:center; gap:0.6rem; flex-shrink:0;">
+        <div class="topbar-logo">💬 ChatCorner</div>
+        <div class="theme-bar" id="theme-bar" style="display:flex; align-items:center; gap:4px; padding:0; border:0; margin:0; box-shadow:none; background:transparent;">
+          <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
+          <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember 🔥"></button>
+          <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic ❄️"></button>
+          <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" onclick="setTheme('matrix')" title="Matrix"></button>
+          <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose 🌸"></button>
+        </div>
+      </div>
       <div class="topbar-room" id="current-room-name">Select a Room</div>
       <div class="topbar-search" id="topbar-search">
         <input
@@ -133,16 +142,7 @@
 
       <!-- LEFT SIDEBAR -->
       <aside class="sidebar sidebar-left" id="sidebar-left">
-        <!-- Theme bar -->
-        <div class="theme-bar" id="theme-bar">
-          <span class="theme-bar-label">🎨 THEME:</span>
-          <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
-          <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember 🔥"></button>
-          <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic ❄️"></button>
-          <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" onclick="setTheme('matrix')" title="Matrix"></button>
-          <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose 🌸"></button>
-          <span id="theme-name-label" class="theme-name-label">Nebula</span>
-        </div>
+        <!-- Room lists will render below -->
 
         <!-- Active cam window -->
         <div class="cam-window-area" id="cam-window-area" style="display:none">
@@ -295,7 +295,7 @@
   <script src="js/chat-v3.js"></script>
   <script src="js/pm.js?v=1.6"></script>
   <script src="js/audio-v3.js"></script>
-  <script src="js/resizable-layout.js?v=1.6"></script>
+  <script src="js/resizable-layout.js?v=1.7"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});

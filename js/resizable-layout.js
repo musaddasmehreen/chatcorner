@@ -20,8 +20,8 @@ class ResizableLayout {
 
     // Default widths (in pixels)
     this.DEFAULT_LEFT_WIDTH = 200;
-    this.DEFAULT_RIGHT_WIDTH = 200;
-    this.MIN_WIDTH = 120;
+    this.DEFAULT_RIGHT_WIDTH = 260;
+    this.MIN_WIDTH = 180;
     this.MAX_WIDTH = 400;
 
     // Dragging state
