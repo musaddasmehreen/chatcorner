@@ -79,6 +79,11 @@ function toggleEmojiPicker(event) {
   const input = document.getElementById('msg-input');
   if (!picker || input?.disabled) return;
   picker.classList.toggle('hidden');
+  if (!picker.classList.contains('hidden')) {
+    if (typeof window.closeInputExtras === 'function') {
+      window.closeInputExtras();
+    }
+  }
 }
 
 function closeEmojiPicker() {
@@ -713,6 +718,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('audio-bar').classList.remove('hidden');
   applyGuestModeUI();
   document.getElementById('btn-image-url')?.addEventListener('click', toggleRoomImageUrlInput);
+  document.getElementById('btn-image-url-mobile')?.addEventListener('click', (event) => {
+    if (typeof closeAllSidebars === 'function') closeAllSidebars();
+    toggleRoomImageUrlInput(event);
+  });
   document.getElementById('btn-room-image-url-clear')?.addEventListener('click', (event) => {
     event.stopPropagation();
     closeRoomImageUrlInput();
@@ -808,6 +817,16 @@ async function loadRooms() {
       li.onclick = () => enterRoom(room);
       if (textList) textList.appendChild(li);
     });
+    // Inject virtual IPTV room at end of sidebar list
+    if (textList) {
+      const iptvLi = document.createElement('li');
+      iptvLi.textContent = '📺 IPTV';
+      iptvLi.title = 'IPTV – Live TV Channels';
+      iptvLi.dataset.roomId = 'iptv-virtual';
+      iptvLi.classList.add('iptv-room-item');
+      iptvLi.onclick = () => enterIPTVRoom();
+      textList.appendChild(iptvLi);
+    }
     renderRoomsTopbar(rooms);
     enterRoom(rooms[0]);
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
@@ -839,6 +858,8 @@ function renderRoomsTopbar(rooms) {
 }
 
 async function enterRoom(room) {
+  // Exit IPTV mode if switching to a normal room
+  exitIPTVRoom();
   if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
   if (currentRoom?.id === room.id) return;
   if (roomVoiceNoteRecorder?.state === 'recording') {
@@ -853,6 +874,16 @@ async function enterRoom(room) {
   currentRoom = room;
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '# ' + room.name;
+
+  // Dynamic SEO: update page title and meta description for the current room
+  document.title = `#${room.name} – ChatCorner`;
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) metaDesc.setAttribute('content', `You are in #${room.name} on ChatCorner. Join the conversation, share voice notes, and connect with other users in real-time.`);
+
+  // Auto-close mobile sidebars when a room is selected
+  if (typeof closeAllSidebars === 'function') closeAllSidebars();
+  if (typeof switchMobileTab === 'function') switchMobileTab('chat');
+
   document.getElementById('messages').innerHTML = '';
   onlineUsers = {};
   cameraStates = {};
@@ -1124,7 +1155,7 @@ function buildMessageNode(msg) {
     
     const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
     const avatarInner = avatarUrl
-      ? `<img src="${escHtml(avatarUrl)}" alt=""/>`
+      ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar" loading="lazy"/>`
       : initial;
       
     let nickStyle = '';
@@ -1166,7 +1197,7 @@ function buildMessageNode(msg) {
   const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
   const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
   const avatarInner = avatarUrl
-    ? `<img src="${escHtml(avatarUrl)}" alt=""/>`
+    ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar" loading="lazy"/>`
     : initial;
     
   let nickStyle = '';
@@ -1234,7 +1265,9 @@ function scheduleRenderUserList() {
 
 function renderUserList() {
   const ul   = document.getElementById('user-list');
+  const ulMobile = document.getElementById('mobile-online-users');
   const frag = document.createDocumentFragment();
+  const fragMobile = document.createDocumentFragment();
   const isGuest = !isRegisteredUser();
   const sortedUsers = getSortedOnlineUsers();
 
@@ -1245,7 +1278,7 @@ function renderUserList() {
     const roleBadge = getRoleBadgeHtml(u);
     const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
     const avatarHtml = u.avatarUrl
-      ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt=""/>`
+      ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt="${escHtml(u.username || '')} avatar" loading="lazy"/>`
       : `<div class="roster-avatar-init" style="background:${escHtml(u.color || '#7c3aed')}">${(u.username || '?')[0].toUpperCase()}</div>`;
     
     li.innerHTML = `
@@ -1272,13 +1305,42 @@ function renderUserList() {
         openFloatingCamera(u.userId, u.username);
       }
     });
-    // Kick/ban buttons in sidebar are removed — only available in profile card (opened by clicking name)
 
     frag.appendChild(li);
+
+    // Mobile horizontal list item
+    if (ulMobile) {
+      const mDiv = document.createElement('div');
+      mDiv.className = 'mobile-user-avatar-wrap';
+      mDiv.dataset.userId = u.userId;
+      
+      const activeDot = `<span class="mobile-user-status-dot${u.registered ? '' : ' guest'}"></span>`;
+      mDiv.innerHTML = `
+        <div class="mobile-user-avatar-container">
+          ${avatarHtml}
+          ${activeDot}
+        </div>
+        <span class="mobile-user-name">${escHtml(u.username)}</span>
+      `;
+      
+      mDiv.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        promptUserRosterAction(u, isGuest);
+      });
+      
+      fragMobile.appendChild(mDiv);
+    }
   });
 
-  ul.innerHTML = '';
-  ul.appendChild(frag);
+  if (ul) {
+    ul.innerHTML = '';
+    ul.appendChild(frag);
+  }
+
+  if (ulMobile) {
+    ulMobile.innerHTML = '';
+    ulMobile.appendChild(fragMobile);
+  }
 
   // Update room-users-bar
   const bar = document.getElementById('room-users-bar');
@@ -4217,5 +4279,312 @@ window.toggleRadioMute = toggleRadioMute;
 window.clearScreenLocally = clearScreenLocally;
 window.clearAllRoomMessages = clearAllRoomMessages;
 
+// ──────────────────────────────────────────────
+// 📺 IPTV ROOM MODULE
+// ──────────────────────────────────────────────
 
+let _iptvHls = null;
+let _iptvChannels = [];
+let _iptvCurrentChannel = null;
+let _iptvChannelChannel = null; // Supabase realtime channel for IPTV chat
+let _iptvActive = false;
 
+// IPTV M3U sources from iptv-org
+const IPTV_SOURCES = {
+  'country:pk': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'country:in': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/in.m3u',
+  'country:us': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/us.m3u',
+  'country:uk': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/gb.m3u',
+  'country:ca': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/ca.m3u',
+  'cat:news':        'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:sports':      'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:movies':      'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:music':       'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:documentary': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/us.m3u',
+  'cat:kids':        'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/us.m3u',
+  'cat:general':     'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+};
+
+// Category filter keywords for category-type sources
+const IPTV_CAT_KEYWORDS = {
+  'cat:news':        ['news'],
+  'cat:sports':      ['sports', 'sport'],
+  'cat:movies':      ['movie', 'cinema', 'film'],
+  'cat:music':       ['music', 'entertainment'],
+  'cat:documentary': ['documentary', 'docu'],
+  'cat:kids':        ['kids', 'children', 'family'],
+  'cat:general':     [],
+};
+
+function parseM3U(text) {
+  const lines = text.split(/\r?\n/);
+  const channels = [];
+  let current = null;
+  for (const line of lines) {
+    if (line.startsWith('#EXTINF:')) {
+      current = { name: '', logo: '', group: '', url: '' };
+      const nameMatch = line.match(/,(.+)$/);
+      if (nameMatch) current.name = nameMatch[1].trim();
+      const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+      if (logoMatch) current.logo = logoMatch[1];
+      const groupMatch = line.match(/group-title="([^"]*)"/i);
+      if (groupMatch) current.group = groupMatch[1].toLowerCase();
+    } else if (line && !line.startsWith('#') && current) {
+      current.url = line.trim();
+      if (current.url) channels.push(current);
+      current = null;
+    }
+  }
+  return channels;
+}
+
+function filterChannelsByCategory(channels, key) {
+  if (!key.startsWith('cat:')) return channels;
+  const keywords = IPTV_CAT_KEYWORDS[key] || [];
+  if (!keywords.length) return channels;
+  return channels.filter(ch => keywords.some(k => (ch.group || '').includes(k) || ch.name.toLowerCase().includes(k)));
+}
+
+async function loadIPTVChannels(key) {
+  const url = IPTV_SOURCES[key] || IPTV_SOURCES['country:pk'];
+  const listEl = document.getElementById('iptv-channel-list');
+  if (listEl) listEl.innerHTML = '<li style="padding:12px;color:var(--muted)">⏳ Loading channels...</li>';
+  try {
+    // Use a CORS proxy to fetch the M3U (GitHub raw is usually CORS-friendly but we add fallback)
+    let text;
+    try {
+      const resp = await fetch(url, { cache: 'default' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      text = await resp.text();
+    } catch (e) {
+      // Fallback: try allorigins proxy
+      const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+      const resp2 = await fetch(proxy);
+      const json = await resp2.json();
+      text = json.contents;
+    }
+    let channels = parseM3U(text);
+    if (key.startsWith('cat:')) channels = filterChannelsByCategory(channels, key);
+    _iptvChannels = channels.slice(0, 200); // limit to first 200
+    renderIPTVChannelList(_iptvChannels);
+  } catch (err) {
+    console.error('IPTV load error', err);
+    if (listEl) listEl.innerHTML = '<li style="padding:12px;color:#ef4444">❌ Failed to load channels. Try another region.</li>';
+    _iptvChannels = [];
+  }
+}
+
+function renderIPTVChannelList(channels) {
+  const listEl = document.getElementById('iptv-channel-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  if (!channels.length) {
+    listEl.innerHTML = '<li style="padding:12px;color:var(--muted)">No channels found.</li>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  channels.forEach((ch, i) => {
+    const li = document.createElement('li');
+    li.dataset.index = String(i);
+    if (ch.logo) {
+      const img = document.createElement('img');
+      img.src = ch.logo;
+      img.alt = '';
+      img.className = 'iptv-channel-logo';
+      img.onerror = () => { img.style.display = 'none'; };
+      li.appendChild(img);
+    } else {
+      const span = document.createElement('span');
+      span.textContent = '📺';
+      li.appendChild(span);
+    }
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = ch.name || ('Channel ' + (i + 1));
+    li.appendChild(nameSpan);
+    li.onclick = () => playIPTVChannel(ch, li);
+    frag.appendChild(li);
+  });
+  listEl.appendChild(frag);
+}
+
+function playIPTVChannel(ch, liEl) {
+  _iptvCurrentChannel = ch;
+  // Mark active
+  document.querySelectorAll('.iptv-channel-list li').forEach(l => l.classList.remove('active'));
+  if (liEl) liEl.classList.add('active');
+
+  const video = document.getElementById('iptv-player');
+  const overlay = document.getElementById('iptv-player-overlay');
+  const loadingText = document.getElementById('iptv-loading-text');
+  if (!video) return;
+
+  // Show loading overlay
+  if (overlay) overlay.classList.remove('hidden');
+  if (loadingText) loadingText.textContent = 'Loading: ' + ch.name + '...';
+
+  // Destroy old HLS instance
+  if (_iptvHls) {
+    _iptvHls.destroy();
+    _iptvHls = null;
+  }
+  video.src = '';
+
+  const onReady = () => { if (overlay) overlay.classList.add('hidden'); };
+  const onError = () => {
+    if (overlay) overlay.classList.remove('hidden');
+    if (loadingText) loadingText.textContent = '⚠️ Cannot play this channel. Try another.';
+  };
+  video.onplaying = onReady;
+  video.onerror = onError;
+
+  if (ch.url.includes('.m3u8') || ch.url.includes('m3u8')) {
+    if (window.Hls && Hls.isSupported()) {
+      _iptvHls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
+      _iptvHls.loadSource(ch.url);
+      _iptvHls.attachMedia(video);
+      _iptvHls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+      _iptvHls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) onError();
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = ch.url;
+      video.play().catch(onError);
+    } else {
+      onError();
+    }
+  } else {
+    // Direct MP4/MKV or other
+    video.src = ch.url;
+    video.play().catch(onError);
+  }
+}
+
+function enterIPTVRoom() {
+  if (_iptvActive) return;
+  _iptvActive = true;
+
+  // Mark sidebar item
+  document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
+  const iptvLi = document.querySelector('#room-list li[data-room-id="iptv-virtual"]');
+  if (iptvLi) iptvLi.classList.add('active');
+
+  // Show IPTV container, hide regular messages area controls
+  const iptvContainer = document.getElementById('iptv-container');
+  if (iptvContainer) iptvContainer.classList.remove('hidden');
+
+  // Update topbar
+  const titleEl = document.getElementById('current-room-name');
+  if (titleEl) titleEl.textContent = '📺 IPTV Live Channels';
+  document.title = '📺 IPTV – ChatCorner';
+
+  // Add page-shell class
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.add('iptv-active');
+
+  // Switch mobile tab to chat
+  if (typeof switchMobileTab === 'function') switchMobileTab('chat');
+
+  // Clear messages and disable voice controls
+  const msgContainer = document.getElementById('messages');
+  if (msgContainer) msgContainer.innerHTML = '';
+  const voiceControls = document.getElementById('voice-controls');
+  if (voiceControls) voiceControls.classList.add('hidden');
+  const barDivider = document.getElementById('bar-divider');
+  if (barDivider) barDivider.classList.add('hidden');
+
+  // Enable input
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn = document.querySelector('.btn-send');
+  const emojiBtn = document.getElementById('btn-emoji');
+  if (msgInput) { msgInput.disabled = false; msgInput.placeholder = '💬 Chat in IPTV room...'; }
+  if (sendBtn) sendBtn.disabled = false;
+  if (emojiBtn) emojiBtn.disabled = false;
+
+  // Set currentRoom to a virtual object so message sending works via realtime broadcast
+  currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: false, _virtual: true };
+
+  // Subscribe to realtime broadcast channel for IPTV chat (no DB writes, broadcast only)
+  if (_iptvChannelChannel) sbClient.removeChannel(_iptvChannelChannel);
+  _iptvChannelChannel = sbClient.channel('iptv-chat-room', {
+    config: { broadcast: { self: true } }
+  });
+  _iptvChannelChannel.on('broadcast', { event: 'message' }, ({ payload }) => {
+    renderIPTVChatMessage(payload);
+  }).subscribe();
+
+  // Load default channels (Pakistan)
+  const catSelect = document.getElementById('iptv-category-select');
+  const defaultVal = catSelect ? catSelect.value : 'country:pk';
+  loadIPTVChannels(defaultVal);
+}
+
+function exitIPTVRoom() {
+  if (!_iptvActive) return;
+  _iptvActive = false;
+
+  const iptvContainer = document.getElementById('iptv-container');
+  if (iptvContainer) iptvContainer.classList.add('hidden');
+
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.remove('iptv-active');
+
+  // Stop video
+  if (_iptvHls) { _iptvHls.destroy(); _iptvHls = null; }
+  const video = document.getElementById('iptv-player');
+  if (video) { video.pause(); video.src = ''; }
+
+  // Remove realtime channel
+  if (_iptvChannelChannel) { sbClient.removeChannel(_iptvChannelChannel); _iptvChannelChannel = null; }
+
+  // Clear channel list
+  const listEl = document.getElementById('iptv-channel-list');
+  if (listEl) listEl.innerHTML = '';
+}
+
+function renderIPTVChatMessage(payload) {
+  const container = document.getElementById('messages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'message';
+  const username = payload.username || 'Anonymous';
+  const text = String(payload.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}</span><span class="msg-text">${text}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+// Patch sendMessage to support IPTV broadcast when in IPTV room
+const _origSendMessage = window.sendMessage;
+window.sendMessage = async function() {
+  if (!_iptvActive || !currentRoom?._virtual) {
+    if (typeof _origSendMessage === 'function') return _origSendMessage();
+    return;
+  }
+  const input = document.getElementById('msg-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const payload = {
+    username: currentProfile?.username || currentUser?.email?.split('@')[0] || 'Guest',
+    text,
+    ts: Date.now()
+  };
+  if (_iptvChannelChannel) {
+    await _iptvChannelChannel.send({ type: 'broadcast', event: 'message', payload });
+  }
+};
+
+window.enterIPTVRoom = enterIPTVRoom;
+window.exitIPTVRoom = exitIPTVRoom;
+
+window.changeIPTVCategoryOrCountry = function(val) {
+  loadIPTVChannels(val);
+};
+
+window.onIPTVChannelSearchInput = function(query) {
+  if (!_iptvChannels.length) return;
+  const q = query.toLowerCase().trim();
+  const filtered = q ? _iptvChannels.filter(ch => ch.name.toLowerCase().includes(q)) : _iptvChannels;
+  renderIPTVChannelList(filtered);
+};

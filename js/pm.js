@@ -170,6 +170,10 @@ async function openPrivateChat(userId, username) {
   activePmUserId = userId;
   renderPvtBar();
 
+  // Close mobile sidebars so PM window is visible
+  if (typeof closeAllSidebars === 'function') closeAllSidebars();
+  if (typeof switchMobileTab === 'function') switchMobileTab('chat');
+
   const root = ensurePmDockedRoot();
   if (!root) return;
   const stage = document.getElementById('pm-popup-stage');

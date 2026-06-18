@@ -46,6 +46,9 @@ class ResizableLayout {
    * Load saved sidebar widths from localStorage
    */
   loadSavedWidths() {
+    // On mobile, skip applying stored widths — CSS drawer system handles sizing
+    if (window.innerWidth <= 768) return;
+
     const savedLeftWidth = localStorage.getItem(this.LEFT_WIDTH_KEY);
     const savedRightWidth = localStorage.getItem(this.RIGHT_WIDTH_KEY);
 

@@ -2,8 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ChatCorner – Rooms</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>ChatCorner – Real-Time Chat & Rooms</title>
+  <meta name="description" content="ChatCorner - Join public chatrooms, connect with users, make voice calls, send voice notes, and share media in real-time."/>
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="ChatCorner – Real-Time Chat & Rooms"/>
+  <meta property="og:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
+  <meta property="og:image" content="https://chatcorner.qzz.io/manifest.json"/>
+  <meta property="og:url" content="https://chatcorner.qzz.io/"/>
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="ChatCorner – Real-Time Chat & Rooms"/>
+  <meta name="twitter:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
+
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#8b6ded"/>
   <!-- Security headers -->
@@ -16,7 +30,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v16';
+    const CURRENT_VERSION = 'v17';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -80,6 +94,7 @@
   </div>
 
   <!-- ── Permissions Banner ──────────────────────────────────────────────────── -->
+  <div id="permissions-backdrop" class="sidebar-backdrop" style="display:none; z-index:998; background:rgba(0,0,0,0.6)" aria-hidden="true"></div>
   <div id="permissions-banner" class="perms-banner" style="display:none">
     <div class="perms-left">
       <span class="perms-title">🔐 Allow Permissions</span>
@@ -105,10 +120,15 @@
   <div class="page-shell">
 
     <!-- TOPBAR -->
-    <header class="topbar">
-      <div class="topbar-logo-area" style="display:flex; align-items:center; gap:0.6rem; flex-shrink:0;">
-        <div class="topbar-logo">💬 ChatCorner</div>
-        <div class="theme-bar" id="theme-bar" style="display:flex; align-items:center; gap:4px; padding:0; border:0; margin:0; box-shadow:none; background:transparent;">
+    <header class="topbar" role="banner">
+      <!-- Mobile: Rooms sidebar toggle -->
+      <button class="topbar-mobile-toggle" id="btn-toggle-left-sidebar" onclick="toggleLeftSidebar()" aria-label="Toggle rooms list" title="Rooms">
+        <span class="hamburger-icon">☰</span>
+      </button>
+
+      <div class="topbar-logo-area">
+        <strong class="topbar-logo">💬 ChatCorner</strong>
+        <div class="theme-bar" id="theme-bar">
           <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
           <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember 🔥"></button>
           <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic ❄️"></button>
@@ -140,14 +160,28 @@
         <button class="topbar-btn" id="btn-edit-avatar" onclick="showProfileModal(currentUser.id, 'profile')" style="display:none" aria-label="Update avatar">🖼️</button>
         <button class="topbar-btn" onclick="logout()" aria-label="Log out">Logout</button>
       </div>
+
+      <!-- Mobile: Users sidebar toggle -->
+      <button class="topbar-mobile-toggle" id="btn-toggle-right-sidebar" onclick="toggleRightSidebar()" aria-label="Toggle users list" title="Users">
+        👥
+      </button>
     </header>
+
+    <!-- Mobile Navigation Tabs (visible only on mobile) -->
+    <nav class="mobile-tabs" id="mobile-tabs" aria-label="Mobile navigation">
+      <button class="mobile-tab-btn" onclick="switchMobileTab('rooms')" id="tab-rooms">Rooms</button>
+      <button class="mobile-tab-btn active" onclick="switchMobileTab('chat')" id="tab-chat">Chat</button>
+      <button class="mobile-tab-btn" onclick="switchMobileTab('users')" id="tab-users">Users</button>
+    </nav>
+
+    <!-- Mobile sidebar backdrop overlay -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="closeAllSidebars()" aria-hidden="true"></div>
 
     <!-- THREE COLUMNS -->
     <div class="layout">
 
       <!-- LEFT SIDEBAR -->
       <aside class="sidebar sidebar-left" id="sidebar-left">
-        <!-- Room lists will render below -->
 
         <!-- Active cam window -->
         <div class="cam-window-area" id="cam-window-area" style="display:none">
@@ -166,6 +200,39 @@
 
       <!-- CENTER -->
       <main class="chat-main">
+        <!-- IPTV player and channel explorer -->
+        <div id="iptv-container" class="iptv-container hidden">
+          <div class="iptv-sidebar">
+            <div class="iptv-category-select-wrapper">
+              <select id="iptv-category-select" onchange="changeIPTVCategoryOrCountry(this.value)">
+                <option value="country:pk">🇵🇰 Pakistan Channels</option>
+                <option value="country:in">🇮🇳 India Channels</option>
+                <option value="country:us">🇺🇸 United States Channels</option>
+                <option value="country:uk">🇬🇧 United Kingdom Channels</option>
+                <option value="country:ca">🇨🇦 Canada Channels</option>
+                <option value="cat:news">📰 News Channels</option>
+                <option value="cat:sports">⚽ Sports Channels</option>
+                <option value="cat:movies">🍿 Movies Channels</option>
+                <option value="cat:music">🎵 Music Channels</option>
+                <option value="cat:documentary">🧪 Documentaries</option>
+                <option value="cat:kids">🧸 Kids Channels</option>
+                <option value="cat:general">🌍 General Channels</option>
+              </select>
+            </div>
+            <div class="iptv-search-bar">
+              <input type="text" id="iptv-channel-search" placeholder="Search channels..." oninput="onIPTVChannelSearchInput(this.value)"/>
+            </div>
+            <ul class="iptv-channel-list" id="iptv-channel-list"></ul>
+          </div>
+          <div class="iptv-player-wrapper">
+            <video id="iptv-player" controls autoplay playsinline></video>
+            <div id="iptv-player-overlay" class="iptv-player-overlay hidden">
+              <div class="spinner"></div>
+              <span id="iptv-loading-text">Loading Channel...</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Video elements for voice room -->
         <div id="video-grid" class="video-grid hidden"></div>
         <video id="local-video" class="local-video hidden" autoplay playsinline muted></video>
@@ -204,10 +271,16 @@
           <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
           <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
         </div>
-        <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
-        <button class="input-btn" id="btn-image-url" title="Share image or GIF" aria-label="Share image or GIF">🖼️</button>
-        <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote()" title="Send a voice note" aria-label="Record and send voice note">🎙️</button>
-        <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick()" title="Join Voice Chat" aria-label="Join voice chat">🔊</button>
+        
+        <!-- Hamburger extras button (visible on mobile, positioned on the left side) -->
+        <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options">☰</button>
+
+        <div id="input-buttons-group" class="input-buttons-group">
+          <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
+          <button class="input-btn" id="btn-image-url" onclick="closeInputExtras()" title="Share image or GIF" aria-label="Share image or GIF">🖼️</button>
+          <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote();closeInputExtras()" title="Send a voice note" aria-label="Record and send voice note">🎙️</button>
+          <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick();closeInputExtras()" title="Join Voice Chat" aria-label="Join voice chat">🔊</button>
+        </div>
         <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
       </div>
       <div class="input-strip-center">
@@ -303,6 +376,18 @@
     </div>
     <video id="floating-camera-video" autoplay playsinline></video>
   </div>
+
+  <!-- Mobile Download App Modal -->
+  <div id="download-app-modal" class="download-modal hidden" role="dialog" aria-modal="true">
+    <div class="download-modal-content">
+      <button class="download-modal-close" onclick="closeDownloadModal()" title="Dismiss">✕</button>
+      <div class="download-modal-icon">📱</div>
+      <h3>Get ChatCorner for Android</h3>
+      <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
+      <a href="chatcorner-updated.apk" class="download-modal-btn" download>Download for Android</a>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/security.js?v=3.2"></script>
   <script src="js/config.js?v=1.6"></script>
@@ -317,6 +402,103 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
     }
+  </script>
+
+  <!-- Mobile Sidebar Drawer Logic -->
+  <script>
+    (function() {
+      const MOBILE_BP = 768;
+
+      function isMobile() { return window.innerWidth <= MOBILE_BP; }
+
+      function getBackdrop() { return document.getElementById('sidebar-backdrop'); }
+      function getLeftSidebar() { return document.getElementById('sidebar-left'); }
+      function getRightSidebar() { return document.getElementById('sidebar-right'); }
+
+      // Mobile Tabs Logic
+      window.switchMobileTab = function(tabName) {
+        const tabs = document.querySelectorAll('.mobile-tab-btn');
+        tabs.forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.getElementById('tab-' + tabName);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        const shell = document.querySelector('.page-shell');
+        if (shell) {
+          if (tabName === 'rooms') {
+            shell.classList.add('mobile-rooms-active');
+            shell.classList.remove('mobile-users-active');
+          } else if (tabName === 'users') {
+            shell.classList.remove('mobile-rooms-active');
+            shell.classList.add('mobile-users-active');
+          } else {
+            shell.classList.remove('mobile-rooms-active');
+            shell.classList.remove('mobile-users-active');
+          }
+        }
+      };
+
+      window.toggleLeftSidebar = function() {
+        if (isMobile()) switchMobileTab('rooms');
+      };
+
+      window.toggleRightSidebar = function() {
+        if (isMobile()) switchMobileTab('users');
+      };
+
+      window.closeAllSidebars = function() {
+        // Compatibility
+      };
+
+      // Input Strip Extras Menu Logic
+      window.toggleInputExtrasMenu = function(event) {
+        event?.stopPropagation();
+        const group = document.getElementById('input-buttons-group');
+        if (group) group.classList.toggle('open');
+      };
+
+      window.closeInputExtras = function() {
+        const group = document.getElementById('input-buttons-group');
+        if (group) group.classList.remove('open');
+      };
+
+      document.addEventListener('click', (event) => {
+        const group = document.getElementById('input-buttons-group');
+        const btn = document.getElementById('btn-input-extras');
+        if (group && btn && !group.contains(event.target) && event.target !== btn) {
+          group.classList.remove('open');
+        }
+      });
+
+      // Mobile Download App Modal Logic
+      window.checkShowDownloadModal = function() {
+        const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isCapacitor = window.hasOwnProperty('Capacitor');
+        
+        if (isMobileDevice && !isCapacitor) {
+          const modal = document.getElementById('download-app-modal');
+          if (modal) modal.classList.remove('hidden');
+        }
+      };
+      
+      window.closeDownloadModal = function() {
+        const modal = document.getElementById('download-app-modal');
+        if (modal) modal.classList.add('hidden');
+      };
+
+      // Call on load
+      setTimeout(checkShowDownloadModal, 1500);
+
+      // Auto-close sidebars when window resizes above mobile breakpoint
+      window.addEventListener('resize', function() {
+        if (!isMobile()) {
+          const shell = document.querySelector('.page-shell');
+          if (shell) {
+            shell.classList.remove('mobile-rooms-active');
+            shell.classList.remove('mobile-users-active');
+          }
+        }
+      });
+    })();
   </script>
 </body>
 </html>
