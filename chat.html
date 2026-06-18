@@ -139,7 +139,10 @@
           <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose 🌸"></button>
         </div>
       </div>
-      <div class="topbar-room" id="current-room-name">Select a Room</div>
+      <div class="topbar-room">
+        <span id="current-room-name">Select a Room</span>
+        <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">🔙 Return to Rooms</button>
+      </div>
       <div class="topbar-search" id="topbar-search">
         <input
           type="search"

@@ -1336,14 +1336,40 @@
   to { transform: rotate(360deg); }
 }
 
-/* Hide sidebar right when IPTV room is active */
+/* Hide sidebar left and right when IPTV room is active */
+.page-shell.iptv-active .sidebar-left,
 .page-shell.iptv-active .sidebar-right {
+  display: none !important;
+}
+
+/* Return to rooms button styling */
+.btn-iptv-return {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(139, 109, 237, 0.4);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.btn-iptv-return:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.btn-iptv-return.hidden {
   display: none !important;
 }
 
 /* On mobile, adjust the split layout */
 @media (max-width: 768px) {
-  .page-shell.iptv-active #tab-users {
+  .page-shell.iptv-active .mobile-tabs {
     display: none !important;
   }
   .iptv-container {

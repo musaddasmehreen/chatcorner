@@ -4345,19 +4345,76 @@ function filterChannelsByCategory(channels, key) {
   return channels.filter(ch => keywords.some(k => (ch.group || '').includes(k) || ch.name.toLowerCase().includes(k)));
 }
 
+let _iptvVerificationQueue = [];
+let _iptvVerifying = false;
+
+async function checkChannelReachability(url) {
+  if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+    return false; // Mixed content will be blocked by the browser anyway
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+    await fetch(url, { method: 'GET', mode: 'no-cors', signal: controller.signal });
+    clearTimeout(timeoutId);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function startVerifyingChannels(channelsToCheck) {
+  _iptvVerificationQueue = [...channelsToCheck];
+  if (!_iptvVerifying) {
+    _iptvVerifying = true;
+    verifyNextBatch();
+  }
+}
+
+async function verifyNextBatch() {
+  if (!_iptvActive || _iptvVerificationQueue.length === 0) {
+    _iptvVerifying = false;
+    _iptvVerificationQueue = [];
+    return;
+  }
+
+  const batch = _iptvVerificationQueue.splice(0, 5);
+  const results = await Promise.all(batch.map(async (ch) => {
+    if (!_iptvChannels.some(item => item.url === ch.url)) {
+      return { ch, isReachable: true }; // Already replaced or loaded new
+    }
+    const isReachable = await checkChannelReachability(ch.url);
+    return { ch, isReachable };
+  }));
+
+  results.forEach(({ ch, isReachable }) => {
+    if (!isReachable && _iptvActive) {
+      ch.broken = true;
+      _iptvChannels = _iptvChannels.filter(item => item.url !== ch.url);
+      const li = document.querySelector(`.iptv-channel-list li[data-url="${encodeURIComponent(ch.url)}"]`);
+      if (li) li.remove();
+    }
+  });
+
+  if (_iptvActive && _iptvVerificationQueue.length > 0) {
+    setTimeout(verifyNextBatch, 100);
+  } else {
+    _iptvVerifying = false;
+    _iptvVerificationQueue = [];
+  }
+}
+
 async function loadIPTVChannels(key) {
   const url = IPTV_SOURCES[key] || IPTV_SOURCES['country:pk'];
   const listEl = document.getElementById('iptv-channel-list');
   if (listEl) listEl.innerHTML = '<li style="padding:12px;color:var(--muted)">⏳ Loading channels...</li>';
   try {
-    // Use a CORS proxy to fetch the M3U (GitHub raw is usually CORS-friendly but we add fallback)
     let text;
     try {
       const resp = await fetch(url, { cache: 'default' });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       text = await resp.text();
     } catch (e) {
-      // Fallback: try allorigins proxy
       const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
       const resp2 = await fetch(proxy);
       const json = await resp2.json();
@@ -4365,8 +4422,9 @@ async function loadIPTVChannels(key) {
     }
     let channels = parseM3U(text);
     if (key.startsWith('cat:')) channels = filterChannelsByCategory(channels, key);
-    _iptvChannels = channels.slice(0, 200); // limit to first 200
+    _iptvChannels = channels.slice(0, 200);
     renderIPTVChannelList(_iptvChannels);
+    startVerifyingChannels(_iptvChannels);
   } catch (err) {
     console.error('IPTV load error', err);
     if (listEl) listEl.innerHTML = '<li style="padding:12px;color:#ef4444">❌ Failed to load channels. Try another region.</li>';
@@ -4386,6 +4444,7 @@ function renderIPTVChannelList(channels) {
   channels.forEach((ch, i) => {
     const li = document.createElement('li');
     li.dataset.index = String(i);
+    li.dataset.url = encodeURIComponent(ch.url);
     if (ch.logo) {
       const img = document.createElement('img');
       img.src = ch.logo;
@@ -4409,7 +4468,6 @@ function renderIPTVChannelList(channels) {
 
 function playIPTVChannel(ch, liEl) {
   _iptvCurrentChannel = ch;
-  // Mark active
   document.querySelectorAll('.iptv-channel-list li').forEach(l => l.classList.remove('active'));
   if (liEl) liEl.classList.add('active');
 
@@ -4418,11 +4476,9 @@ function playIPTVChannel(ch, liEl) {
   const loadingText = document.getElementById('iptv-loading-text');
   if (!video) return;
 
-  // Show loading overlay
   if (overlay) overlay.classList.remove('hidden');
   if (loadingText) loadingText.textContent = 'Loading: ' + ch.name + '...';
 
-  // Destroy old HLS instance
   if (_iptvHls) {
     _iptvHls.destroy();
     _iptvHls = null;
@@ -4433,6 +4489,12 @@ function playIPTVChannel(ch, liEl) {
   const onError = () => {
     if (overlay) overlay.classList.remove('hidden');
     if (loadingText) loadingText.textContent = '⚠️ Cannot play this channel. Try another.';
+    
+    // Mark as broken and remove from DOM/list
+    ch.broken = true;
+    _iptvChannels = _iptvChannels.filter(item => item.url !== ch.url);
+    const li = document.querySelector(`.iptv-channel-list li[data-url="${encodeURIComponent(ch.url)}"]`);
+    if (li) li.remove();
   };
   video.onplaying = onReady;
   video.onerror = onError;
@@ -4453,7 +4515,6 @@ function playIPTVChannel(ch, liEl) {
       onError();
     }
   } else {
-    // Direct MP4/MKV or other
     video.src = ch.url;
     video.play().catch(onError);
   }
@@ -4471,6 +4532,10 @@ function enterIPTVRoom() {
   // Show IPTV container, hide regular messages area controls
   const iptvContainer = document.getElementById('iptv-container');
   if (iptvContainer) iptvContainer.classList.remove('hidden');
+
+  // Show return button
+  const btnReturn = document.getElementById('btn-iptv-return');
+  if (btnReturn) btnReturn.classList.remove('hidden');
 
   // Update topbar
   const titleEl = document.getElementById('current-room-name');
@@ -4528,6 +4593,10 @@ function exitIPTVRoom() {
   const shell = document.querySelector('.page-shell');
   if (shell) shell.classList.remove('iptv-active');
 
+  // Hide return button
+  const btnReturn = document.getElementById('btn-iptv-return');
+  if (btnReturn) btnReturn.classList.add('hidden');
+
   // Stop video
   if (_iptvHls) { _iptvHls.destroy(); _iptvHls = null; }
   const video = document.getElementById('iptv-player');
@@ -4539,6 +4608,15 @@ function exitIPTVRoom() {
   // Clear channel list
   const listEl = document.getElementById('iptv-channel-list');
   if (listEl) listEl.innerHTML = '';
+}
+
+function exitIPTVRoomAndShowRooms() {
+  if (cachedRooms && cachedRooms.length > 0) {
+    enterRoom(cachedRooms[0]);
+  }
+  if (typeof switchMobileTab === 'function') {
+    switchMobileTab('rooms');
+  }
 }
 
 function renderIPTVChatMessage(payload) {
@@ -4577,6 +4655,7 @@ window.sendMessage = async function() {
 
 window.enterIPTVRoom = enterIPTVRoom;
 window.exitIPTVRoom = exitIPTVRoom;
+window.exitIPTVRoomAndShowRooms = exitIPTVRoomAndShowRooms;
 
 window.changeIPTVCategoryOrCountry = function(val) {
   loadIPTVChannels(val);
