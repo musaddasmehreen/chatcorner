@@ -20,6 +20,9 @@
 
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#8b6ded"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="ChatCorner"/>
   <!-- Security headers -->
   <meta name="referrer" content="strict-origin-when-cross-origin"/>
   <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
@@ -471,10 +474,10 @@
 
       // Mobile Download App Modal Logic
       window.checkShowDownloadModal = function() {
-        const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isAndroid = /Android/i.test(navigator.userAgent);
         const isCapacitor = window.hasOwnProperty('Capacitor');
         
-        if (isMobileDevice && !isCapacitor) {
+        if (isAndroid && !isCapacitor) {
           const modal = document.getElementById('download-app-modal');
           if (modal) modal.classList.remove('hidden');
         }
