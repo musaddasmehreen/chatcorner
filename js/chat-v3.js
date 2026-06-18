@@ -4565,6 +4565,18 @@ function enterIPTVRoom() {
   if (sendBtn) sendBtn.disabled = false;
   if (emojiBtn) emojiBtn.disabled = false;
 
+  // Wrap messages + input-strip into .iptv-chat-wrapper for left panel
+  const chatMain = document.querySelector('.chat-main');
+  const messages = document.getElementById('messages');
+  const inputStrip = document.querySelector('.input-strip');
+  if (chatMain && messages && inputStrip && !document.querySelector('.iptv-chat-wrapper')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'iptv-chat-wrapper';
+    chatMain.appendChild(wrapper);
+    wrapper.appendChild(messages);
+    wrapper.appendChild(inputStrip);
+  }
+
   // Set currentRoom to a virtual object so message sending works via realtime broadcast
   currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: false, _virtual: true };
 
@@ -4596,6 +4608,14 @@ function exitIPTVRoom() {
   // Hide return button
   const btnReturn = document.getElementById('btn-iptv-return');
   if (btnReturn) btnReturn.classList.add('hidden');
+
+  // Unwrap chat elements back into .chat-main
+  const chatMain = document.querySelector('.chat-main');
+  const wrapper = document.querySelector('.iptv-chat-wrapper');
+  if (chatMain && wrapper) {
+    while (wrapper.firstChild) chatMain.appendChild(wrapper.firstChild);
+    wrapper.remove();
+  }
 
   // Stop video
   if (_iptvHls) { _iptvHls.destroy(); _iptvHls = null; }
