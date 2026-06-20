@@ -2703,6 +2703,7 @@ function getRoleLabel(u) {
 let _pcTimer  = null;
 let _pcHide   = null;
 let _pcActive = null;
+let _pcSessionId = 0;
 
 function scheduleProfileCard(u, anchor) {
   clearTimeout(_pcTimer);
@@ -2712,6 +2713,7 @@ function scheduleProfileCard(u, anchor) {
 
 function cancelProfileCard() {
   clearTimeout(_pcTimer);
+  _pcSessionId++; // Invalidate any pending async fetch
   // Do NOT close the profile card if it is in pinned mode
   if (_pcActive && _pcActive.classList.contains('pinned')) {
     return;
@@ -2729,6 +2731,7 @@ function hideProfileCard() {
 
 async function showProfileCard(u, anchor, pinned = false) {
   hideProfileCard();
+  const currentSession = ++_pcSessionId;
 
   // Fetch full profile for join date, IP, avatar, VIP status
   let profile = null;
@@ -2736,6 +2739,8 @@ async function showProfileCard(u, anchor, pinned = false) {
     const { data } = await sbClient.from('profiles').select('*').eq('id', u.userId).single();
     profile = data;
   } catch (_) {}
+  
+  if (currentSession !== _pcSessionId) return; // Mouse left while fetching
   if (!profile) return;
 
   const viewerLevel  = getViewerRoleLevel();
