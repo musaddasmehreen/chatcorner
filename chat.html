@@ -27,13 +27,15 @@
   <meta name="referrer" content="strict-origin-when-cross-origin"/>
   <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
   <meta http-equiv="X-Frame-Options" content="DENY"/>
-  <link rel="stylesheet" href="css/style.css?v=1.2"/>
-  <link rel="stylesheet" href="css/chat-extras-v3.css"/>
+  <link rel="stylesheet" href="css/style.css?v=1.3"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=1.3"/>
   <link rel="stylesheet" href="css/resizable-layout.css?v=1.2"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v17';
+    const CURRENT_VERSION = 'v18';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -67,6 +69,12 @@
   </script>
 </head>
 <body class="chat-page">
+
+  <!-- ── Connection Error Banner ────────────────────────────────────────────── -->
+  <div id="connection-error-banner" class="connection-error-banner hidden" role="alert">
+    <span class="banner-text">⚠️ Connection lost or room limit reached. Reconnecting...</span>
+    <button class="banner-close" onclick="this.parentElement.classList.add('hidden')" title="Dismiss">✕</button>
+  </div>
 
   <!-- ── VPN Block Overlay ───────────────────────────────────────────────────── -->
   <div id="vpn-overlay" class="vpn-overlay hidden" role="alertdialog" aria-modal="true" aria-label="VPN Detected">
@@ -189,6 +197,9 @@
       <!-- LEFT SIDEBAR -->
       <aside class="sidebar sidebar-left" id="sidebar-left">
 
+        <!-- Pin button (Feature 2) -->
+        <button class="btn-pin-rooms" id="btn-pin-rooms" title="Pin/Unpin rooms sidebar" aria-label="Pin rooms sidebar">📌 Pin</button>
+
         <!-- Active cam window -->
         <div class="cam-window-area" id="cam-window-area" style="display:none">
           <div class="cam-window-header">
@@ -290,7 +301,7 @@
         <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
       </div>
       <div class="input-strip-center">
-        <input id="msg-input" class="msg-input" type="text" placeholder="Type a message… (Enter to send)" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off" aria-label="Message input"/>
+        <textarea id="msg-input" class="msg-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
         <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap" aria-live="polite" aria-label="Character count">0/500</span>
       </div>
       <div class="input-strip-right">
@@ -391,19 +402,22 @@
       <h3>Get ChatCorner for Android</h3>
       <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
       <a href="chatcorner-updated.apk" class="download-modal-btn" download>Download for Android</a>
+      <div style="font-family: monospace; font-size: 11px; margin-top: 10px; color: rgba(255,255,255,0.6); word-break: break-all; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2);">
+        SHA-256: <span id="apk-sha256">a8000174421f29a6af56658d24734d48b06f4155f07814a601202b954cccb80c</span>
+      </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/security.js?v=3.2"></script>
-  <script src="js/config.js?v=1.6"></script>
-  <script src="js/auth.js?v=1.6"></script>
-  <script src="js/permissions.js?v=1.6"></script>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous"></script>
-  <script src="js/chat-v3.js"></script>
-  <script src="js/pm.js?v=1.6"></script>
-  <script src="js/audio-v3.js"></script>
-  <script src="js/resizable-layout.js?v=1.7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="js/security.js?v=3.2" defer></script>
+  <script src="js/config.js?v=1.6" defer></script>
+  <script src="js/auth.js?v=1.6" defer></script>
+  <script src="js/permissions.js?v=1.6" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
+  <script src="js/chat-v3.js?v=1.3" defer></script>
+  <script src="js/pm.js?v=1.6" defer></script>
+  <script src="js/audio-v3.js?v=1.3" defer></script>
+  <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
@@ -504,6 +518,23 @@
           }
         }
       });
+
+      // Feature 2 — Rooms sidebar pin/unpin logic
+      (function initRoomsPin() {
+        const isPinned = localStorage.getItem('cc-rooms-pinned') !== 'false'; // default: pinned
+        if (!isPinned) document.body.classList.add('rooms-unpinned');
+
+        const pinBtn = document.getElementById('btn-pin-rooms');
+        if (pinBtn) {
+          pinBtn.textContent = isPinned ? '📌 Pinned' : '📌 Pin';
+          pinBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const nowUnpinned = document.body.classList.toggle('rooms-unpinned');
+            localStorage.setItem('cc-rooms-pinned', String(!nowUnpinned));
+            pinBtn.textContent = nowUnpinned ? '📌 Pin' : '📌 Pinned';
+          });
+        }
+      })();
     })();
   </script>
 </body>

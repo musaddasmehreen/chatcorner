@@ -172,6 +172,34 @@ const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
 let guestCleanupPromise = null;
 let ignoredUserIds = loadIgnoredUserIds();
 
+/* ── Optimistic UI dedup tracking ─────────────────────────────
+   Stores { content, userId, ts } for messages sent optimistically.
+   Realtime INSERT for same user/content within 5s is skipped.
+──────────────────────────────────────────────────────────────── */
+const _optimisticPending = new Map(); // tempId -> { content, userId, ts, node }
+let _optimisticCounter = 0;
+
+/* ── Debounced presence track ──────────────────────────────────
+   Coalesces rapid calls into a single track() every 1500ms.
+──────────────────────────────────────────────────────────────── */
+let _presenceTrackTimer = null;
+function debouncedPresenceTrack() {
+  if (!presenceChannel) return;
+  clearTimeout(_presenceTrackTimer);
+  _presenceTrackTimer = setTimeout(() => {
+    presenceChannel.track(presenceBaseData).catch(() => {});
+  }, 1500);
+}
+
+/* ── Textarea auto-resize helper ───────────────────────────────
+   Grows the textarea up to its CSS max-height as content fills.
+──────────────────────────────────────────────────────────────── */
+function autoResizeTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -447,7 +475,8 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     boldNick: !!profile?.bold_nick,
     msgColor: profile?.msg_color,
     boldText: !!profile?.bold_text,
-    avatarUrl: profile?.avatar_url
+    avatarUrl: profile?.avatar_url,
+    totalOnlineTime: profile?.total_online_time || 0
   };
 }
 
@@ -533,7 +562,7 @@ function upsertOnlineUserProfile(profile) {
     currentProfile = { ...currentProfile, ...profile };
     updatePresenceBaseFromProfile(currentProfile);
     updateCurrentUserBadge();
-    if (presenceChannel) presenceChannel.track(presenceBaseData).catch(() => {});
+    if (presenceChannel) debouncedPresenceTrack();
   }
   if (onlineUsers[profile.id]) {
     onlineUsers[profile.id] = {
@@ -737,15 +766,26 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
 
 
-  // Character counter for message input
-  document.getElementById('msg-input')?.addEventListener('input', () => {
-    const len = document.getElementById('msg-input').value.length;
-    const counter = document.getElementById('msg-char-counter');
-    if (counter) {
-      counter.textContent = `${len}/500`;
-      counter.style.color = len > 450 ? 'var(--red, #ef4444)' : 'var(--muted)';
-    }
-  });
+  // Character counter + auto-resize for textarea message input
+  const msgInputEl = document.getElementById('msg-input');
+  if (msgInputEl) {
+    msgInputEl.addEventListener('input', () => {
+      const len = msgInputEl.value.length;
+      const counter = document.getElementById('msg-char-counter');
+      if (counter) {
+        counter.textContent = `${len}/500`;
+        counter.style.color = len > 450 ? 'var(--red, #ef4444)' : 'var(--muted)';
+      }
+      autoResizeTextarea(msgInputEl);
+    });
+    // Enter = send, Shift+Enter = newline
+    msgInputEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+  }
 
   // Scroll-to-bottom button visibility
   document.getElementById('messages')?.addEventListener('scroll', () => {
@@ -797,6 +837,40 @@ window.addEventListener('DOMContentLoaded', async () => {
   checkVpnOnEntry();
 
   await loadRooms();
+
+  // ── Offline / Online reconnect recovery ─────────────────────────────
+  window.addEventListener('offline', () => {
+    const banner = document.getElementById('connection-error-banner');
+    if (banner) {
+      banner.querySelector('.banner-text').textContent = '⚠️ You are offline. Waiting to reconnect...';
+      banner.classList.remove('hidden');
+    }
+  });
+
+  window.addEventListener('online', async () => {
+    const banner = document.getElementById('connection-error-banner');
+    if (banner) banner.classList.add('hidden');
+    // Re-subscribe to Supabase channels if currently in a room
+    if (currentRoom) {
+      showChatToast('🔄 Reconnecting...', 'info', 2000);
+      await enterRoom(currentRoom, true);
+    }
+  });
+
+  // Re-subscribe after tab was hidden for more than 90 seconds
+  let _hiddenAt = 0;
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) {
+      _hiddenAt = Date.now();
+    } else {
+      const gapMs = Date.now() - _hiddenAt;
+      if (_hiddenAt > 0 && gapMs > 90_000 && currentRoom) {
+        showChatToast('🔄 Refreshing connection...', 'info', 2000);
+        await enterRoom(currentRoom, true);
+      }
+      _hiddenAt = 0;
+    }
+  });
 });
 
 let _roomCountInterval = null;
@@ -857,11 +931,11 @@ function renderRoomsTopbar(rooms) {
   bar.classList.add('hidden');
 }
 
-async function enterRoom(room) {
+async function enterRoom(room, force = false) {
   // Exit IPTV mode if switching to a normal room
   exitIPTVRoom();
   if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
-  if (currentRoom?.id === room.id) return;
+  if (!force && currentRoom?.id === room.id) return;
   if (roomVoiceNoteRecorder?.state === 'recording') {
     discardRoomVoiceNoteOnStop = true;
     roomVoiceNoteRecorder.stop();
@@ -923,7 +997,7 @@ async function enterRoom(room) {
     closeRoomImageUrlInput(false);
   } else {
     msgInput.disabled = false;
-    msgInput.placeholder = 'Type a message\u2026 (Enter to send)';
+    msgInput.placeholder = 'Type a message\u2026 (Enter to send, Shift+Enter for newline)';
     if (sendBtn)  sendBtn.disabled  = false;
     if (emojiBtn) emojiBtn.disabled = false;
   }
@@ -946,6 +1020,28 @@ async function enterRoom(room) {
   if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !messages || messages.length < 50);
 
   // Batch-append for performance (skip persisted system/deletion notices so newcomers don't see them)
+  const MSG_CACHE_KEY = `cc-msgs-${room.id}`;
+  const MSG_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+  // Feature 3 — Try restoring from localStorage cache first (shows instantly before DB responds)
+  if (!messages?.length) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(MSG_CACHE_KEY) || 'null');
+      if (cached && cached.ts && Date.now() - cached.ts < MSG_CACHE_TTL && cached.msgs?.length) {
+        const container = document.getElementById('messages');
+        const frag = document.createDocumentFragment();
+        cached.msgs.forEach(m => {
+          if (m.type === 'system') return;
+          const node = buildMessageNode(m);
+          if (node) { node.classList.add('msg-row--cached'); frag.appendChild(node); }
+        });
+        container.appendChild(frag);
+        refreshIgnoredMessageVisibility();
+        scrollToBottom();
+      }
+    } catch (_) {}
+  }
+
   if (messages?.length) {
     const container = document.getElementById('messages');
     const frag = document.createDocumentFragment();
@@ -955,6 +1051,11 @@ async function enterRoom(room) {
       if (node) frag.appendChild(node);
     });
     container.appendChild(frag);
+
+    // Feature 3 — Cache last 50 messages to localStorage for persistence across logout/login
+    try {
+      localStorage.setItem(MSG_CACHE_KEY, JSON.stringify({ ts: Date.now(), msgs: messages.slice(-50) }));
+    } catch (_) {}
   }
   refreshIgnoredMessageVisibility();
   scrollToBottom();
@@ -968,6 +1069,29 @@ async function enterRoom(room) {
       if (!canProcessIncomingPayload(payload.new?.user_id)) return;
       // Skip system (deletion notice) messages from DB realtime — they are shown locally and auto-expire
       if (payload.new?.type === 'system') return;
+      // Skip if this is our own optimistic message already shown
+      if (payload.new?.id && _optimisticPending.has(payload.new.id)) {
+        _optimisticPending.delete(payload.new.id);
+        return;
+      }
+      if (payload.new?.user_id === currentUser?.id) {
+        let matchedTempId = null;
+        for (const [tempId, entry] of _optimisticPending.entries()) {
+          if (entry.userId === payload.new.user_id && entry.content === payload.new.content && (Date.now() - entry.ts < 5000)) {
+            matchedTempId = tempId;
+            break;
+          }
+        }
+        if (matchedTempId) {
+          const entry = _optimisticPending.get(matchedTempId);
+          if (entry && entry.node) {
+            entry.node.dataset.messageId = payload.new.id;
+            entry.node.classList.remove('msg-row--pending');
+          }
+          _optimisticPending.delete(matchedTempId);
+          return;
+        }
+      }
       if (payload.new?.user_id) {
         await cacheSenderProfiles([payload.new.user_id]);
       }
@@ -986,7 +1110,17 @@ async function enterRoom(room) {
     }, payload => {
       handleRealtimeMessageUpdate(payload.new);
     })
-    .subscribe();
+    .subscribe((status) => {
+      const banner = document.getElementById('connection-error-banner');
+      if (status === 'SUBSCRIBED') {
+        if (banner) banner.classList.add('hidden');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (banner) {
+          banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
+          banner.classList.remove('hidden');
+        }
+      }
+    });
 
   presenceChannel = sbClient.channel('presence:' + room.id, {
     config: { presence: { key: currentUser.id } }
@@ -1037,8 +1171,15 @@ async function enterRoom(room) {
       updateTypingIndicator();
     })
     .subscribe(async (status) => {
+      const banner = document.getElementById('connection-error-banner');
       if (status === 'SUBSCRIBED') {
+        if (banner) banner.classList.add('hidden');
         await presenceChannel.track(presenceBaseData);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (banner) {
+          banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
+          banner.classList.remove('hidden');
+        }
       }
     });
 
@@ -1050,7 +1191,22 @@ function applyGuestUI() {
   updateComposerState();
 }
 
+let globalMessageTimestamps = [];
+function checkGlobalRateLimit() {
+  const now = Date.now();
+  globalMessageTimestamps = globalMessageTimestamps.filter(t => now - t < 5000);
+  if (globalMessageTimestamps.length >= 3) {
+    return false;
+  }
+  globalMessageTimestamps.push(now);
+  return true;
+}
+
 async function sendMessage() {
+  if (!checkGlobalRateLimit()) {
+    showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
+    return;
+  }
   if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
@@ -1080,9 +1236,7 @@ async function sendMessage() {
     }
   }
 
-  if (!isSendingImage) input.value = '';
-
-  // ── Security: validate content before sending ──────────────────
+  // ── Security: validate content before sending ──
   if (!isSendingImage) {
     const validation = window.ccValidateMessage ? window.ccValidateMessage(text) : { ok: true };
     if (!validation.ok) {
@@ -1090,7 +1244,6 @@ async function sendMessage() {
       return;
     }
   }
-  // Sanitise image URL — only allow http(s)
   const safeImageUrl = isSendingImage && window.ccSanitize
     ? window.ccSanitize.url(imageUrl)
     : imageUrl;
@@ -1098,27 +1251,77 @@ async function sendMessage() {
     showChatToast('⚠️ Invalid image URL blocked for security.', 'warning');
     return;
   }
-  // Validate room/user IDs are proper UUIDs before insert
   if (window.ccSanitize) {
     if (!window.ccSanitize.isUUID(currentRoom?.id) || !window.ccSanitize.isUUID(currentUser?.id)) {
       console.warn('[CC-SEC] sendMessage: invalid room/user ID — aborting insert.');
       return;
     }
   }
-  // Sanitise text content
   const safeText = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
+  const finalContent = isSendingImage ? safeImageUrl : safeText;
+
+  // ── Clear input immediately for instant UX feel ──
+  if (!isSendingImage) {
+    input.value = '';
+    autoResizeTextarea(input);
+    const counter = document.getElementById('msg-char-counter');
+    if (counter) counter.textContent = '0/500';
+  }
+
+  // ── OPTIMISTIC UI: append message node instantly before DB confirms ──
+  let optimisticNode = null;
+  const tempId = `opt-${++_optimisticCounter}`;
+  if (!isSendingImage) {
+    const fakeMsg = {
+      id: tempId,
+      room_id: currentRoom.id,
+      user_id: currentUser.id,
+      username: currentProfile.username,
+      content: finalContent,
+      type: 'text',
+      created_at: new Date().toISOString()
+    };
+    optimisticNode = buildMessageNode(fakeMsg);
+    if (optimisticNode) {
+      optimisticNode.classList.add('msg-row--pending');
+      optimisticNode.dataset.tempId = tempId;
+      document.getElementById('messages').appendChild(optimisticNode);
+      scrollToBottom();
+      pruneMessageDom();
+      _optimisticPending.set(tempId, { content: finalContent, userId: currentUser.id, ts: Date.now(), node: optimisticNode });
+    }
+  }
 
   const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
     room_id:  currentRoom.id,
     user_id:  currentUser.id,
     username: currentProfile.username,
-    content:  isSendingImage ? safeImageUrl : safeText,
+    content:  finalContent,
     type:     isSendingImage ? 'image' : 'text'
   }).select('id');
 
   if (error) {
+    // Roll back optimistic node on failure
+    if (optimisticNode) {
+      optimisticNode.classList.add('is-deleting');
+      setTimeout(() => optimisticNode.remove(), 220);
+      _optimisticPending.delete(tempId);
+    }
     appendSystemMessage(isSendingImage ? 'Could not share image. Please try again.' : 'Could not send message. Please try again.');
     return;
+  }
+
+  // Confirm optimistic node — stamp real DB id, remove pending style
+  if (optimisticNode && insertedMsgs?.[0]?.id) {
+    optimisticNode.dataset.messageId = insertedMsgs[0].id;
+    optimisticNode.classList.remove('msg-row--pending');
+    // Register real id so the realtime event skips it
+    _optimisticPending.set(insertedMsgs[0].id, _optimisticPending.get(tempId) || {});
+    _optimisticPending.delete(tempId);
+    setTimeout(() => _optimisticPending.delete(insertedMsgs[0].id), 5000);
+  } else if (optimisticNode) {
+    optimisticNode.classList.remove('msg-row--pending');
+    _optimisticPending.delete(tempId);
   }
 
   // Delete guest messages immediately from the database to keep history empty for guests
@@ -1172,10 +1375,12 @@ function buildMessageNode(msg) {
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
       : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
     const deleteButton = buildDeleteButtonHtml(msg.user_id);
+    const reportButton = buildReportButtonHtml(msg);
     div.innerHTML = `
       <div class="avatar" style="background:${color}">${avatarInner}</div>
       <div class="msg-bubble">
         ${deleteButton}
+        ${reportButton}
         <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
         ${audioHtml}
         <div class="msg-time">${formatTime(msg.created_at)}</div>
@@ -1221,11 +1426,13 @@ function buildMessageNode(msg) {
   }
 
   const deleteButton = buildDeleteButtonHtml(msg.user_id);
+  const reportButton = buildReportButtonHtml(msg);
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
+      ${reportButton}
       <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
       <div class="msg-text" style="${msgStyle}">${escHtml(msg.content)}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
@@ -1238,6 +1445,7 @@ function appendMessage(msg) {
   const node = buildMessageNode(msg);
   if (!node) return;
   document.getElementById('messages').appendChild(node);
+  pruneMessageDom();
   // Deletion notices (type=system) auto-disappear after 5 minutes for live users
   if (msg?.type === 'system' && String(msg?.content || '').startsWith(DELETED_MESSAGE_PREFIX)) {
     setTimeout(() => {
@@ -1246,6 +1454,29 @@ function appendMessage(msg) {
         setTimeout(() => node.remove(), 220);
       }
     }, 5 * 60 * 1000);
+  }
+}
+
+/* Trim oldest messages from DOM when count exceeds 200 to prevent memory leaks */
+function pruneMessageDom() {
+  const container = document.getElementById('messages');
+  if (!container) return;
+  const rows = container.querySelectorAll('.msg-row:not([data-temp-id])');
+  const MAX = 200;
+  const TRIM = 50;
+  if (rows.length > MAX) {
+    for (let i = 0; i < TRIM && i < rows.length; i++) rows[i].remove();
+    const loadMoreBtn = document.getElementById('btn-load-older');
+    if (loadMoreBtn) loadMoreBtn.classList.remove('hidden');
+
+    const remainingRows = container.querySelectorAll('.msg-row:not([data-temp-id])');
+    if (remainingRows.length > 0) {
+      const firstRow = remainingRows[0];
+      const createdAt = firstRow.dataset.createdAt;
+      if (createdAt) {
+        oldestMessageTimestamp = createdAt;
+      }
+    }
   }
 }
 
@@ -1355,6 +1586,29 @@ function renderUserList() {
       bfrag.appendChild(pill);
     });
     bar.appendChild(bfrag);
+  }
+
+  // Feature 7 — Glowing star for user with most total online time
+  if (ul && sortedUsers.length > 0) {
+    let topUserId = null;
+    let topTime = 0;
+    sortedUsers.forEach(u => {
+      const t = onlineUsers[u.userId]?.totalOnlineTime || 0;
+      if (t > topTime) { topTime = t; topUserId = u.userId; }
+    });
+    if (topUserId && topTime > 0) {
+      const topLi = ul.querySelector(`li[data-user-id="${CSS.escape(topUserId)}"]`);
+      if (topLi && !topLi.querySelector('.top-time-star')) {
+        const nameBtn = topLi.querySelector('.user-name-btn');
+        if (nameBtn) {
+          const star = document.createElement('span');
+          star.className = 'top-time-star';
+          star.title = 'Most time spent in this chatroom!';
+          star.textContent = '🌟';
+          nameBtn.after(star);
+        }
+      }
+    }
   }
 }
 
@@ -1495,7 +1749,7 @@ function markSelfAsViewer(on) {
   scheduleRenderUserList();
   if (presenceChannel) {
     presenceBaseData.viewingCam = !!on;
-    presenceChannel.track(presenceBaseData).catch(() => {});
+    debouncedPresenceTrack();
   }
 }
 
@@ -1655,7 +1909,7 @@ async function setLocalCameraState(cameraOn) {
   presenceBaseData.cameraOn = !!cameraOn;
   scheduleRenderUserList();
   if (presenceChannel) {
-    try { await presenceChannel.track(presenceBaseData); } catch (_) {}
+    try { debouncedPresenceTrack(); } catch (_) {}
   }
 }
 
@@ -1688,6 +1942,11 @@ function buildDeleteButtonHtml(userId) {
   return `<button type="button" class="msg-local-delete" title="${escHtml(title)}">🗑️</button>`;
 }
 
+function buildReportButtonHtml(msg) {
+  if (!currentUser?.id || msg.user_id === currentUser.id) return '';
+  return `<button type="button" class="msg-local-report" title="Report message for review">⚠️</button>`;
+}
+
 function isKickActive(profile) {
   if (!profile?.kicked_until) return false;
   const until = new Date(profile.kicked_until).getTime();
@@ -1716,7 +1975,7 @@ function updateComposerState() {
   if (isGuest) {
     if (msgInput) {
       msgInput.disabled = isLocked;
-      msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send)';
+      msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send, Shift+Enter for newline)';
       msgInput.title = '';
     }
     if (sendBtn) {
@@ -1752,7 +2011,7 @@ function updateComposerState() {
 
   if (msgInput) {
     msgInput.disabled = isLocked;
-    msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send)';
+    msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send, Shift+Enter for newline)';
     msgInput.title = '';
   }
   if (sendBtn) {
@@ -2088,6 +2347,11 @@ async function sendVoiceNote() {
         return;
       }
 
+      if (!checkGlobalRateLimit()) {
+        showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
+        return;
+      }
+
       if (!chunks.length) {
         appendSystemMessage('Voice note cancelled.');
         return;
@@ -2354,6 +2618,52 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+document.addEventListener('click', async (event) => {
+  const reportBtn = event.target.closest('.msg-local-report');
+  if (!reportBtn) return;
+  
+  const row = reportBtn.closest('.msg-row');
+  if (!row) return;
+  
+  const targetUserId = row.dataset.userId || '';
+  const messageId = row.dataset.messageId || '';
+  const targetUsername = row.querySelector('.msg-username')?.textContent || 'Unknown';
+  const messageText = row.querySelector('.msg-text')?.textContent || '';
+  
+  if (!messageId) return;
+
+  reportBtn.disabled = true;
+  reportBtn.textContent = '…';
+  
+  try {
+    if (window.sbClient) {
+      await window.sbClient.from('security_events').insert({
+        event_type: 'REPORT_MESSAGE',
+        details: {
+          messageId,
+          targetUserId,
+          targetUsername,
+          messageText,
+          reporterId: currentUser?.id,
+          reporterName: currentProfile?.username,
+          roomId: currentRoom?.id
+        },
+        user_agent: navigator.userAgent
+      });
+    }
+    
+    showChatToast('Message reported successfully. Thank you.', 'success', 3000);
+    reportBtn.textContent = '✓';
+    reportBtn.title = 'Reported';
+    row.style.opacity = '0.6';
+  } catch (err) {
+    reportBtn.disabled = false;
+    reportBtn.textContent = '🚩';
+    showChatToast('Failed to report message. Please try again.', 'warning', 3000);
+    console.error('Report error:', err);
+  }
+});
+
 /* ════════════════════════════════════════════════════════════════
    Feature 1 — Hover Profile Card & Role Hierarchy
 ════════════════════════════════════════════════════════════════ */
@@ -2473,10 +2783,19 @@ async function showProfileCard(u, anchor, pinned = false) {
     ? `<button class="pc-profile-btn pm-btn" type="button" data-uid="${escHtml(u.userId)}">👤 Edit Profile</button>`
     : `<button class="pc-profile-btn" type="button" data-uid="${escHtml(u.userId)}">👤 View Profile</button>`;
 
+  // Feature 6 — Promote button: owner-only, shows for other users
+  const isCurrentUserOwner = !!(currentProfile?.is_owner);
+  const isTargetSelf = u.userId === currentUser?.id;
+  const targetIsOwner = !!(profile?.is_owner);
+  const promoteBtn = isCurrentUserOwner && !isTargetSelf && !targetIsOwner
+    ? `<button class="pc-promote-btn" type="button" data-uid="${escHtml(u.userId)}" data-uname="${escHtml(u.username || profile.username || '')}">🏅 Promote</button>`
+    : '';
+
   const row1Html = (pmBtn || ignoreBtn) ? `<div class="pc-action-row">${pmBtn}${ignoreBtn}</div>` : '';
   const row2Html = (kickBtn || banBtn) ? `<div class="pc-action-row">${kickBtn}${banBtn}</div>` : '';
-  const actionsHtml = (row1Html || row2Html || vipBtn)
-    ? `<div class="pc-actions">${row1Html}${row2Html}${vipBtn}</div>`
+  const row3Html = promoteBtn ? `<div class="pc-action-row">${promoteBtn}</div>` : '';
+  const actionsHtml = (row1Html || row2Html || row3Html || vipBtn)
+    ? `<div class="pc-actions">${row1Html}${row2Html}${row3Html}${vipBtn}</div>`
     : '';
 
   const card = document.createElement('div');
@@ -2578,6 +2897,12 @@ async function showProfileCard(u, anchor, pinned = false) {
     const ignore = ev.currentTarget.dataset.action === 'ignore';
     setUserIgnored(u.userId, ignore);
     hideProfileCard();
+  });
+
+  card.querySelector('.pc-promote-btn')?.addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    hideProfileCard();
+    await showPromoteMenu(u.userId, u.username || profile.username, profile);
   });
 }
 
@@ -2724,6 +3049,72 @@ async function toggleVip(userId, username, grant) {
 }
 
 /* ════════════════════════════════════════════════════════════════
+   Feature 6 — Owner-only Promote/Demote menu
+════════════════════════════════════════════════════════════════ */
+async function showPromoteMenu(userId, username, profile) {
+  // Remove any existing promote menu
+  document.getElementById('cc-promote-menu')?.remove();
+
+  const isAdmin = !!(profile?.is_admin);
+  const isMod   = !!(profile?.is_mod);
+  const isVip   = !!(profile?.is_vip);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cc-promote-menu';
+  overlay.className = 'cc-modal-overlay';
+  overlay.innerHTML = `
+    <div class="cc-modal promote" role="dialog" aria-modal="true">
+      <h3 class="cc-modal-title">🏅 Promote / Demote <span class="cc-modal-uname">${escHtml(username || 'User')}</span></h3>
+      <div class="cc-modal-grid promote-grid">
+        <button class="cc-modal-opt promote${isAdmin ? ' active' : ''}" data-role="admin">
+          <span class="cc-opt-icon">🛡️</span>
+          <span class="cc-opt-label">Admin</span>
+          <span class="cc-opt-note">${isAdmin ? 'Click to demote' : 'Full moderation access'}</span>
+        </button>
+        <button class="cc-modal-opt promote${isMod ? ' active' : ''}" data-role="mod">
+          <span class="cc-opt-icon">🔨</span>
+          <span class="cc-opt-label">Moderator</span>
+          <span class="cc-opt-note">${isMod ? 'Click to demote' : 'Kick/ban access'}</span>
+        </button>
+        <button class="cc-modal-opt promote${isVip ? ' active' : ''}" data-role="vip">
+          <span class="cc-opt-icon">⭐</span>
+          <span class="cc-opt-label">VIP</span>
+          <span class="cc-opt-note">${isVip ? 'Click to remove' : 'Custom styles & badge'}</span>
+        </button>
+      </div>
+      <button class="cc-modal-cancel" style="margin-top:12px">Cancel</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('.cc-modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+
+  overlay.querySelectorAll('.cc-modal-opt[data-role]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const role = btn.dataset.role;
+      let updates = {};
+      let label = '';
+      if (role === 'admin')  { updates = { is_admin: !isAdmin, is_mod: false }; label = isAdmin ? 'demoted from Admin' : 'promoted to Admin'; }
+      if (role === 'mod')    { updates = { is_mod: !isMod, is_admin: false };   label = isMod   ? 'demoted from Moderator' : 'promoted to Moderator'; }
+      if (role === 'vip')    { updates = { is_vip: !isVip };                     label = isVip   ? 'VIP removed' : 'granted VIP'; }
+      const { error } = await sbClient.from('profiles').update(updates).eq('id', userId);
+      overlay.remove();
+      if (error) { showChatToast('Promote failed: ' + error.message, 'error'); return; }
+      if (onlineUsers[userId]) {
+        if ('is_admin' in updates) onlineUsers[userId].isAdmin = updates.is_admin;
+        if ('is_mod'   in updates) onlineUsers[userId].isMod   = updates.is_mod;
+        if ('is_vip'   in updates) onlineUsers[userId].isVip   = updates.is_vip;
+      }
+      scheduleRenderUserList();
+      showChatToast(`✅ ${username || 'User'} ${label}.`, 'success');
+      appendSystemMessage(`🏅 ${username || 'User'} has been ${label}.`);
+    });
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
    Feature 2 — Chatroom VPN Gatekeeper
 ════════════════════════════════════════════════════════════════ */
 async function checkVpnOnEntry() {
@@ -2860,7 +3251,7 @@ async function saveAvatar() {
     currentProfile.avatar_url = dataUrl;
     updatePresenceBaseFromProfile(currentProfile);
     if (presenceChannel) {
-      presenceChannel.track(presenceBaseData).catch(() => {});
+      debouncedPresenceTrack();
     }
 
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
@@ -3514,7 +3905,7 @@ async function saveProfileChanges(event) {
     updateCurrentUserBadge();
     
     if (presenceChannel) {
-      presenceChannel.track(presenceBaseData).catch(() => {});
+      debouncedPresenceTrack();
     }
     
     showChatToast('Profile saved successfully!', 'success');
@@ -3532,7 +3923,7 @@ async function claimFreeVipDeveloperMode() {
     if (error) throw error;
     currentProfile.is_vip = true;
     updatePresenceBaseFromProfile(currentProfile);
-    if (presenceChannel) presenceChannel.track(presenceBaseData).catch(() => {});
+    if (presenceChannel) debouncedPresenceTrack();
     showChatToast('⭐ VIP Activated! Enjoy exclusive nickname/message styles.', 'success');
     renderProfileTab('vip', currentProfile, true);
   } catch (err) {
@@ -4663,6 +5054,9 @@ window.sendMessage = async function() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  autoResizeTextarea(input);
+  const counter = document.getElementById('msg-char-counter');
+  if (counter) counter.textContent = '0/500';
   const payload = {
     username: currentProfile?.username || currentUser?.email?.split('@')[0] || 'Guest',
     text,

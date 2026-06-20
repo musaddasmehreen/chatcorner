@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chatcorner-v17';
+const CACHE_NAME = 'chatcorner-v18';
 
 const STATIC_ASSETS = [
   './',
@@ -11,6 +11,10 @@ const STATIC_ASSETS = [
   './js/chat-v3.js',
   './js/pm.js',
   './js/audio-v3.js',
+  './js/security.js',
+  './js/permissions.js',
+  './js/resizable-layout.js',
+  './js/free-tier-optimizer.js',
   './manifest.json'
 ];
 
@@ -64,13 +68,13 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(cache => cache.put(chatEntryUrl.href, clone));
         }
         return response;
-      }).catch(() => caches.match(chatEntryUrl.href))
+      }).catch(() => caches.match(chatEntryUrl.href, { ignoreSearch: true }))
     );
     return;
   }
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
+    caches.match(event.request, { ignoreSearch: true }).then(cached => {
       const networkFetch = fetch(event.request).then(response => {
         if (response && response.status === 200 && response.type === 'basic') {
           const clone = response.clone();

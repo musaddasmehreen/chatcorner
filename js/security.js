@@ -513,3 +513,68 @@ window.ccValidateMessage = function(text) {
   }
   return { ok: true };
 };
+
+/* ── 20. securityManager Compatibility Shim ──────────────────────
+   Restores support for admin panel logs, security score, and 2FA. */
+window.securityManager = {
+  logSecurityEvent: function(eventType, details = {}) {
+    window.ccSecLog?.record(eventType, details);
+    console.warn('[SECURITY EVENT]', { type: eventType, details, ts: new Date().toISOString() });
+    
+    // Asynchronously attempt to log admin intrusions/events to Supabase if client is initialized
+    if (window.sbClient && typeof window.sbClient.from === 'function') {
+      window.sbClient.from('security_events').insert({
+        event_type: eventType,
+        details: details,
+        user_agent: navigator.userAgent
+      }).then(({ error }) => {
+        if (error) console.warn('[CC-SEC] Failed to persist event to DB:', error);
+      }).catch(err => {
+        // Silently catch to avoid disrupting runtime
+      });
+    }
+  },
+
+  calculateSecurityScore: function() {
+    let score = 40;
+    if (window.location.protocol === 'https:') score += 20;
+    if (window.ccLoginGuard) score += 20;
+    if (window.ccBotDetect && !window.ccBotDetect.isBot()) score += 20;
+    return score;
+  },
+
+  generateDeviceFingerprint: async function() {
+    const hash = window.ccFingerprint ? await window.ccFingerprint.generate() : 'no_fp_hash';
+    return {
+      hash: hash,
+      fingerprint: {
+        ua: navigator.userAgent
+      }
+    };
+  },
+
+  detectAnomalousActivity: async function() {
+    const currentFp = window.ccFingerprint ? await window.ccFingerprint.generate() : 'no_fp_hash';
+    const storedFp = sessionStorage.getItem('cc_device_fp');
+    return {
+      deviceMismatch: storedFp && currentFp !== storedFp,
+      currentFingerprint: currentFp,
+      storedFingerprint: storedFp
+    };
+  },
+
+  getGenericErrorMessage: function() {
+    return 'Invalid credentials or account restricted. Try again later.';
+  },
+
+  clearSecurityData: function() {
+    sessionStorage.removeItem('admin_sec_session');
+    sessionStorage.removeItem('cc_device_fp');
+    const keys = Object.keys(localStorage);
+    keys.forEach(k => {
+      if (k.startsWith('admin_sec_') || k.startsWith('sec_questions_')) {
+        localStorage.removeItem(k);
+      }
+    });
+  }
+};

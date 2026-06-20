@@ -2281,3 +2281,173 @@ body.guest-mode .emoji-bar { display: none; }
 .topbar-clear-btn.hidden {
   display: none !important;
 }
+
+/* ── CONNECTION ERROR BANNER ─────────────────────────────────── */
+.connection-error-banner {
+  position: fixed;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.2);
+  transition: all 0.3s ease;
+  animation: slideDown 0.3s ease-out;
+}
+.connection-error-banner.hidden {
+  display: none !important;
+}
+.connection-error-banner .banner-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 0;
+  margin: 0;
+}
+.connection-error-banner .banner-close:hover {
+  color: white;
+}
+@keyframes slideDown {
+  from { transform: translate(-50%, -40px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* ── MSG LOCAL REPORT BUTTON ─────────────────────────────────── */
+.msg-local-report {
+  display: none;
+  position: absolute;
+  top: .35rem;
+  right: .35rem;
+  border: 1px solid rgba(245,158,11,.35);
+  background: rgba(245,158,11,.12);
+  color: #fcd34d;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: .1rem .28rem;
+  font-size: .75rem;
+  line-height: 1;
+  align-items: center;
+  justify-content: center;
+}
+.msg-local-delete ~ .msg-local-report {
+  right: 1.9rem;
+}
+.msg-row:hover .msg-local-report,
+.msg-row:focus-within .msg-local-report {
+  display: inline-flex;
+}
+.msg-local-report:hover {
+  background: rgba(245,158,11,.25);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 6: Promote modal & promote button in profile card
+   ════════════════════════════════════════════════════════════════ */
+.cc-modal.promote::before {
+  content: '🏅';
+  display: block;
+  text-align: center;
+  font-size: 2.2rem;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 10px rgba(234,179,8,0.6));
+}
+.cc-modal.promote .cc-modal-uname { color: #fbbf24; }
+.cc-modal-grid.promote-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cc-modal-opt.promote {
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.2);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  text-align: left;
+}
+.cc-modal-opt.promote:hover {
+  background: rgba(99,102,241,0.18);
+  border-color: rgba(99,102,241,0.4);
+  transform: translateY(-1px);
+}
+.cc-modal-opt.promote.active {
+  background: rgba(99,102,241,0.22);
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px #6366f1;
+}
+.cc-modal-opt.promote .cc-opt-label { font-weight: 700; font-size: 0.95rem; }
+.cc-modal-opt.promote .cc-opt-note { font-size: 0.78rem; color: var(--muted); margin-left: auto; }
+
+.pc-promote-btn {
+  background: linear-gradient(135deg,rgba(234,179,8,0.15),rgba(251,191,36,0.08));
+  border: 1px solid rgba(234,179,8,0.35);
+  color: #fbbf24;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  width: 100%;
+}
+.pc-promote-btn:hover {
+  background: rgba(234,179,8,0.25);
+  border-color: #fbbf24;
+  box-shadow: 0 0 8px rgba(234,179,8,0.3);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 7: Top online-time glowing star badge
+   ════════════════════════════════════════════════════════════════ */
+.top-time-star {
+  display: inline-block;
+  font-size: 0.85em;
+  line-height: 1;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: topStarGlow 2s ease-in-out infinite alternate;
+  cursor: default;
+}
+@keyframes topStarGlow {
+  from { filter: drop-shadow(0 0 3px rgba(251,191,36,0.5)) drop-shadow(0 0 6px rgba(251,191,36,0.3)); transform: scale(1); }
+  to   { filter: drop-shadow(0 0 8px rgba(251,191,36,0.9)) drop-shadow(0 0 14px rgba(251,191,36,0.6)); transform: scale(1.2); }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 3: Cached message hint
+   ════════════════════════════════════════════════════════════════ */
+.msg-row--cached { opacity: 0.88; }
+
+/* ════════════════════════════════════════════════════════════════
+   Feature 4: General UX speed polish
+   ════════════════════════════════════════════════════════════════ */
+/* Instant visual feedback on clickable user names */
+.user-name-btn { transition: color 0.12s; }
+.user-name-btn:active { transform: scale(0.97); }
+/* Smooth message entry */
+.msg-row { animation: msgSlideIn 0.18s ease-out; }
+@keyframes msgSlideIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* Preload font display */
+@font-face { font-display: swap; }
