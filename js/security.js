@@ -578,3 +578,60 @@ window.securityManager = {
     });
   }
 };
+
+/* ── 21. Anti-Screenshot & Screen Recording Guard ─────────────
+   Attempts to prevent screenshots via keyboard and focus loss.   */
+window.ccAntiScreenshot = (function() {
+  function init() {
+    // Blur on focus loss to counter Snipping Tool / OS screen capture
+    window.addEventListener('blur', () => {
+      document.body.style.filter = 'blur(15px) grayscale(100%)';
+      document.body.style.opacity = '0.1';
+    });
+    
+    window.addEventListener('focus', () => {
+      document.body.style.filter = 'none';
+      document.body.style.opacity = '1';
+    });
+    
+    document.addEventListener('keydown', (e) => {
+      const isScreenshotShortcut = 
+        (e.key === 'PrintScreen') ||
+        (e.ctrlKey && e.key === 'p') ||
+        (e.metaKey && e.shiftKey && (e.key === 's' || e.key === 'S' || e.key === '3' || e.key === '4')) ||
+        (e.metaKey && e.key === 'p');
+        
+      if (isScreenshotShortcut) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Obscure screen immediately
+        document.body.style.display = 'none';
+        
+        // Clear clipboard
+        try { navigator.clipboard.writeText('Screenshots are disabled in this chat room.'); } catch(err){}
+        
+        if (typeof showChatToast === 'function') {
+          showChatToast('⚠️ Screenshots are disabled by server policy.', 'error');
+        }
+        
+        window.ccSecLog?.record('SCREENSHOT_ATTEMPT', { key: e.key });
+        
+        // Restore screen after 2 seconds
+        setTimeout(() => {
+          document.body.style.display = '';
+        }, 2000);
+      }
+    }, { capture: true });
+    
+    // Listen for PrintScreen keyup specifically
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'PrintScreen') {
+        try { navigator.clipboard.writeText('Screenshots are disabled in this chat room.'); } catch(err){}
+      }
+    });
+  }
+  
+  init();
+  return { init };
+})();

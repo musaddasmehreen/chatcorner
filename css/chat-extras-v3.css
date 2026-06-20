@@ -2532,3 +2532,12 @@ body.guest-mode .emoji-bar { display: none; }
   color: var(--text);
 }
 
+/* ── Anti-Screenshot & Print Block ── */
+@media print {
+  html, body {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+}
+
