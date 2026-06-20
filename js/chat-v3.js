@@ -2621,6 +2621,8 @@ function cancelProfileCard() {
 }
 
 function hideProfileCard() {
+  document.querySelectorAll('#profile-card').forEach(el => el.remove());
+  document.querySelectorAll('.profile-card').forEach(el => el.remove());
   if (_pcActive) {
     _pcActive.remove();
     _pcActive = null;
@@ -2742,6 +2744,7 @@ async function showProfileCard(u, anchor, pinned = false) {
     ${promoteSectionHtml}
   `;
 
+  hideProfileCard();
   document.body.appendChild(card);
   _pcActive = card;
 
