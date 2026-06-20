@@ -2451,3 +2451,84 @@ body.guest-mode .emoji-bar { display: none; }
 }
 /* Preload font display */
 @font-face { font-display: swap; }
+
+/* ── Promote / Demote Options inside Profile Card ── */
+.pc-role-opt-btn, .pc-promote-back-btn {
+  padding: 0.38rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid;
+  text-align: center;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+.pc-role-opt-btn:hover, .pc-promote-back-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+}
+.pc-role-opt-btn:active, .pc-promote-back-btn:active {
+  transform: scale(0.97);
+}
+
+.pc-role-opt-btn[data-role="admin"] {
+  border-color: rgba(99,102,241,0.45);
+  background: rgba(99,102,241,0.1);
+  color: #818cf8;
+}
+.pc-role-opt-btn[data-role="admin"]:hover {
+  background: rgba(99,102,241,0.22);
+}
+.pc-role-opt-btn[data-role="admin"].active {
+  background: rgba(99,102,241,0.35);
+  border-color: #6366f1;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(99,102,241,0.5);
+}
+
+.pc-role-opt-btn[data-role="mod"] {
+  border-color: rgba(16,185,129,0.45);
+  background: rgba(16,185,129,0.1);
+  color: #34d399;
+}
+.pc-role-opt-btn[data-role="mod"]:hover {
+  background: rgba(16,185,129,0.22);
+}
+.pc-role-opt-btn[data-role="mod"].active {
+  background: rgba(16,185,129,0.35);
+  border-color: #10b981;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(16,185,129,0.5);
+}
+
+.pc-role-opt-btn[data-role="vip"] {
+  border-color: rgba(251,191,36,0.45);
+  background: rgba(251,191,36,0.1);
+  color: #fbbf24;
+}
+.pc-role-opt-btn[data-role="vip"]:hover {
+  background: rgba(251,191,36,0.22);
+}
+.pc-role-opt-btn[data-role="vip"].active {
+  background: rgba(251,191,36,0.35);
+  border-color: #fbbf24;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(251,191,36,0.5);
+}
+
+.pc-promote-back-btn {
+  border-color: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+.pc-promote-back-btn:hover {
+  background: rgba(255,255,255,0.12);
+  color: var(--text);
+}
+

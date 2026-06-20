@@ -2745,6 +2745,8 @@ async function showProfileCard(u, anchor, pinned = false) {
   const canKick      = canBan;
   const canGrantVip  = viewerLevel >= 3 && targetLevel === 1;
   const isVip        = !!(profile.is_vip);
+  const isAdmin      = !!(profile.is_admin);
+  const isMod        = !!(profile.is_mod);
   const ignoreLabel  = isUserIgnored(u.userId) ? 'Unignore' : 'Ignore';
 
   const roleLabel = getRoleLabel(u);
@@ -2788,7 +2790,7 @@ async function showProfileCard(u, anchor, pinned = false) {
   const isTargetSelf = u.userId === currentUser?.id;
   const targetIsOwner = !!(profile?.is_owner);
   const promoteBtn = isCurrentUserOwner && !isTargetSelf && !targetIsOwner
-    ? `<button class="pc-promote-btn" type="button" data-uid="${escHtml(u.userId)}" data-uname="${escHtml(u.username || profile.username || '')}">🏅 Promote</button>`
+    ? `<button class="pc-promote-btn" type="button" data-uid="${escHtml(u.userId)}" data-uname="${escHtml(u.username || profile.username || '')}">🏅 Promote/Demote</button>`
     : '';
 
   const row1Html = (pmBtn || ignoreBtn) ? `<div class="pc-action-row">${pmBtn}${ignoreBtn}</div>` : '';
@@ -2796,6 +2798,26 @@ async function showProfileCard(u, anchor, pinned = false) {
   const row3Html = promoteBtn ? `<div class="pc-action-row">${promoteBtn}</div>` : '';
   const actionsHtml = (row1Html || row2Html || row3Html || vipBtn)
     ? `<div class="pc-actions">${row1Html}${row2Html}${row3Html}${vipBtn}</div>`
+    : '';
+
+  const promoteSectionHtml = isCurrentUserOwner && !isTargetSelf && !targetIsOwner
+    ? `
+      <div class="pc-promote-section" style="display: none; flex-direction: column; gap: 0.38rem; margin-top: 0.7rem;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: var(--muted); margin-bottom: 0.2rem; text-align: center; text-transform: uppercase; letter-spacing: 0.05em;">🏅 Promote / Demote</div>
+        <button class="pc-role-opt-btn ${isAdmin ? 'active' : ''}" type="button" data-role="admin">
+          🛡️ Admin ${isAdmin ? '(Active)' : ''}
+        </button>
+        <button class="pc-role-opt-btn ${isMod ? 'active' : ''}" type="button" data-role="mod">
+          🔨 Moderator ${isMod ? '(Active)' : ''}
+        </button>
+        <button class="pc-role-opt-btn ${isVip ? 'active' : ''}" type="button" data-role="vip">
+          ⭐ VIP ${isVip ? '(Active)' : ''}
+        </button>
+        <button class="pc-promote-back-btn" type="button">
+          ⬅️ Back
+        </button>
+      </div>
+    `
     : '';
 
   const card = document.createElement('div');
@@ -2814,6 +2836,7 @@ async function showProfileCard(u, anchor, pinned = false) {
     <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
     ${ipRow}
     ${actionsHtml}
+    ${promoteSectionHtml}
   `;
 
   document.body.appendChild(card);
@@ -2899,10 +2922,51 @@ async function showProfileCard(u, anchor, pinned = false) {
     hideProfileCard();
   });
 
-  card.querySelector('.pc-promote-btn')?.addEventListener('click', async (ev) => {
+  card.querySelector('.pc-promote-btn')?.addEventListener('click', (ev) => {
     ev.stopPropagation();
-    hideProfileCard();
-    await showPromoteMenu(u.userId, u.username || profile.username, profile);
+    const actionsEl = card.querySelector('.pc-actions');
+    const promoteEl = card.querySelector('.pc-promote-section');
+    if (actionsEl && promoteEl) {
+      actionsEl.style.display = 'none';
+      promoteEl.style.display = 'flex';
+    }
+  });
+
+  card.querySelector('.pc-promote-back-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const actionsEl = card.querySelector('.pc-actions');
+    const promoteEl = card.querySelector('.pc-promote-section');
+    if (actionsEl && promoteEl) {
+      promoteEl.style.display = 'none';
+      actionsEl.style.display = 'flex';
+    }
+  });
+
+  card.querySelectorAll('.pc-role-opt-btn').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const role = btn.dataset.role;
+      let updates = {};
+      let label = '';
+      if (role === 'admin')  { updates = { is_admin: !isAdmin, is_mod: false }; label = isAdmin ? 'demoted from Admin' : 'promoted to Admin'; }
+      if (role === 'mod')    { updates = { is_mod: !isMod, is_admin: false };   label = isMod   ? 'demoted from Moderator' : 'promoted to Moderator'; }
+      if (role === 'vip')    { updates = { is_vip: !isVip };                     label = isVip   ? 'VIP removed' : 'granted VIP'; }
+      
+      const { error } = await sbClient.from('profiles').update(updates).eq('id', u.userId);
+      hideProfileCard();
+      
+      if (error) { showChatToast('Promote failed: ' + error.message, 'error'); return; }
+      
+      if (onlineUsers[u.userId]) {
+        if ('is_admin' in updates) onlineUsers[u.userId].isAdmin = updates.is_admin;
+        if ('is_mod'   in updates) onlineUsers[u.userId].isMod   = updates.is_mod;
+        if ('is_vip'   in updates) onlineUsers[u.userId].isVip   = updates.is_vip;
+      }
+      scheduleRenderUserList();
+      const targetName = u.username || profile.username || 'User';
+      showChatToast(`✅ ${targetName} ${label}.`, 'success');
+      appendSystemMessage(`🏅 ${targetName} has been ${label}.`);
+    });
   });
 }
 
