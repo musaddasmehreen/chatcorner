@@ -1794,7 +1794,7 @@ function buildImageMessageNode(msg) {
   const deleteButton = buildDeleteButtonHtml(msg.user_id);
   const imageMarkup = imageSrc
     ? `
-      <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="lazy"/>
+      <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image"/>
       <div class="msg-image-error hidden">⚠️ Image could not be loaded.</div>
       <a class="msg-image-link" href="${escHtml(imageSrc)}" target="_blank" rel="noopener noreferrer">Open image</a>
     `

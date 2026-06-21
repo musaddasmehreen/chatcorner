@@ -645,7 +645,7 @@ function appendPmImageMessage(userId, msg, isMe) {
     <div class="pm-msg-bubble">
       ${imageSrc
         ? `
-          <img class="pm-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="lazy"/>
+          <img class="pm-inline-image" src="${escHtml(imageSrc)}" alt="Shared image"/>
           <div class="pm-image-error hidden">⚠️ Image could not be loaded.</div>
           <a class="pm-image-link" href="${escHtml(imageSrc)}" target="_blank" rel="noopener noreferrer">Open image</a>
         `

@@ -1402,7 +1402,7 @@ function buildMessageNode(msg) {
     
     const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
     const avatarInner = avatarUrl
-      ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar" loading="lazy"/>`
+      ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
       : initial;
       
     let nickStyle = '';
@@ -1446,7 +1446,7 @@ function buildMessageNode(msg) {
   const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
   const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
   const avatarInner = avatarUrl
-    ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar" loading="lazy"/>`
+    ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
     : initial;
     
   let nickStyle = '';
@@ -1553,7 +1553,7 @@ function renderUserList() {
     const roleBadge = getRoleBadgeHtml(u);
     const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
     const avatarHtml = u.avatarUrl
-      ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt="${escHtml(u.username || '')} avatar" loading="lazy"/>`
+      ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt="${escHtml(u.username || '')} avatar"/>`
       : `<div class="roster-avatar-init" style="background:${escHtml(u.color || '#7c3aed')}">${(u.username || '?')[0].toUpperCase()}</div>`;
     
     li.innerHTML = `
@@ -2032,7 +2032,7 @@ function buildImageMessageNode(msg) {
   const deleteButton = buildDeleteButtonHtml(msg.user_id);
   const imageMarkup = imageSrc
     ? `
-      <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="lazy"/>
+      <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image"/>
       <div class="msg-image-error hidden">⚠️ Image could not be loaded.</div>
       <a class="msg-image-link" href="${escHtml(imageSrc)}" target="_blank" rel="noopener noreferrer">Open image</a>
     `
@@ -2690,6 +2690,9 @@ let _pcTimer  = null;
 let _pcHide   = null;
 let _pcActive = null;
 let _pcSessionId = 0;
+let _pcOutsideClickFn = null;
+let _pcEscHandlerFn = null;
+let _pcScrollHandlerFn = null;
 
 function scheduleProfileCard(u, anchor) {
   clearTimeout(_pcTimer);
@@ -2714,6 +2717,18 @@ function hideProfileCard() {
   if (_pcActive) {
     _pcActive.remove();
     _pcActive = null;
+  }
+  if (_pcOutsideClickFn) {
+    document.removeEventListener('click', _pcOutsideClickFn, true);
+    _pcOutsideClickFn = null;
+  }
+  if (_pcEscHandlerFn) {
+    document.removeEventListener('keydown', _pcEscHandlerFn);
+    _pcEscHandlerFn = null;
+  }
+  if (_pcScrollHandlerFn) {
+    document.removeEventListener('scroll', _pcScrollHandlerFn, true);
+    _pcScrollHandlerFn = null;
   }
 }
 
@@ -2853,24 +2868,37 @@ async function showProfileCard(u, anchor, pinned = false) {
     card.style.visibility = 'visible';
   });
 
+  // Set up robust closing handlers for click outside, escape key, and scroll
+  _pcOutsideClickFn = (ev) => {
+    if (card && !card.contains(ev.target) && !anchor.contains(ev.target)) {
+      hideProfileCard();
+    }
+  };
+  setTimeout(() => {
+    if (_pcActive === card) {
+      document.addEventListener('click', _pcOutsideClickFn, true);
+    }
+  }, 50);
+
+  _pcEscHandlerFn = (ev) => {
+    if (ev.key === 'Escape') {
+      hideProfileCard();
+    }
+  };
+  document.addEventListener('keydown', _pcEscHandlerFn);
+
+  // Close card when scrolling any element (capture phase captures all scrolls)
+  _pcScrollHandlerFn = () => {
+    hideProfileCard();
+  };
+  document.addEventListener('scroll', _pcScrollHandlerFn, true);
+
   if (pinned) {
-    // Pinned mode: close on ✕ button, Escape key, or click outside
+    // Pinned mode: close on ✕ button
     card.querySelector('.pc-close-btn')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       hideProfileCard();
     });
-    const outsideClick = (ev) => {
-      if (!card.contains(ev.target)) {
-        hideProfileCard();
-        document.removeEventListener('click', outsideClick, true);
-      }
-    };
-    // Delay so the triggering click doesn't immediately close it
-    setTimeout(() => document.addEventListener('click', outsideClick, true), 50);
-    const escHandler = (ev) => {
-      if (ev.key === 'Escape') { hideProfileCard(); document.removeEventListener('keydown', escHandler); }
-    };
-    document.addEventListener('keydown', escHandler);
   } else {
     // Hover mode: keep alive while mouse is inside
     card.addEventListener('mouseenter', () => { clearTimeout(_pcHide); });
