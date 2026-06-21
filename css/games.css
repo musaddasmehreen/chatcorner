@@ -1,0 +1,600 @@
+/* 
+   ==========================================================================
+   ChatCorner In-Chat Mini-Games Style Sheet
+   Aesthetics: Frosted Glassmorphism with Neon Neo-Brutalist Accents
+   ========================================================================== 
+*/
+
+/* --- Common Variables & Utilities --- */
+:root {
+  --game-bg-frosted: rgba(15, 15, 25, 0.85);
+  --game-border-neon-blue: #00f0ff;
+  --game-border-neon-pink: #ff007f;
+  --game-neon-glow-blue: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
+  --game-neon-glow-pink: 0 0 10px rgba(255, 0, 127, 0.5), 0 0 20px rgba(255, 0, 127, 0.3);
+  --game-shadow-neobrutal: 4px 4px 0px #000;
+  --game-text-light: #f3f4f6;
+  --game-font-title: 'Exo 2', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* --- Game Trigger & Invitation UI --- */
+.pm-game-btn {
+  font-size: 1.15rem;
+  padding: 4px 8px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+.pm-game-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
+}
+
+/* Invitation Dialog Inline Bubble */
+.pm-game-invite-bubble {
+  background: var(--game-bg-frosted);
+  backdrop-filter: blur(12px);
+  border: 2px solid var(--game-border-neon-blue);
+  box-shadow: var(--game-neon-glow-blue);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+  color: var(--game-text-light);
+  font-family: var(--game-font-title);
+  animation: pmBubbleSlideIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+@keyframes pmBubbleSlideIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pm-game-invite-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pm-game-invite-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.game-btn-accept, .game-btn-decline {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border: 2px solid #000;
+  box-shadow: 2px 2px 0px #000;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.game-btn-accept {
+  background: #39ff14;
+  color: #000;
+}
+.game-btn-decline {
+  background: #ff073a;
+  color: #fff;
+}
+.game-btn-accept:active, .game-btn-decline:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #000;
+}
+
+/* --- Floating Game Window Container --- */
+.game-window {
+  position: absolute;
+  width: 380px;
+  height: 480px;
+  min-width: 320px;
+  min-height: 400px;
+  background: var(--game-bg-frosted);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 3px solid #000;
+  box-shadow: var(--game-shadow-neobrutal), 0 8px 32px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  font-family: var(--game-font-title);
+  color: var(--game-text-light);
+  overflow: hidden;
+  resize: both;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.game-window.hidden {
+  display: none !important;
+  opacity: 0;
+  pointer-events: none;
+}
+.game-window.minimized {
+  height: 48px !important;
+  min-height: 48px !important;
+  width: 260px !important;
+  resize: none;
+  overflow: hidden;
+}
+.game-window.pulse {
+  animation: gameWindowPulse 0.3s ease;
+}
+@keyframes gameWindowPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); box-shadow: 0 0 20px rgba(0, 240, 255, 0.4); }
+  100% { transform: scale(1); }
+}
+
+/* Header */
+.game-header {
+  height: 48px;
+  padding: 0 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 2px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+  user-select: none;
+}
+.game-header.dragging {
+  background: rgba(0, 240, 255, 0.15);
+}
+.game-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.game-logo {
+  font-size: 1.2rem;
+}
+.game-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.2);
+}
+.game-header-actions {
+  display: flex;
+  gap: 6px;
+}
+.game-header-actions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: var(--game-text-light);
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.game-header-actions button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+.game-close-btn:hover {
+  background: #ff073a !important;
+  color: #fff !important;
+}
+
+/* Scoreboard Panel */
+.game-scoreboard {
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.score-pill {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.score-divider {
+  color: rgba(255, 255, 255, 0.4);
+}
+.score-val {
+  color: var(--game-border-neon-blue);
+  text-shadow: var(--game-neon-glow-blue);
+  font-weight: 700;
+}
+
+/* Body / Workspace */
+.game-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: auto;
+}
+
+/* Info Bar (turn info, match over) */
+.game-info-bar {
+  padding: 8px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.turn-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ccc;
+  display: inline-block;
+}
+.turn-indicator.active {
+  background: var(--game-border-neon-blue);
+  box-shadow: var(--game-neon-glow-blue);
+  animation: pulseLight 1.5s infinite alternate;
+}
+.turn-indicator.opponent {
+  background: var(--game-border-neon-pink);
+  box-shadow: var(--game-neon-glow-pink);
+  animation: pulseLightPink 1.5s infinite alternate;
+}
+@keyframes pulseLight {
+  from { transform: scale(0.9); opacity: 0.7; }
+  to { transform: scale(1.2); opacity: 1; }
+}
+@keyframes pulseLightPink {
+  from { transform: scale(0.9); opacity: 0.7; }
+  to { transform: scale(1.2); opacity: 1; }
+}
+
+/* Canvas Area where active game draws */
+.game-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  position: relative;
+}
+
+/* Game Over overlay screen */
+.game-over-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(10, 10, 15, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeInOverlay 0.25s ease;
+  padding: 20px;
+  text-align: center;
+}
+@keyframes fadeInOverlay {
+  from { opacity: 0; } to { opacity: 1; }
+}
+.game-over-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+.game-over-subtitle {
+  font-size: 1rem;
+  margin-bottom: 24px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.game-restart-btn {
+  padding: 10px 24px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border: 2px solid #000;
+  background: var(--game-border-neon-blue);
+  color: #000;
+  box-shadow: var(--game-shadow-neobrutal);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.game-restart-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 6px 6px 0px #000;
+}
+.game-restart-btn:active {
+  transform: translateY(1px);
+  box-shadow: 2px 2px 0px #000;
+}
+
+/* ==========================================================================
+   GAME 1: TIC-TAC-TOE BOARD STYLE
+   ========================================================================= */
+.ttt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px;
+}
+.ttt-cell {
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ttt-cell:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--game-border-neon-blue);
+}
+.ttt-cell svg {
+  width: 70%;
+  height: 70%;
+}
+.ttt-x-path {
+  stroke: var(--game-border-neon-blue);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: tttDraw 0.3s ease forwards;
+  filter: drop-shadow(0 0 4px var(--game-border-neon-blue));
+}
+.ttt-o-path {
+  stroke: var(--game-border-neon-pink);
+  stroke-width: 6;
+  stroke-linecap: round;
+  fill: none;
+  stroke-dasharray: 150;
+  stroke-dashoffset: 150;
+  animation: tttDraw 0.3s ease forwards;
+  filter: drop-shadow(0 0 4px var(--game-border-neon-pink));
+}
+@keyframes tttDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ==========================================================================
+   GAME 2: CHESS BOARD STYLE
+   ========================================================================== */
+.chess-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 290px;
+  aspect-ratio: 1;
+}
+.chess-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  border: 3px solid #000;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  background: #111;
+}
+.chess-square {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+.chess-square.light {
+  background: rgba(240, 240, 245, 0.12);
+}
+.chess-square.dark {
+  background: rgba(25, 25, 45, 0.7);
+}
+/* Selection & Move Indicators */
+.chess-square.selected {
+  outline: 2px solid var(--game-border-neon-blue);
+  outline-offset: -2px;
+  background: rgba(0, 240, 255, 0.2) !important;
+}
+.chess-square.legal-move::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--game-border-neon-blue);
+  box-shadow: var(--game-neon-glow-blue);
+  position: absolute;
+  pointer-events: none;
+}
+.chess-square.legal-capture::after {
+  content: '';
+  width: 80%;
+  height: 80%;
+  border-radius: 50%;
+  border: 3px solid var(--game-border-neon-pink);
+  box-shadow: var(--game-neon-glow-pink);
+  position: absolute;
+  pointer-events: none;
+}
+.chess-square.in-check {
+  background: rgba(255, 7, 58, 0.35) !important;
+  outline: 2px dashed #ff073a;
+}
+/* Chess SVG Pieces */
+.chess-piece {
+  width: 90%;
+  height: 90%;
+  transition: transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+  pointer-events: none;
+  filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.5));
+}
+.chess-piece.white {
+  fill: #ffffff;
+  stroke: #000000;
+  stroke-width: 1.5;
+}
+.chess-piece.black {
+  fill: #222222;
+  stroke: #ff007f;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 2px rgba(255, 0, 127, 0.5));
+}
+
+/* ==========================================================================
+   GAME 3: STREAMLINED LUDO BOARD STYLE
+   ========================================================================== */
+.ludo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 290px;
+  gap: 12px;
+}
+.ludo-board-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: rgba(20, 20, 30, 0.6);
+  border: 3px solid #000;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+  padding: 8px;
+}
+.ludo-board-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Glow effects in Ludo */
+.ludo-cell {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(255, 255, 255, 0.15);
+  stroke-width: 1;
+  transition: all 0.2s;
+}
+.ludo-cell.red-start {
+  fill: rgba(0, 240, 255, 0.15);
+  stroke: var(--game-border-neon-blue);
+  stroke-width: 1.5;
+}
+.ludo-cell.green-start {
+  fill: rgba(255, 0, 127, 0.15);
+  stroke: var(--game-border-neon-pink);
+  stroke-width: 1.5;
+}
+.ludo-cell.goal {
+  fill: url(#ludo-goal-gradient);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+/* Interactive board nodes overlay for highlighting */
+.ludo-node-highlight {
+  cursor: pointer;
+}
+
+/* Dice Roller Panel */
+.ludo-dice-area {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+  justify-content: center;
+}
+.ludo-dice-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.ludo-dice-box {
+  width: 44px;
+  height: 44px;
+  background: #000;
+  border: 2px solid var(--game-border-neon-blue);
+  box-shadow: var(--game-neon-glow-blue);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ludo-dice-box.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: rgba(255,255,255,0.2);
+  box-shadow: none;
+}
+.ludo-dice-box:not(.disabled):hover {
+  transform: scale(1.05) rotate(5deg);
+}
+.ludo-dice-box:not(.disabled):active {
+  transform: scale(0.95);
+}
+
+/* Dice Face SVG dots */
+.dice-svg {
+  width: 100%;
+  height: 100%;
+}
+.dice-dot {
+  fill: #fff;
+  filter: drop-shadow(0 0 2px var(--game-border-neon-blue));
+}
+.ludo-dice-box.rolling {
+  animation: diceRollAnim 0.5s infinite linear;
+}
+@keyframes diceRollAnim {
+  0% { transform: rotate(0deg) scale(1); border-color: var(--game-border-neon-blue); }
+  50% { transform: rotate(180deg) scale(1.1); border-color: var(--game-border-neon-pink); }
+  100% { transform: rotate(360deg) scale(1); border-color: var(--game-border-neon-blue); }
+}
+
+/* Tokens */
+.ludo-token {
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.6));
+  cursor: pointer;
+  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), filter 0.2s;
+}
+.ludo-token.movable {
+  animation: tokenBounce 0.8s infinite alternate;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+.ludo-token.color-blue {
+  color: var(--game-border-neon-blue);
+}
+.ludo-token.color-pink {
+  color: var(--game-border-neon-pink);
+}
+@keyframes tokenBounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
+}

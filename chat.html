@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="css/chat-extras.css"/>
   <link rel="stylesheet" href="css/resizable-layout.css"/>
   <link rel="stylesheet" href="css/chatroom-layout.css"/>
+  <link rel="stylesheet" href="css/games.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
 </head>
 <body class="chat-page layout-classic">
@@ -141,6 +142,11 @@
               <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
               <button class="btn-sm" id="btn-room-image-url-clear" title="Clear" type="button">✕</button>
             </div>
+            <div id="voice-note-preview-popover" class="room-image-url-popover hidden" style="display:flex; align-items:center; gap: 8px; padding: 4px;">
+              <audio id="voice-note-preview-audio" controls style="height: 30px; max-width: 200px;"></audio>
+              <button class="btn-sm" id="btn-voice-note-send" type="button" style="background:var(--accent, #7c3aed); color:white; border:none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Send</button>
+              <button class="btn-sm" id="btn-voice-note-cancel" type="button" style="background:var(--red, #ef4444); color:white; border:none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Cancel</button>
+            </div>
           </div>
           <div class="composer-input-row">
             <input id="msg-input" class="msg-input msg-input-classic" type="text" placeholder="Type your message here…" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off" aria-label="Message input"/>
@@ -197,6 +203,7 @@
   <script src="js/permissions.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/pm.js"></script>
+  <script src="js/games.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/resizable-layout.js"></script>
   <script>

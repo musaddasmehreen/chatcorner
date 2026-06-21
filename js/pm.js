@@ -203,8 +203,10 @@ async function openPrivateChat(userId, username) {
       <button type="button" class="media-url-clear pm-image-url-clear" title="Cancel image URL">✕</button>
     </div>
     <div class="pm-toolbar">
+      <button type="button" class="pm-emoji-btn" title="Emoji">😀</button>
       <button type="button" class="pm-image-btn" title="Share image/GIF by URL">🖼️</button>
       <button type="button" class="pm-record-btn" title="Record voice message">🎙️</button>
+      <button type="button" class="pm-game-btn" title="Play a game">🎮</button>
     </div>
     <div class="pm-input-row">
       <input class="pm-input" type="text" maxlength="500" placeholder="Type a private message…"/>
@@ -228,6 +230,7 @@ async function openPrivateChat(userId, username) {
   const minimizeBtn = wrap.querySelector('.pm-minimize-btn');
   const muteBtn = wrap.querySelector('.pm-mute-btn');
   const recordBtn = wrap.querySelector('.pm-record-btn');
+  const emojiBtn = wrap.querySelector('.pm-emoji-btn');
   const imageBtn = wrap.querySelector('.pm-image-btn');
   const imageInput = wrap.querySelector('.pm-image-url-input');
   const imageClearBtn = wrap.querySelector('.pm-image-url-clear');
@@ -271,6 +274,16 @@ async function openPrivateChat(userId, username) {
     }
     if (event.key === 'Escape') closePmImageInput(userId);
   };
+  if (emojiBtn && typeof toggleEmojiPicker === 'function') {
+    emojiBtn.onclick = (e) => toggleEmojiPicker(e, input);
+  }
+  const gameBtn = wrap.querySelector('.pm-game-btn');
+  if (gameBtn) {
+    gameBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (typeof toggleGamePicker === 'function') toggleGamePicker(userId, gameBtn);
+    };
+  }
   callBtn.onclick = () => startPmVoiceCall(userId);
   acceptBtn.onclick = () => acceptPmVoiceCall(userId);
   declineBtn.onclick = () => declinePmVoiceCall(userId);
@@ -303,6 +316,7 @@ function focusPmWindow(userId) {
   item.el.classList.add('pulse');
   setTimeout(() => item.el.classList.remove('pulse'), 250);
   item.el.querySelector('.pm-input')?.focus();
+  if (typeof handlePmRestore === 'function') handlePmRestore(userId);
 }
 
 function restorePrivateChat(userId) {
@@ -319,6 +333,7 @@ function minimizePrivateChat(userId) {
   }
   renderPvtBar();
   positionPmWindows();
+  if (typeof handlePmMinimize === 'function') handlePmMinimize(userId);
 }
 
 function closePrivateChat(userId) {
@@ -340,6 +355,7 @@ function closePrivateChat(userId) {
   activePmUserId = activePmUserId === userId ? (pvtOpenUsers.keys().next().value || null) : activePmUserId;
   renderPvtBar();
   positionPmWindows();
+  if (typeof handlePmClose === 'function') handlePmClose(userId);
 }
 
 function positionPmWindows() {
@@ -351,6 +367,9 @@ function positionPmWindows() {
     win.el.classList.toggle('hidden', !active);
     win.el.style.left = `${win.left}px`;
     win.el.style.top = `${win.top}px`;
+    if (typeof syncGameWindowPosition === 'function') {
+      syncGameWindowPosition(userId, win.left, win.top, active);
+    }
   });
 }
 
@@ -513,6 +532,13 @@ async function handleIncomingPm(payload) {
 
   const username = payload.username || getUsernameById(fromUserId);
   await openPrivateChat(fromUserId, username);
+
+  if (payload.type && payload.type.startsWith('game_')) {
+    if (typeof handleIncomingGameEvent === 'function') {
+      handleIncomingGameEvent(payload);
+    }
+    return;
+  }
 
   if (payload.type === 'voice' && payload.voiceDataUrl) {
     const blob = dataUrlToBlob(payload.voiceDataUrl);

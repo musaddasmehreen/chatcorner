@@ -61,8 +61,10 @@ function applyTheme(name, animate) {
 /* ══ Emoji Insertion ════════════════════════════════════════════
    Inserts emoji at cursor position in #msg-input.
 ═══════════════════════════════════════════════════════════════ */
+let activeEmojiTarget = null;
+
 function insertEmoji(emoji) {
-  const input = document.getElementById('msg-input');
+  const input = activeEmojiTarget || document.getElementById('msg-input');
   if (!input || input.disabled) return;
   const start = input.selectionStart ?? input.value.length;
   const end   = input.selectionEnd   ?? input.value.length;
@@ -73,12 +75,15 @@ function insertEmoji(emoji) {
   closeEmojiPicker();
 }
 
-function toggleEmojiPicker(event) {
-  event?.stopPropagation();
+function toggleEmojiPicker(event, targetElement = null) {
+  event.stopPropagation();
   const picker = document.getElementById('emoji-picker');
-  const input = document.getElementById('msg-input');
-  if (!picker || input?.disabled) return;
   picker.classList.toggle('hidden');
+  if (!picker.classList.contains('hidden')) {
+    activeEmojiTarget = targetElement;
+  } else {
+    activeEmojiTarget = null;
+  }
 }
 
 function closeEmojiPicker() {
@@ -146,6 +151,7 @@ let presenceChannel= null;
 let profileChannel = null;
 let onlineUsers    = {};
 let cameraStates   = {};
+let pendingMessages= [];
 let presenceBaseData = {};
 const GUEST_TEXT_RATE_LIMIT_COUNT = 2;
 const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -784,6 +790,14 @@ window.addEventListener('DOMContentLoaded', async () => {
         closeRoomImageUrlInput();
       }
     }
+    
+    // Hide profile card if clicked outside
+    if (_pcActive && !_pcActive.contains(event.target)) {
+      // Don't hide if we clicked a user name button (let it handle its own hover)
+      if (!event.target.closest('.user-name-btn')) {
+        hideProfileCard();
+      }
+    }
   });
 
   // Feature 2 — VPN check (non-blocking; shows overlay if VPN detected)
@@ -971,8 +985,30 @@ async function enterRoom(room) {
       filter: `room_id=eq.${room.id}`
     }, payload => {
       if (!canProcessIncomingPayload(payload.new?.user_id)) return;
+      
+      const el = document.getElementById('messages');
+      const wasAtBottom = el ? (el.scrollHeight - el.scrollTop - el.clientHeight < 80) : true;
+      const isMyMessage = payload.new?.user_id === currentUser?.id;
+
+      if (isMyMessage) {
+        const pendingIdx = pendingMessages.findIndex(m => m.content === payload.new.content && m.type === payload.new.type);
+        if (pendingIdx !== -1) {
+          const tempId = pendingMessages[pendingIdx].tempId;
+          const tempNode = document.querySelector(`.msg-row[data-message-id="${tempId}"]`);
+          if (tempNode) tempNode.dataset.messageId = payload.new.id;
+          pendingMessages.splice(pendingIdx, 1);
+          return;
+        }
+      }
+
       appendMessage(payload.new);
-      scrollToBottom();
+
+      if (wasAtBottom || isMyMessage) {
+        setTimeout(scrollToBottom, 50);
+      } else {
+        const btn = document.getElementById('btn-scroll-bottom');
+        if (btn) btn.classList.remove('hidden');
+      }
     })
     .on('postgres_changes', {
       event: 'DELETE', schema: 'public', table: 'messages',
@@ -1082,12 +1118,31 @@ async function sendMessage() {
 
   if (!isSendingImage) input.value = '';
 
+  const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+  const msgContent = isSendingImage ? imageUrl : text;
+  const msgType = isSendingImage ? 'image' : 'text';
+
+  const tempMsg = {
+    id: tempId,
+    room_id: currentRoom.id,
+    user_id: currentUser.id,
+    username: currentProfile.username,
+    content: msgContent,
+    type: msgType,
+    created_at: new Date().toISOString()
+  };
+
+  appendMessage(tempMsg);
+  pendingMessages.push({ tempId, content: msgContent, type: msgType });
+  
+  setTimeout(scrollToBottom, 10);
+
   const { error } = await sbClient.from('messages').insert({
     room_id:  currentRoom.id,
     user_id:  currentUser.id,
     username: currentProfile.username,
-    content:  isSendingImage ? imageUrl : text,
-    type:     isSendingImage ? 'image' : 'text'
+    content:  msgContent,
+    type:     msgType
   });
   if (error) {
     appendSystemMessage(isSendingImage ? 'Could not share image. Please try again.' : 'Could not send message. Please try again.');
@@ -1270,7 +1325,12 @@ function renderUserList() {
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
 function scrollToBottom() {
   const el = document.getElementById('messages');
-  el.scrollTop = el.scrollHeight;
+  if (!el) return;
+  if (typeof el.scrollTo === 'function') {
+    el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+  } else {
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 /* ── Load Older Messages (pagination) ── */
@@ -2009,24 +2069,70 @@ async function sendVoiceNote() {
       try {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
-        const { error } = await sbClient.from('messages').insert({
-          room_id: roomIdForVoiceNote,
-          user_id: currentUser.id,
-          username: currentProfile.username,
-          content: dataUrl,
-          type: 'voice'
-        });
-        if (error) {
-          appendSystemMessage('Could not send voice note. Please try again.');
-        } else if (!isRegisteredUser()) {
-          const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
-          localStorage.setItem('cc-guest-voice-used', String(newCount));
-          if (newCount >= GUEST_VOICE_LIMIT) {
-            setTimeout(() => showRegisterForVoice(), 800);
-          }
+        
+        const previewPopover = document.getElementById('voice-note-preview-popover');
+        const previewAudio = document.getElementById('voice-note-preview-audio');
+        const sendBtn = document.getElementById('btn-voice-note-send');
+        const cancelBtn = document.getElementById('btn-voice-note-cancel');
+        
+        if (previewPopover && previewAudio) {
+          previewAudio.src = dataUrl;
+          previewPopover.classList.remove('hidden');
+          
+          sendBtn.onclick = async () => {
+            previewPopover.classList.add('hidden');
+            previewAudio.src = '';
+            
+            const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+            const tempMsg = {
+              id: tempId,
+              room_id: roomIdForVoiceNote,
+              user_id: currentUser.id,
+              username: currentProfile.username,
+              content: dataUrl,
+              type: 'voice',
+              created_at: new Date().toISOString()
+            };
+
+            appendMessage(tempMsg);
+            pendingMessages.push({ tempId, content: dataUrl, type: 'voice' });
+            setTimeout(scrollToBottom, 10);
+
+            const { error } = await sbClient.from('messages').insert({
+              room_id: roomIdForVoiceNote,
+              user_id: currentUser.id,
+              username: currentProfile.username,
+              content: dataUrl,
+              type: 'voice'
+            });
+            if (error) {
+              appendSystemMessage('Could not send voice note. Please try again.');
+            } else if (!isRegisteredUser()) {
+              const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
+              localStorage.setItem('cc-guest-voice-used', String(newCount));
+              if (newCount >= GUEST_VOICE_LIMIT) {
+                setTimeout(() => showRegisterForVoice(), 800);
+              }
+            }
+          };
+          
+          cancelBtn.onclick = () => {
+            previewPopover.classList.add('hidden');
+            previewAudio.src = '';
+          };
+        } else {
+          // fallback
+          const { error } = await sbClient.from('messages').insert({
+            room_id: roomIdForVoiceNote,
+            user_id: currentUser.id,
+            username: currentProfile.username,
+            content: dataUrl,
+            type: 'voice'
+          });
+          if (error) appendSystemMessage('Could not send voice note. Please try again.');
         }
       } catch (_) {
-        appendSystemMessage('Could not send voice note. Please try again.');
+        appendSystemMessage('Could not process voice note. Please try again.');
       }
     };
 
@@ -2283,15 +2389,18 @@ function getRoleLabel(u) {
 let _pcTimer  = null;
 let _pcHide   = null;
 let _pcActive = null;
+let _pcSessionId = 0;
 
 function scheduleProfileCard(u, anchor) {
   clearTimeout(_pcTimer);
   clearTimeout(_pcHide);
-  _pcTimer = setTimeout(() => showProfileCard(u, anchor), 350);
+  const currentSession = ++_pcSessionId;
+  _pcTimer = setTimeout(() => showProfileCard(u, anchor, currentSession), 350);
 }
 
 function cancelProfileCard() {
   clearTimeout(_pcTimer);
+  _pcSessionId++; // Cancel pending async requests
   // Small grace period so user can move cursor into the card
   _pcHide = setTimeout(() => hideProfileCard(), 220);
 }
@@ -2303,7 +2412,7 @@ function hideProfileCard() {
   }
 }
 
-async function showProfileCard(u, anchor) {
+async function showProfileCard(u, anchor, sessionId) {
   hideProfileCard();
 
   // Fetch full profile for join date, IP, avatar, VIP status
@@ -2312,6 +2421,10 @@ async function showProfileCard(u, anchor) {
     const { data } = await sbClient.from('profiles').select('*').eq('id', u.userId).single();
     profile = data;
   } catch (_) {}
+  
+  // Abort if session changed (mouse left anchor before request finished)
+  if (_pcSessionId !== sessionId) return;
+  
   if (!profile) return;
 
   const viewerLevel  = getViewerRoleLevel();
