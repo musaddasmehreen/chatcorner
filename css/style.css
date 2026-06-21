@@ -6,32 +6,6 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Theme: Classic — clean white chatroom (default) ── */
-[data-theme="classic"] {
-  --bg:          #f0f0f0;
-  --surface:     #ffffff;
-  --panel:       #fafafa;
-  --border:      #c8e6c9;
-  --accent:      #2e7d32;
-  --accent2:     #1565c0;
-  --accent-rgb:  46,125,50;
-  --accent2-rgb: 21,101,192;
-  --green:       #2e7d32;
-  --red:         #c41e3a;
-  --text:        #222222;
-  --muted:       #666666;
-  --nick:        #1565c0;
-  --msg-bg:      transparent;
-  --msg-self:    transparent;
-  --radius:      4px;
-  --particle:    rgba(46,125,50,0.08);
-  --glow:        rgba(46,125,50,0.15);
-  --topbar-bg:   #ffffff;
-  --input-bg:    #ffffff;
-  --send-btn:    #c41e3a;
-  --shadow:      0 2px 12px rgba(0,0,0,0.08);
-}
-
 /* ── Theme: Nebula (default) — soft midnight blue/violet ── */
 :root,
 [data-theme="nebula"] {
@@ -518,7 +492,6 @@ body {
 
 /* ── Sidebars ── */
 .sidebar {
-  width: 210px;
   background: var(--surface);
   display: flex;
   flex-direction: column;
@@ -527,18 +500,137 @@ body {
   transition: background 0.25s;
 }
 
-.sidebar.left  { border-right: 1px solid var(--border); }
-.sidebar.right { border-left:  1px solid var(--border); width: 185px; }
+/* Support both old (.sidebar.left) and new (.sidebar-left) class naming */
+.sidebar.left,
+.sidebar-left  { border-right: 1px solid var(--border); width: 160px; }
+.sidebar.right,
+.sidebar-right { border-left: 1px solid var(--border); width: 260px; }
 
-.sidebar-title {
-  padding: 0.7rem 0.85rem 0.35rem;
+/* ── Rooms sidebar auto-hide (Feature 2) ── */
+.sidebar-left {
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+body.rooms-unpinned .sidebar-left {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-right: none;
+}
+
+body.rooms-unpinned .sidebar-left:hover,
+body.rooms-unpinned .sidebar-left:focus-within {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: all;
+  width: 160px;
+  overflow: visible;
+  border-right: 1px solid var(--border);
+  z-index: 200;
+  position: fixed;
+  left: 0;
+  top: var(--topbar-h, 52px);
+  bottom: 0;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+}
+
+/* Thin "grab tab" visible when sidebar is hidden */
+body.rooms-unpinned .sidebar-left::before {
+  content: '❯';
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--accent);
+  color: #fff;
+  width: 16px;
+  padding: 12px 0;
+  text-align: center;
+  border-radius: 0 8px 8px 0;
+  font-size: 0.75rem;
+  pointer-events: all;
+  cursor: pointer;
+  z-index: 201;
+  opacity: 0.85;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.3);
+  transition: opacity 0.2s;
+}
+
+body.rooms-unpinned .sidebar-left:hover::before {
+  opacity: 0;
+}
+
+/* Pin button inside sidebar */
+.btn-pin-rooms {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--surface2, rgba(255,255,255,0.08));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: #ef4444;
+  cursor: pointer;
   font-size: 0.7rem;
+  padding: 2px 6px;
+  z-index: 10;
+  line-height: 1.4;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.btn-pin-rooms:hover { background: rgba(239,68,68,0.18); box-shadow: 0 0 0 2px rgba(239,68,68,0.3); }
+body:not(.rooms-unpinned) .btn-pin-rooms { color: #22c55e; border-color: #22c55e; }
+body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12); box-shadow: 0 0 0 2px rgba(34,197,94,0.25); }
+
+
+/* ── Theme bar (inside left sidebar) ── */
+.theme-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0.5rem 0.4rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.theme-bar-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+  width: 100%;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.theme-name-label {
+  font-size: 0.65rem;
+  color: var(--accent);
+  font-weight: 600;
+  width: 100%;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ── Sidebar section labels (ROOMS, USERS IN ROOM) ── */
+.sidebar-section-label {
+  padding: 0.55rem 0.85rem 0.3rem;
+  font-size: 0.66rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
   flex-shrink: 0;
   opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar hr {
@@ -562,7 +654,7 @@ body {
   padding: 0.48rem 0.65rem;
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   color: var(--muted);
   transition: background 0.15s, color 0.15s, transform 0.1s;
   white-space: nowrap;
@@ -709,6 +801,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  contain: layout style;
+  will-change: scroll-position;
 }
 
 .messages::-webkit-scrollbar { width: 4px; }
@@ -722,6 +816,20 @@ body {
   max-width: 75%;
   animation: msgIn 0.18s ease both;
   will-change: opacity, transform;
+  contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 60px;
+}
+
+/* Pending (optimistic) message indicator */
+.msg-row--pending {
+  opacity: 0.6;
+}
+.msg-row--pending .msg-bubble::after {
+  content: ' ⌛';
+  font-size: 0.65rem;
+  color: var(--muted);
+  vertical-align: middle;
 }
 
 @keyframes msgIn {
@@ -837,6 +945,20 @@ body {
   padding: 0.25rem 1rem;
   font-style: italic;
   opacity: 0.65;
+  transition: opacity 0.3s, max-height 0.3s;
+}
+
+/* Deletion notices fade and collapse when auto-removed */
+.msg-system-deleted {
+  color: var(--red);
+  opacity: 0.55;
+}
+
+.msg-system.is-deleting {
+  opacity: 0 !important;
+  max-height: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
 }
 
 /* ── Audio Bar ── */
@@ -919,13 +1041,22 @@ body {
   padding: 0.6rem 1rem;
   background: var(--input-bg);
   border: 1.5px solid var(--border);
-  border-radius: 999px;
+  border-radius: 18px;
   color: var(--text);
   font-size: 0.9rem;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, height 0.1s;
+  resize: none;
+  overflow: hidden;
+  min-height: 40px;
+  max-height: 120px;
+  line-height: 1.4;
+  display: block;
+  width: 100%;
+  scrollbar-width: none;
 }
+#msg-input::-webkit-scrollbar { display: none; }
 
 #msg-input::placeholder { color: var(--muted); opacity: 0.55; }
 

@@ -31,21 +31,20 @@ async function joinVoice() {
   if (typeof stopRadioPlayer === 'function') {
     stopRadioPlayer();
   }
-  if (!currentUser) {
-    alert('🔒 Please log in to use voice chat.');
-    return;
-  }
-  if (!currentProfile?.is_registered) {
-    alert('🔒 Register to join voice rooms.');
-    return;
-  }
   if (!currentRoom?.is_audio_enabled || inVoice) return;
+
+  // Guests join in listen-only mode (Feature 5)
+  if (!currentUser || !currentProfile?.is_registered) {
+    await joinVoiceListenOnly();
+    return;
+  }
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     isCameraOn = false;
   } catch (e) {
-    alert('Microphone access denied. Please allow microphone in your browser settings.');
+    // Fallback: if mic denied, join as listener
+    await joinVoiceListenOnly();
     return;
   }
 
@@ -106,8 +105,71 @@ async function joinVoice() {
           }
         });
         await broadcastCameraState();
+        // Feature 1 fix: new joiner calls all existing speakers so they can hear them too
+        const state = audioChannel.presenceState();
+        const myId = currentUser.id;
+        Object.values(state).forEach(arr => arr.forEach(u => {
+          if (u.userId && u.userId !== myId && u.role === 'speaker' && !peers[u.userId]) {
+            handlePeerJoinAsInitiator(u.userId, u.username || u.userId);
+          }
+        }));
       }
     });
+}
+
+// Feature 5 — Listen-only mode: joins voice channel without mic, receives all audio
+async function joinVoiceListenOnly() {
+  if (inVoice || !currentRoom?.is_audio_enabled) return;
+
+  inVoice = true;
+  isListenerMode = true;
+  localStream = null;
+
+  document.getElementById('btn-join-voice')?.classList.add('hidden');
+  document.getElementById('btn-leave-voice')?.classList.remove('hidden');
+  document.getElementById('btn-mute')?.classList.add('hidden'); // no mic to mute
+  document.getElementById('btn-toggle-camera')?.classList.add('hidden');
+
+  const statusEl = document.getElementById('audio-status');
+  if (statusEl) { statusEl.textContent = '🎧 Voice: Listening'; statusEl.classList.add('listener-mode'); }
+
+  audioChannel = sbClient.channel('voice:listen-' + currentRoom.id + '-' + (currentUser?.id || Math.random().toString(36).slice(2)));
+
+  audioChannel
+    .on('broadcast', { event: 'offer' }, ({ payload }) => handleOffer(payload))
+    .on('broadcast', { event: 'answer' }, ({ payload }) => handleAnswer(payload))
+    .on('broadcast', { event: 'ice' }, ({ payload }) => handleIce(payload))
+    .on('broadcast', { event: 'camera-state' }, ({ payload }) => handleCameraState(payload))
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        // Ask all existing speakers to send us their stream by broadcasting a listen-request
+        await audioChannel.send({
+          type: 'broadcast',
+          event: 'join',
+          payload: {
+            from: currentUser?.id || 'guest-' + Math.random().toString(36).slice(2),
+            username: currentProfile?.username || 'Guest',
+            cameraOn: false,
+            listenOnly: true
+          }
+        });
+      }
+    });
+}
+
+// Feature 1 fix: initiator-side connection (new joiner calls existing speakers)
+async function handlePeerJoinAsInitiator(from, username) {
+  if (peers[from]) return;
+  addPeerTag(from, username);
+  const pc = createPeerConnection(from, username);
+  peers[from] = pc;
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await audioChannel.send({
+    type: 'broadcast',
+    event: 'offer',
+    payload: { from: currentUser.id, to: from, sdp: offer, username: currentProfile.username, cameraOn: isCameraOn }
+  });
 }
 
 async function leaveVoice() {
@@ -230,23 +292,30 @@ async function toggleCamera() {
   await broadcastCameraState();
 }
 
-async function handlePeerJoin({ from, username, cameraOn }) {
-  if (from === currentUser.id || peers[from]) return;
-  addPeerTag(from, username);
-  updatePeerCameraIcon(from, !!cameraOn);
-  if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
+async function handlePeerJoin({ from, username, cameraOn, listenOnly }) {
+  if (!from || from === currentUser?.id || peers[from]) return;
+  if (!inVoice || !audioChannel) return; // only active voice participants handle this
 
-  const pc = createPeerConnection(from, username);
-  peers[from] = pc;
+  // If we are a speaker with a localStream, call the new participant so they can hear us
+  if (!isListenerMode && localStream) {
+    addPeerTag(from, username);
+    if (!listenOnly) {
+      updatePeerCameraIcon(from, !!cameraOn);
+      if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
+    }
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+    const pc = createPeerConnection(from, username);
+    peers[from] = pc;
 
-  await audioChannel.send({
-    type: 'broadcast',
-    event: 'offer',
-    payload: { from: currentUser.id, to: from, sdp: offer, username: currentProfile.username, cameraOn: isCameraOn }
-  });
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await audioChannel.send({
+      type: 'broadcast',
+      event: 'offer',
+      payload: { from: currentUser.id, to: from, sdp: offer, username: currentProfile.username, cameraOn: isCameraOn }
+    });
+  }
 }
 
 async function handleOffer({ from, to, sdp, username, cameraOn }) {

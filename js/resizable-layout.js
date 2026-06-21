@@ -19,8 +19,8 @@ class ResizableLayout {
     this.RIGHT_WIDTH_KEY = 'chatcorner_right_sidebar_width';
 
     // Default widths (in pixels)
-    this.DEFAULT_LEFT_WIDTH = 200;
-    this.DEFAULT_RIGHT_WIDTH = 200;
+    this.DEFAULT_LEFT_WIDTH = 150;
+    this.DEFAULT_RIGHT_WIDTH = 230;
     this.MIN_WIDTH = 120;
     this.MAX_WIDTH = 400;
 
@@ -46,6 +46,9 @@ class ResizableLayout {
    * Load saved sidebar widths from localStorage
    */
   loadSavedWidths() {
+    // On mobile, skip applying stored widths — CSS drawer system handles sizing
+    if (window.innerWidth <= 768) return;
+
     const savedLeftWidth = localStorage.getItem(this.LEFT_WIDTH_KEY);
     const savedRightWidth = localStorage.getItem(this.RIGHT_WIDTH_KEY);
 

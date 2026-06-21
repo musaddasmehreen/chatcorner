@@ -102,6 +102,8 @@ async function requestAllPermissions() {
 function dismissPermissions(remember = true) {
   const banner = document.getElementById('permissions-banner');
   if (banner) banner.style.display = 'none';
+  const backdrop = document.getElementById('permissions-backdrop');
+  if (backdrop) backdrop.style.display = 'none';
   if (remember) localStorage.setItem('cc_perms_dismissed', '1');
 }
 
@@ -154,6 +156,8 @@ async function initPermissionsBanner() {
   // Show the banner briefly so the user sees what's being requested
   const banner = document.getElementById('permissions-banner');
   if (banner) banner.style.display = 'flex';
+  const backdrop = document.getElementById('permissions-backdrop');
+  if (backdrop) backdrop.style.display = 'block';
 
   await updatePermissionIndicators();
   setAllowButtonState('✅ Allow All', false);

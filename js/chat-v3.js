@@ -61,10 +61,8 @@ function applyTheme(name, animate) {
 /* ══ Emoji Insertion ════════════════════════════════════════════
    Inserts emoji at cursor position in #msg-input.
 ═══════════════════════════════════════════════════════════════ */
-let activeEmojiTarget = null;
-
 function insertEmoji(emoji) {
-  const input = activeEmojiTarget || document.getElementById('msg-input');
+  const input = document.getElementById('msg-input');
   if (!input || input.disabled) return;
   const start = input.selectionStart ?? input.value.length;
   const end   = input.selectionEnd   ?? input.value.length;
@@ -75,14 +73,16 @@ function insertEmoji(emoji) {
   closeEmojiPicker();
 }
 
-function toggleEmojiPicker(event, targetElement = null) {
-  event.stopPropagation();
+function toggleEmojiPicker(event) {
+  event?.stopPropagation();
   const picker = document.getElementById('emoji-picker');
+  const input = document.getElementById('msg-input');
+  if (!picker || input?.disabled) return;
   picker.classList.toggle('hidden');
   if (!picker.classList.contains('hidden')) {
-    activeEmojiTarget = targetElement;
-  } else {
-    activeEmojiTarget = null;
+    if (typeof window.closeInputExtras === 'function') {
+      window.closeInputExtras();
+    }
   }
 }
 
@@ -171,6 +171,34 @@ const IGNORED_USERS_STORAGE_KEY = 'cc-ignored-users';
 const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
 let guestCleanupPromise = null;
 let ignoredUserIds = loadIgnoredUserIds();
+
+/* ── Optimistic UI dedup tracking ─────────────────────────────
+   Stores { content, userId, ts } for messages sent optimistically.
+   Realtime INSERT for same user/content within 5s is skipped.
+──────────────────────────────────────────────────────────────── */
+const _optimisticPending = new Map(); // tempId -> { content, userId, ts, node }
+let _optimisticCounter = 0;
+
+/* ── Debounced presence track ──────────────────────────────────
+   Coalesces rapid calls into a single track() every 1500ms.
+──────────────────────────────────────────────────────────────── */
+let _presenceTrackTimer = null;
+function debouncedPresenceTrack() {
+  if (!presenceChannel) return;
+  clearTimeout(_presenceTrackTimer);
+  _presenceTrackTimer = setTimeout(() => {
+    presenceChannel.track(presenceBaseData).catch(() => {});
+  }, 1500);
+}
+
+/* ── Textarea auto-resize helper ───────────────────────────────
+   Grows the textarea up to its CSS max-height as content fills.
+──────────────────────────────────────────────────────────────── */
+function autoResizeTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -447,7 +475,8 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     boldNick: !!profile?.bold_nick,
     msgColor: profile?.msg_color,
     boldText: !!profile?.bold_text,
-    avatarUrl: profile?.avatar_url
+    avatarUrl: profile?.avatar_url,
+    totalOnlineTime: profile?.total_online_time || 0
   };
 }
 
@@ -533,7 +562,7 @@ function upsertOnlineUserProfile(profile) {
     currentProfile = { ...currentProfile, ...profile };
     updatePresenceBaseFromProfile(currentProfile);
     updateCurrentUserBadge();
-    if (presenceChannel) presenceChannel.track(presenceBaseData).catch(() => {});
+    if (presenceChannel) debouncedPresenceTrack();
   }
   if (onlineUsers[profile.id]) {
     onlineUsers[profile.id] = {
@@ -718,6 +747,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('audio-bar').classList.remove('hidden');
   applyGuestModeUI();
   document.getElementById('btn-image-url')?.addEventListener('click', toggleRoomImageUrlInput);
+  document.getElementById('btn-image-url-mobile')?.addEventListener('click', (event) => {
+    if (typeof closeAllSidebars === 'function') closeAllSidebars();
+    toggleRoomImageUrlInput(event);
+  });
   document.getElementById('btn-room-image-url-clear')?.addEventListener('click', (event) => {
     event.stopPropagation();
     closeRoomImageUrlInput();
@@ -733,15 +766,26 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
 
 
-  // Character counter for message input
-  document.getElementById('msg-input')?.addEventListener('input', () => {
-    const len = document.getElementById('msg-input').value.length;
-    const counter = document.getElementById('msg-char-counter');
-    if (counter) {
-      counter.textContent = `${len}/500`;
-      counter.style.color = len > 450 ? 'var(--red, #ef4444)' : 'var(--muted)';
-    }
-  });
+  // Character counter + auto-resize for textarea message input
+  const msgInputEl = document.getElementById('msg-input');
+  if (msgInputEl) {
+    msgInputEl.addEventListener('input', () => {
+      const len = msgInputEl.value.length;
+      const counter = document.getElementById('msg-char-counter');
+      if (counter) {
+        counter.textContent = `${len}/500`;
+        counter.style.color = len > 450 ? 'var(--red, #ef4444)' : 'var(--muted)';
+      }
+      autoResizeTextarea(msgInputEl);
+    });
+    // Enter = send, Shift+Enter = newline
+    msgInputEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+  }
 
   // Scroll-to-bottom button visibility
   document.getElementById('messages')?.addEventListener('scroll', () => {
@@ -787,20 +831,46 @@ window.addEventListener('DOMContentLoaded', async () => {
         closeRoomImageUrlInput();
       }
     }
-    
-    // Hide profile card if clicked outside
-    if (_pcActive && !_pcActive.contains(event.target)) {
-      // Don't hide if we clicked a user name button (let it handle its own hover)
-      if (!event.target.closest('.user-name-btn')) {
-        hideProfileCard();
-      }
-    }
   });
 
   // Feature 2 — VPN check (non-blocking; shows overlay if VPN detected)
   checkVpnOnEntry();
 
   await loadRooms();
+
+  // ── Offline / Online reconnect recovery ─────────────────────────────
+  window.addEventListener('offline', () => {
+    const banner = document.getElementById('connection-error-banner');
+    if (banner) {
+      banner.querySelector('.banner-text').textContent = '⚠️ You are offline. Waiting to reconnect...';
+      banner.classList.remove('hidden');
+    }
+  });
+
+  window.addEventListener('online', async () => {
+    const banner = document.getElementById('connection-error-banner');
+    if (banner) banner.classList.add('hidden');
+    // Re-subscribe to Supabase channels if currently in a room
+    if (currentRoom) {
+      showChatToast('🔄 Reconnecting...', 'info', 2000);
+      await enterRoom(currentRoom, true);
+    }
+  });
+
+  // Re-subscribe after tab was hidden for more than 90 seconds
+  let _hiddenAt = 0;
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) {
+      _hiddenAt = Date.now();
+    } else {
+      const gapMs = Date.now() - _hiddenAt;
+      if (_hiddenAt > 0 && gapMs > 90_000 && currentRoom) {
+        showChatToast('🔄 Refreshing connection...', 'info', 2000);
+        await enterRoom(currentRoom, true);
+      }
+      _hiddenAt = 0;
+    }
+  });
 });
 
 let _roomCountInterval = null;
@@ -821,6 +891,16 @@ async function loadRooms() {
       li.onclick = () => enterRoom(room);
       if (textList) textList.appendChild(li);
     });
+    // Inject virtual IPTV room at end of sidebar list
+    if (textList) {
+      const iptvLi = document.createElement('li');
+      iptvLi.textContent = '📺 IPTV';
+      iptvLi.title = 'IPTV – Live TV Channels';
+      iptvLi.dataset.roomId = 'iptv-virtual';
+      iptvLi.classList.add('iptv-room-item');
+      iptvLi.onclick = () => enterIPTVRoom();
+      textList.appendChild(iptvLi);
+    }
     renderRoomsTopbar(rooms);
     enterRoom(rooms[0]);
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
@@ -851,9 +931,11 @@ function renderRoomsTopbar(rooms) {
   bar.classList.add('hidden');
 }
 
-async function enterRoom(room) {
+async function enterRoom(room, force = false) {
+  // Exit IPTV mode if switching to a normal room
+  exitIPTVRoom();
   if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
-  if (currentRoom?.id === room.id) return;
+  if (!force && currentRoom?.id === room.id) return;
   if (roomVoiceNoteRecorder?.state === 'recording') {
     discardRoomVoiceNoteOnStop = true;
     roomVoiceNoteRecorder.stop();
@@ -866,6 +948,16 @@ async function enterRoom(room) {
   currentRoom = room;
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '# ' + room.name;
+
+  // Dynamic SEO: update page title and meta description for the current room
+  document.title = `#${room.name} – ChatCorner`;
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) metaDesc.setAttribute('content', `You are in #${room.name} on ChatCorner. Join the conversation, share voice notes, and connect with other users in real-time.`);
+
+  // Auto-close mobile sidebars when a room is selected
+  if (typeof closeAllSidebars === 'function') closeAllSidebars();
+  if (typeof switchMobileTab === 'function') switchMobileTab('chat');
+
   document.getElementById('messages').innerHTML = '';
   onlineUsers = {};
   cameraStates = {};
@@ -905,7 +997,7 @@ async function enterRoom(room) {
     closeRoomImageUrlInput(false);
   } else {
     msgInput.disabled = false;
-    msgInput.placeholder = 'Type a message\u2026 (Enter to send)';
+    msgInput.placeholder = 'Type a message\u2026 (Enter to send, Shift+Enter for newline)';
     if (sendBtn)  sendBtn.disabled  = false;
     if (emojiBtn) emojiBtn.disabled = false;
   }
@@ -928,6 +1020,28 @@ async function enterRoom(room) {
   if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !messages || messages.length < 50);
 
   // Batch-append for performance (skip persisted system/deletion notices so newcomers don't see them)
+  const MSG_CACHE_KEY = `cc-msgs-${room.id}`;
+  const MSG_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+  // Feature 3 — Try restoring from localStorage cache first (shows instantly before DB responds)
+  if (!messages?.length) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(MSG_CACHE_KEY) || 'null');
+      if (cached && cached.ts && Date.now() - cached.ts < MSG_CACHE_TTL && cached.msgs?.length) {
+        const container = document.getElementById('messages');
+        const frag = document.createDocumentFragment();
+        cached.msgs.forEach(m => {
+          if (m.type === 'system') return;
+          const node = buildMessageNode(m);
+          if (node) { node.classList.add('msg-row--cached'); frag.appendChild(node); }
+        });
+        container.appendChild(frag);
+        refreshIgnoredMessageVisibility();
+        scrollToBottom();
+      }
+    } catch (_) {}
+  }
+
   if (messages?.length) {
     const container = document.getElementById('messages');
     const frag = document.createDocumentFragment();
@@ -937,6 +1051,11 @@ async function enterRoom(room) {
       if (node) frag.appendChild(node);
     });
     container.appendChild(frag);
+
+    // Feature 3 — Cache last 50 messages to localStorage for persistence across logout/login
+    try {
+      localStorage.setItem(MSG_CACHE_KEY, JSON.stringify({ ts: Date.now(), msgs: messages.slice(-50) }));
+    } catch (_) {}
   }
   refreshIgnoredMessageVisibility();
   scrollToBottom();
@@ -950,17 +1069,34 @@ async function enterRoom(room) {
       if (!canProcessIncomingPayload(payload.new?.user_id)) return;
       // Skip system (deletion notice) messages from DB realtime — they are shown locally and auto-expire
       if (payload.new?.type === 'system') return;
+      // Skip if this is our own optimistic message already shown
+      if (payload.new?.id && _optimisticPending.has(payload.new.id)) {
+        _optimisticPending.delete(payload.new.id);
+        return;
+      }
+      if (payload.new?.user_id === currentUser?.id) {
+        let matchedTempId = null;
+        for (const [tempId, entry] of _optimisticPending.entries()) {
+          if (entry.userId === payload.new.user_id && entry.content === payload.new.content && (Date.now() - entry.ts < 5000)) {
+            matchedTempId = tempId;
+            break;
+          }
+        }
+        if (matchedTempId) {
+          const entry = _optimisticPending.get(matchedTempId);
+          if (entry && entry.node) {
+            entry.node.dataset.messageId = payload.new.id;
+            entry.node.classList.remove('msg-row--pending');
+          }
+          _optimisticPending.delete(matchedTempId);
+          return;
+        }
+      }
       if (payload.new?.user_id) {
         await cacheSenderProfiles([payload.new.user_id]);
       }
       appendMessage(payload.new);
-
-      if (wasAtBottom || isMyMessage) {
-        setTimeout(scrollToBottom, 50);
-      } else {
-        const btn = document.getElementById('btn-scroll-bottom');
-        if (btn) btn.classList.remove('hidden');
-      }
+      scrollToBottom();
     })
     .on('postgres_changes', {
       event: 'DELETE', schema: 'public', table: 'messages',
@@ -974,7 +1110,17 @@ async function enterRoom(room) {
     }, payload => {
       handleRealtimeMessageUpdate(payload.new);
     })
-    .subscribe();
+    .subscribe((status) => {
+      const banner = document.getElementById('connection-error-banner');
+      if (status === 'SUBSCRIBED') {
+        if (banner) banner.classList.add('hidden');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (banner) {
+          banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
+          banner.classList.remove('hidden');
+        }
+      }
+    });
 
   presenceChannel = sbClient.channel('presence:' + room.id, {
     config: { presence: { key: currentUser.id } }
@@ -1025,8 +1171,15 @@ async function enterRoom(room) {
       updateTypingIndicator();
     })
     .subscribe(async (status) => {
+      const banner = document.getElementById('connection-error-banner');
       if (status === 'SUBSCRIBED') {
+        if (banner) banner.classList.add('hidden');
         await presenceChannel.track(presenceBaseData);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (banner) {
+          banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
+          banner.classList.remove('hidden');
+        }
       }
     });
 
@@ -1038,7 +1191,22 @@ function applyGuestUI() {
   updateComposerState();
 }
 
+let globalMessageTimestamps = [];
+function checkGlobalRateLimit() {
+  const now = Date.now();
+  globalMessageTimestamps = globalMessageTimestamps.filter(t => now - t < 5000);
+  if (globalMessageTimestamps.length >= 3) {
+    return false;
+  }
+  globalMessageTimestamps.push(now);
+  return true;
+}
+
 async function sendMessage() {
+  if (!checkGlobalRateLimit()) {
+    showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
+    return;
+  }
   if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
@@ -1068,9 +1236,7 @@ async function sendMessage() {
     }
   }
 
-  if (!isSendingImage) input.value = '';
-
-  // ── Security: validate content before sending ──────────────────
+  // ── Security: validate content before sending ──
   if (!isSendingImage) {
     const validation = window.ccValidateMessage ? window.ccValidateMessage(text) : { ok: true };
     if (!validation.ok) {
@@ -1078,7 +1244,6 @@ async function sendMessage() {
       return;
     }
   }
-  // Sanitise image URL — only allow http(s)
   const safeImageUrl = isSendingImage && window.ccSanitize
     ? window.ccSanitize.url(imageUrl)
     : imageUrl;
@@ -1086,27 +1251,77 @@ async function sendMessage() {
     showChatToast('⚠️ Invalid image URL blocked for security.', 'warning');
     return;
   }
-  // Validate room/user IDs are proper UUIDs before insert
   if (window.ccSanitize) {
     if (!window.ccSanitize.isUUID(currentRoom?.id) || !window.ccSanitize.isUUID(currentUser?.id)) {
       console.warn('[CC-SEC] sendMessage: invalid room/user ID — aborting insert.');
       return;
     }
   }
-  // Sanitise text content
   const safeText = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
+  const finalContent = isSendingImage ? safeImageUrl : safeText;
+
+  // ── Clear input immediately for instant UX feel ──
+  if (!isSendingImage) {
+    input.value = '';
+    autoResizeTextarea(input);
+    const counter = document.getElementById('msg-char-counter');
+    if (counter) counter.textContent = '0/500';
+  }
+
+  // ── OPTIMISTIC UI: append message node instantly before DB confirms ──
+  let optimisticNode = null;
+  const tempId = `opt-${++_optimisticCounter}`;
+  if (!isSendingImage) {
+    const fakeMsg = {
+      id: tempId,
+      room_id: currentRoom.id,
+      user_id: currentUser.id,
+      username: currentProfile.username,
+      content: finalContent,
+      type: 'text',
+      created_at: new Date().toISOString()
+    };
+    optimisticNode = buildMessageNode(fakeMsg);
+    if (optimisticNode) {
+      optimisticNode.classList.add('msg-row--pending');
+      optimisticNode.dataset.tempId = tempId;
+      document.getElementById('messages').appendChild(optimisticNode);
+      scrollToBottom();
+      pruneMessageDom();
+      _optimisticPending.set(tempId, { content: finalContent, userId: currentUser.id, ts: Date.now(), node: optimisticNode });
+    }
+  }
 
   const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
     room_id:  currentRoom.id,
     user_id:  currentUser.id,
     username: currentProfile.username,
-    content:  isSendingImage ? safeImageUrl : safeText,
+    content:  finalContent,
     type:     isSendingImage ? 'image' : 'text'
   }).select('id');
 
   if (error) {
+    // Roll back optimistic node on failure
+    if (optimisticNode) {
+      optimisticNode.classList.add('is-deleting');
+      setTimeout(() => optimisticNode.remove(), 220);
+      _optimisticPending.delete(tempId);
+    }
     appendSystemMessage(isSendingImage ? 'Could not share image. Please try again.' : 'Could not send message. Please try again.');
     return;
+  }
+
+  // Confirm optimistic node — stamp real DB id, remove pending style
+  if (optimisticNode && insertedMsgs?.[0]?.id) {
+    optimisticNode.dataset.messageId = insertedMsgs[0].id;
+    optimisticNode.classList.remove('msg-row--pending');
+    // Register real id so the realtime event skips it
+    _optimisticPending.set(insertedMsgs[0].id, _optimisticPending.get(tempId) || {});
+    _optimisticPending.delete(tempId);
+    setTimeout(() => _optimisticPending.delete(insertedMsgs[0].id), 5000);
+  } else if (optimisticNode) {
+    optimisticNode.classList.remove('msg-row--pending');
+    _optimisticPending.delete(tempId);
   }
 
   // Delete guest messages immediately from the database to keep history empty for guests
@@ -1143,7 +1358,7 @@ function buildMessageNode(msg) {
     
     const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
     const avatarInner = avatarUrl
-      ? `<img src="${escHtml(avatarUrl)}" alt=""/>`
+      ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar" loading="lazy"/>`
       : initial;
       
     let nickStyle = '';
@@ -1160,10 +1375,12 @@ function buildMessageNode(msg) {
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
       : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
     const deleteButton = buildDeleteButtonHtml(msg.user_id);
+    const reportButton = buildReportButtonHtml(msg);
     div.innerHTML = `
       <div class="avatar" style="background:${color}">${avatarInner}</div>
       <div class="msg-bubble">
         ${deleteButton}
+        ${reportButton}
         <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
         ${audioHtml}
         <div class="msg-time">${formatTime(msg.created_at)}</div>
@@ -1185,7 +1402,7 @@ function buildMessageNode(msg) {
   const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
   const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
   const avatarInner = avatarUrl
-    ? `<img src="${escHtml(avatarUrl)}" alt=""/>`
+    ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar" loading="lazy"/>`
     : initial;
     
   let nickStyle = '';
@@ -1209,11 +1426,13 @@ function buildMessageNode(msg) {
   }
 
   const deleteButton = buildDeleteButtonHtml(msg.user_id);
+  const reportButton = buildReportButtonHtml(msg);
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
+      ${reportButton}
       <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
       <div class="msg-text" style="${msgStyle}">${escHtml(msg.content)}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
@@ -1226,6 +1445,7 @@ function appendMessage(msg) {
   const node = buildMessageNode(msg);
   if (!node) return;
   document.getElementById('messages').appendChild(node);
+  pruneMessageDom();
   // Deletion notices (type=system) auto-disappear after 5 minutes for live users
   if (msg?.type === 'system' && String(msg?.content || '').startsWith(DELETED_MESSAGE_PREFIX)) {
     setTimeout(() => {
@@ -1234,6 +1454,29 @@ function appendMessage(msg) {
         setTimeout(() => node.remove(), 220);
       }
     }, 5 * 60 * 1000);
+  }
+}
+
+/* Trim oldest messages from DOM when count exceeds 200 to prevent memory leaks */
+function pruneMessageDom() {
+  const container = document.getElementById('messages');
+  if (!container) return;
+  const rows = container.querySelectorAll('.msg-row:not([data-temp-id])');
+  const MAX = 200;
+  const TRIM = 50;
+  if (rows.length > MAX) {
+    for (let i = 0; i < TRIM && i < rows.length; i++) rows[i].remove();
+    const loadMoreBtn = document.getElementById('btn-load-older');
+    if (loadMoreBtn) loadMoreBtn.classList.remove('hidden');
+
+    const remainingRows = container.querySelectorAll('.msg-row:not([data-temp-id])');
+    if (remainingRows.length > 0) {
+      const firstRow = remainingRows[0];
+      const createdAt = firstRow.dataset.createdAt;
+      if (createdAt) {
+        oldestMessageTimestamp = createdAt;
+      }
+    }
   }
 }
 
@@ -1253,7 +1496,9 @@ function scheduleRenderUserList() {
 
 function renderUserList() {
   const ul   = document.getElementById('user-list');
+  const ulMobile = document.getElementById('mobile-online-users');
   const frag = document.createDocumentFragment();
+  const fragMobile = document.createDocumentFragment();
   const isGuest = !isRegisteredUser();
   const sortedUsers = getSortedOnlineUsers();
 
@@ -1264,7 +1509,7 @@ function renderUserList() {
     const roleBadge = getRoleBadgeHtml(u);
     const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
     const avatarHtml = u.avatarUrl
-      ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt=""/>`
+      ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt="${escHtml(u.username || '')} avatar" loading="lazy"/>`
       : `<div class="roster-avatar-init" style="background:${escHtml(u.color || '#7c3aed')}">${(u.username || '?')[0].toUpperCase()}</div>`;
     
     li.innerHTML = `
@@ -1272,7 +1517,6 @@ function renderUserList() {
       ${avatarHtml}
       ${roleBadge}
       <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${escHtml(u.username)}</button>
-      <canvas class="mini-soundbar" data-user-id="${u.userId}" width="32" height="10" aria-hidden="true"></canvas>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
     `;
@@ -1292,13 +1536,42 @@ function renderUserList() {
         openFloatingCamera(u.userId, u.username);
       }
     });
-    // Kick/ban buttons in sidebar are removed — only available in profile card (opened by clicking name)
 
     frag.appendChild(li);
+
+    // Mobile horizontal list item
+    if (ulMobile) {
+      const mDiv = document.createElement('div');
+      mDiv.className = 'mobile-user-avatar-wrap';
+      mDiv.dataset.userId = u.userId;
+      
+      const activeDot = `<span class="mobile-user-status-dot${u.registered ? '' : ' guest'}"></span>`;
+      mDiv.innerHTML = `
+        <div class="mobile-user-avatar-container">
+          ${avatarHtml}
+          ${activeDot}
+        </div>
+        <span class="mobile-user-name">${escHtml(u.username)}</span>
+      `;
+      
+      mDiv.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        promptUserRosterAction(u, isGuest);
+      });
+      
+      fragMobile.appendChild(mDiv);
+    }
   });
 
-  ul.innerHTML = '';
-  ul.appendChild(frag);
+  if (ul) {
+    ul.innerHTML = '';
+    ul.appendChild(frag);
+  }
+
+  if (ulMobile) {
+    ulMobile.innerHTML = '';
+    ulMobile.appendChild(fragMobile);
+  }
 
   // Update room-users-bar
   const bar = document.getElementById('room-users-bar');
@@ -1314,17 +1587,35 @@ function renderUserList() {
     });
     bar.appendChild(bfrag);
   }
+
+  // Feature 7 — Glowing star for user with most total online time
+  if (ul && sortedUsers.length > 0) {
+    let topUserId = null;
+    let topTime = 0;
+    sortedUsers.forEach(u => {
+      const t = onlineUsers[u.userId]?.totalOnlineTime || 0;
+      if (t > topTime) { topTime = t; topUserId = u.userId; }
+    });
+    if (topUserId && topTime > 0) {
+      const topLi = ul.querySelector(`li[data-user-id="${CSS.escape(topUserId)}"]`);
+      if (topLi && !topLi.querySelector('.top-time-star')) {
+        const nameBtn = topLi.querySelector('.user-name-btn');
+        if (nameBtn) {
+          const star = document.createElement('span');
+          star.className = 'top-time-star';
+          star.title = 'Most time spent in this chatroom!';
+          star.textContent = '🌟';
+          nameBtn.after(star);
+        }
+      }
+    }
+  }
 }
 
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
 function scrollToBottom() {
   const el = document.getElementById('messages');
-  if (!el) return;
-  if (typeof el.scrollTo === 'function') {
-    el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
-  } else {
-    el.scrollTop = el.scrollHeight;
-  }
+  el.scrollTop = el.scrollHeight;
 }
 
 /* ── Load Older Messages (pagination) ── */
@@ -1458,7 +1749,7 @@ function markSelfAsViewer(on) {
   scheduleRenderUserList();
   if (presenceChannel) {
     presenceBaseData.viewingCam = !!on;
-    presenceChannel.track(presenceBaseData).catch(() => {});
+    debouncedPresenceTrack();
   }
 }
 
@@ -1475,112 +1766,10 @@ function joinVoiceQuick() {
   }
 }
 
-/* ── Cam Area: show a user's camera stream inside #cam-area ── */
-let _camAreaStream = null;
-let _camAreaUserId = null;
-
 function showCamInArea(userId, username) {
-  const area = document.getElementById('cam-window-area');
-  if (!area) {
-    if (typeof openFloatingCamera === 'function') openFloatingCamera(userId, username);
-    return;
+  if (typeof openFloatingCamera === 'function') {
+    openFloatingCamera(userId, username);
   }
-
-  // If audio.js has a peer stream, use it; otherwise delegate to openFloatingCamera
-  let stream = null;
-  if (typeof peerConnections !== 'undefined' && peerConnections[userId]) {
-    const receivers = peerConnections[userId].getReceivers?.() || [];
-    const videoReceiver = receivers.find(r => r.track?.kind === 'video');
-    if (videoReceiver?.track) {
-      stream = new MediaStream([videoReceiver.track]);
-    }
-  }
-
-  if (!stream) {
-    // Delegate to audio.js floating camera and mirror the video element
-    if (typeof openFloatingCamera === 'function') openFloatingCamera(userId, username);
-    // Mirror: after short delay, grab video from floating window into cam-area
-    setTimeout(() => _mirrorFloatingCamToArea(userId, username), 200);
-    return;
-  }
-
-  _placeCamInArea(stream, userId, username);
-}
-
-function _mirrorFloatingCamToArea(userId, username) {
-  const floatWin = document.getElementById('floating-camera-window');
-  const floatVid = document.getElementById('floating-camera-video');
-  if (!floatVid || !floatVid.srcObject) return;
-  _placeCamInArea(floatVid.srcObject, userId, username);
-  // Hide floating window now that cam-area is showing
-  if (floatWin) floatWin.classList.add('hidden');
-}
-
-function _placeCamInArea(stream, userId, username) {
-  const area = document.getElementById('cam-window-area');
-  const video = document.getElementById('cam-video');
-  const usernameEl = document.getElementById('cam-window-username');
-  const minBtn = document.getElementById('btn-cam-minimize');
-  const closeBtn = document.getElementById('btn-cam-close');
-  if (!area) return;
-
-  // Stop any previous stream in cam window
-  _clearCamArea(false);
-
-  _camAreaStream = stream;
-  _camAreaUserId = userId;
-  if (usernameEl) usernameEl.textContent = username || '';
-  if (video) video.srcObject = stream;
-  if (minBtn) minBtn.onclick = () => _minimizeCamToBar(userId, username, stream);
-  if (closeBtn) closeBtn.onclick = () => _clearCamArea(true);
-  area.style.display = '';
-}
-
-function _clearCamArea(stopStream) {
-  const area = document.getElementById('cam-window-area');
-  const video = document.getElementById('cam-video');
-  const usernameEl = document.getElementById('cam-window-username');
-  if (!area) return;
-
-  if (video) {
-    if (stopStream && video.srcObject) {
-      video.srcObject.getTracks().forEach(t => t.stop());
-    }
-    video.srcObject = null;
-  }
-  if (usernameEl) usernameEl.textContent = '';
-  area.style.display = 'none';
-  _camAreaStream = null;
-  _camAreaUserId = null;
-}
-
-function _minimizeCamToBar(userId, username, stream) {
-  _clearCamArea(false);
-  const bar = document.getElementById('minimized-cams-bar');
-  if (!bar) return;
-
-  const pill = document.createElement('div');
-  pill.className = 'mini-cam-item';
-  pill.dataset.userId = userId;
-
-  const thumb = document.createElement('video');
-  thumb.className = 'mini-cam-thumb';
-  thumb.autoplay = true;
-  thumb.playsInline = true;
-  thumb.muted = true;
-  thumb.srcObject = stream;
-
-  const label = document.createElement('span');
-  label.textContent = username || 'User';
-
-  pill.onclick = () => {
-    pill.remove();
-    _placeCamInArea(stream, userId, username);
-  };
-
-  pill.appendChild(thumb);
-  pill.appendChild(label);
-  bar.appendChild(pill);
 }
 
 function escHtml(str) {
@@ -1618,7 +1807,7 @@ async function setLocalCameraState(cameraOn) {
   presenceBaseData.cameraOn = !!cameraOn;
   scheduleRenderUserList();
   if (presenceChannel) {
-    try { await presenceChannel.track(presenceBaseData); } catch (_) {}
+    try { debouncedPresenceTrack(); } catch (_) {}
   }
 }
 
@@ -1651,6 +1840,11 @@ function buildDeleteButtonHtml(userId) {
   return `<button type="button" class="msg-local-delete" title="${escHtml(title)}">🗑️</button>`;
 }
 
+function buildReportButtonHtml(msg) {
+  if (!currentUser?.id || msg.user_id === currentUser.id) return '';
+  return `<button type="button" class="msg-local-report" title="Report message for review">⚠️</button>`;
+}
+
 function isKickActive(profile) {
   if (!profile?.kicked_until) return false;
   const until = new Date(profile.kicked_until).getTime();
@@ -1679,7 +1873,7 @@ function updateComposerState() {
   if (isGuest) {
     if (msgInput) {
       msgInput.disabled = isLocked;
-      msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send)';
+      msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send, Shift+Enter for newline)';
       msgInput.title = '';
     }
     if (sendBtn) {
@@ -1715,7 +1909,7 @@ function updateComposerState() {
 
   if (msgInput) {
     msgInput.disabled = isLocked;
-    msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send)';
+    msgInput.placeholder = isLocked ? 'This room is locked by admin.' : 'Type a message… (Enter to send, Shift+Enter for newline)';
     msgInput.title = '';
   }
   if (sendBtn) {
@@ -2051,6 +2245,11 @@ async function sendVoiceNote() {
         return;
       }
 
+      if (!checkGlobalRateLimit()) {
+        showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
+        return;
+      }
+
       if (!chunks.length) {
         appendSystemMessage('Voice note cancelled.');
         return;
@@ -2079,7 +2278,7 @@ async function sendVoiceNote() {
           }
         }
       } catch (_) {
-        appendSystemMessage('Could not process voice note. Please try again.');
+        appendSystemMessage('Could not send voice note. Please try again.');
       }
     };
 
@@ -2317,6 +2516,52 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+document.addEventListener('click', async (event) => {
+  const reportBtn = event.target.closest('.msg-local-report');
+  if (!reportBtn) return;
+  
+  const row = reportBtn.closest('.msg-row');
+  if (!row) return;
+  
+  const targetUserId = row.dataset.userId || '';
+  const messageId = row.dataset.messageId || '';
+  const targetUsername = row.querySelector('.msg-username')?.textContent || 'Unknown';
+  const messageText = row.querySelector('.msg-text')?.textContent || '';
+  
+  if (!messageId) return;
+
+  reportBtn.disabled = true;
+  reportBtn.textContent = '…';
+  
+  try {
+    if (window.sbClient) {
+      await window.sbClient.from('security_events').insert({
+        event_type: 'REPORT_MESSAGE',
+        details: {
+          messageId,
+          targetUserId,
+          targetUsername,
+          messageText,
+          reporterId: currentUser?.id,
+          reporterName: currentProfile?.username,
+          roomId: currentRoom?.id
+        },
+        user_agent: navigator.userAgent
+      });
+    }
+    
+    showChatToast('Message reported successfully. Thank you.', 'success', 3000);
+    reportBtn.textContent = '✓';
+    reportBtn.title = 'Reported';
+    row.style.opacity = '0.6';
+  } catch (err) {
+    reportBtn.disabled = false;
+    reportBtn.textContent = '🚩';
+    showChatToast('Failed to report message. Please try again.', 'warning', 3000);
+    console.error('Report error:', err);
+  }
+});
+
 /* ════════════════════════════════════════════════════════════════
    Feature 1 — Hover Profile Card & Role Hierarchy
 ════════════════════════════════════════════════════════════════ */
@@ -2361,12 +2606,12 @@ let _pcSessionId = 0;
 function scheduleProfileCard(u, anchor) {
   clearTimeout(_pcTimer);
   clearTimeout(_pcHide);
-  const currentSession = ++_pcSessionId;
-  _pcTimer = setTimeout(() => showProfileCard(u, anchor, currentSession), 350);
+  _pcTimer = setTimeout(() => showProfileCard(u, anchor), 350);
 }
 
 function cancelProfileCard() {
   clearTimeout(_pcTimer);
+  _pcSessionId++; // Invalidate any pending async fetch
   // Do NOT close the profile card if it is in pinned mode
   if (_pcActive && _pcActive.classList.contains('pinned')) {
     return;
@@ -2376,6 +2621,8 @@ function cancelProfileCard() {
 }
 
 function hideProfileCard() {
+  document.querySelectorAll('#profile-card').forEach(el => el.remove());
+  document.querySelectorAll('.profile-card').forEach(el => el.remove());
   if (_pcActive) {
     _pcActive.remove();
     _pcActive = null;
@@ -2384,6 +2631,7 @@ function hideProfileCard() {
 
 async function showProfileCard(u, anchor, pinned = false) {
   hideProfileCard();
+  const currentSession = ++_pcSessionId;
 
   // Fetch full profile for join date, IP, avatar, VIP status
   let profile = null;
@@ -2392,9 +2640,7 @@ async function showProfileCard(u, anchor, pinned = false) {
     profile = data;
   } catch (_) {}
   
-  // Abort if session changed (mouse left anchor before request finished)
-  if (_pcSessionId !== sessionId) return;
-  
+  if (currentSession !== _pcSessionId) return; // Mouse left while fetching
   if (!profile) return;
 
   const viewerLevel  = getViewerRoleLevel();
@@ -2404,6 +2650,8 @@ async function showProfileCard(u, anchor, pinned = false) {
   const canKick      = canBan;
   const canGrantVip  = viewerLevel >= 3 && targetLevel === 1;
   const isVip        = !!(profile.is_vip);
+  const isAdmin      = !!(profile.is_admin);
+  const isMod        = !!(profile.is_mod);
   const ignoreLabel  = isUserIgnored(u.userId) ? 'Unignore' : 'Ignore';
 
   const roleLabel = getRoleLabel(u);
@@ -2442,10 +2690,39 @@ async function showProfileCard(u, anchor, pinned = false) {
     ? `<button class="pc-profile-btn pm-btn" type="button" data-uid="${escHtml(u.userId)}">👤 Edit Profile</button>`
     : `<button class="pc-profile-btn" type="button" data-uid="${escHtml(u.userId)}">👤 View Profile</button>`;
 
+  // Feature 6 — Promote button: owner-only, shows for other users
+  const isCurrentUserOwner = !!(currentProfile?.is_owner);
+  const isTargetSelf = u.userId === currentUser?.id;
+  const targetIsOwner = !!(profile?.is_owner);
+  const promoteBtn = isCurrentUserOwner && !isTargetSelf && !targetIsOwner
+    ? `<button class="pc-promote-btn" type="button" data-uid="${escHtml(u.userId)}" data-uname="${escHtml(u.username || profile.username || '')}">🏅 Promote/Demote</button>`
+    : '';
+
   const row1Html = (pmBtn || ignoreBtn) ? `<div class="pc-action-row">${pmBtn}${ignoreBtn}</div>` : '';
   const row2Html = (kickBtn || banBtn) ? `<div class="pc-action-row">${kickBtn}${banBtn}</div>` : '';
-  const actionsHtml = (row1Html || row2Html || vipBtn)
-    ? `<div class="pc-actions">${row1Html}${row2Html}${vipBtn}</div>`
+  const row3Html = promoteBtn ? `<div class="pc-action-row">${promoteBtn}</div>` : '';
+  const actionsHtml = (row1Html || row2Html || row3Html || vipBtn)
+    ? `<div class="pc-actions">${row1Html}${row2Html}${row3Html}${vipBtn}</div>`
+    : '';
+
+  const promoteSectionHtml = isCurrentUserOwner && !isTargetSelf && !targetIsOwner
+    ? `
+      <div class="pc-promote-section" style="display: none; flex-direction: column; gap: 0.38rem; margin-top: 0.7rem;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: var(--muted); margin-bottom: 0.2rem; text-align: center; text-transform: uppercase; letter-spacing: 0.05em;">🏅 Promote / Demote</div>
+        <button class="pc-role-opt-btn ${isAdmin ? 'active' : ''}" type="button" data-role="admin">
+          🛡️ Admin ${isAdmin ? '(Active)' : ''}
+        </button>
+        <button class="pc-role-opt-btn ${isMod ? 'active' : ''}" type="button" data-role="mod">
+          🔨 Moderator ${isMod ? '(Active)' : ''}
+        </button>
+        <button class="pc-role-opt-btn ${isVip ? 'active' : ''}" type="button" data-role="vip">
+          ⭐ VIP ${isVip ? '(Active)' : ''}
+        </button>
+        <button class="pc-promote-back-btn" type="button">
+          ⬅️ Back
+        </button>
+      </div>
+    `
     : '';
 
   const card = document.createElement('div');
@@ -2464,8 +2741,10 @@ async function showProfileCard(u, anchor, pinned = false) {
     <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
     ${ipRow}
     ${actionsHtml}
+    ${promoteSectionHtml}
   `;
 
+  hideProfileCard();
   document.body.appendChild(card);
   _pcActive = card;
 
@@ -2547,6 +2826,53 @@ async function showProfileCard(u, anchor, pinned = false) {
     const ignore = ev.currentTarget.dataset.action === 'ignore';
     setUserIgnored(u.userId, ignore);
     hideProfileCard();
+  });
+
+  card.querySelector('.pc-promote-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const actionsEl = card.querySelector('.pc-actions');
+    const promoteEl = card.querySelector('.pc-promote-section');
+    if (actionsEl && promoteEl) {
+      actionsEl.style.display = 'none';
+      promoteEl.style.display = 'flex';
+    }
+  });
+
+  card.querySelector('.pc-promote-back-btn')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const actionsEl = card.querySelector('.pc-actions');
+    const promoteEl = card.querySelector('.pc-promote-section');
+    if (actionsEl && promoteEl) {
+      promoteEl.style.display = 'none';
+      actionsEl.style.display = 'flex';
+    }
+  });
+
+  card.querySelectorAll('.pc-role-opt-btn').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const role = btn.dataset.role;
+      let updates = {};
+      let label = '';
+      if (role === 'admin')  { updates = { is_admin: !isAdmin, is_mod: false }; label = isAdmin ? 'demoted from Admin' : 'promoted to Admin'; }
+      if (role === 'mod')    { updates = { is_mod: !isMod, is_admin: false };   label = isMod   ? 'demoted from Moderator' : 'promoted to Moderator'; }
+      if (role === 'vip')    { updates = { is_vip: !isVip };                     label = isVip   ? 'VIP removed' : 'granted VIP'; }
+      
+      const { error } = await sbClient.from('profiles').update(updates).eq('id', u.userId);
+      hideProfileCard();
+      
+      if (error) { showChatToast('Promote failed: ' + error.message, 'error'); return; }
+      
+      if (onlineUsers[u.userId]) {
+        if ('is_admin' in updates) onlineUsers[u.userId].isAdmin = updates.is_admin;
+        if ('is_mod'   in updates) onlineUsers[u.userId].isMod   = updates.is_mod;
+        if ('is_vip'   in updates) onlineUsers[u.userId].isVip   = updates.is_vip;
+      }
+      scheduleRenderUserList();
+      const targetName = u.username || profile.username || 'User';
+      showChatToast(`✅ ${targetName} ${label}.`, 'success');
+      appendSystemMessage(`🏅 ${targetName} has been ${label}.`);
+    });
   });
 }
 
@@ -2693,6 +3019,72 @@ async function toggleVip(userId, username, grant) {
 }
 
 /* ════════════════════════════════════════════════════════════════
+   Feature 6 — Owner-only Promote/Demote menu
+════════════════════════════════════════════════════════════════ */
+async function showPromoteMenu(userId, username, profile) {
+  // Remove any existing promote menu
+  document.getElementById('cc-promote-menu')?.remove();
+
+  const isAdmin = !!(profile?.is_admin);
+  const isMod   = !!(profile?.is_mod);
+  const isVip   = !!(profile?.is_vip);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cc-promote-menu';
+  overlay.className = 'cc-modal-overlay';
+  overlay.innerHTML = `
+    <div class="cc-modal promote" role="dialog" aria-modal="true">
+      <h3 class="cc-modal-title">🏅 Promote / Demote <span class="cc-modal-uname">${escHtml(username || 'User')}</span></h3>
+      <div class="cc-modal-grid promote-grid">
+        <button class="cc-modal-opt promote${isAdmin ? ' active' : ''}" data-role="admin">
+          <span class="cc-opt-icon">🛡️</span>
+          <span class="cc-opt-label">Admin</span>
+          <span class="cc-opt-note">${isAdmin ? 'Click to demote' : 'Full moderation access'}</span>
+        </button>
+        <button class="cc-modal-opt promote${isMod ? ' active' : ''}" data-role="mod">
+          <span class="cc-opt-icon">🔨</span>
+          <span class="cc-opt-label">Moderator</span>
+          <span class="cc-opt-note">${isMod ? 'Click to demote' : 'Kick/ban access'}</span>
+        </button>
+        <button class="cc-modal-opt promote${isVip ? ' active' : ''}" data-role="vip">
+          <span class="cc-opt-icon">⭐</span>
+          <span class="cc-opt-label">VIP</span>
+          <span class="cc-opt-note">${isVip ? 'Click to remove' : 'Custom styles & badge'}</span>
+        </button>
+      </div>
+      <button class="cc-modal-cancel" style="margin-top:12px">Cancel</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('.cc-modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+
+  overlay.querySelectorAll('.cc-modal-opt[data-role]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const role = btn.dataset.role;
+      let updates = {};
+      let label = '';
+      if (role === 'admin')  { updates = { is_admin: !isAdmin, is_mod: false }; label = isAdmin ? 'demoted from Admin' : 'promoted to Admin'; }
+      if (role === 'mod')    { updates = { is_mod: !isMod, is_admin: false };   label = isMod   ? 'demoted from Moderator' : 'promoted to Moderator'; }
+      if (role === 'vip')    { updates = { is_vip: !isVip };                     label = isVip   ? 'VIP removed' : 'granted VIP'; }
+      const { error } = await sbClient.from('profiles').update(updates).eq('id', userId);
+      overlay.remove();
+      if (error) { showChatToast('Promote failed: ' + error.message, 'error'); return; }
+      if (onlineUsers[userId]) {
+        if ('is_admin' in updates) onlineUsers[userId].isAdmin = updates.is_admin;
+        if ('is_mod'   in updates) onlineUsers[userId].isMod   = updates.is_mod;
+        if ('is_vip'   in updates) onlineUsers[userId].isVip   = updates.is_vip;
+      }
+      scheduleRenderUserList();
+      showChatToast(`✅ ${username || 'User'} ${label}.`, 'success');
+      appendSystemMessage(`🏅 ${username || 'User'} has been ${label}.`);
+    });
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
    Feature 2 — Chatroom VPN Gatekeeper
 ════════════════════════════════════════════════════════════════ */
 async function checkVpnOnEntry() {
@@ -2829,7 +3221,7 @@ async function saveAvatar() {
     currentProfile.avatar_url = dataUrl;
     updatePresenceBaseFromProfile(currentProfile);
     if (presenceChannel) {
-      presenceChannel.track(presenceBaseData).catch(() => {});
+      debouncedPresenceTrack();
     }
 
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
@@ -3483,7 +3875,7 @@ async function saveProfileChanges(event) {
     updateCurrentUserBadge();
     
     if (presenceChannel) {
-      presenceChannel.track(presenceBaseData).catch(() => {});
+      debouncedPresenceTrack();
     }
     
     showChatToast('Profile saved successfully!', 'success');
@@ -3501,7 +3893,7 @@ async function claimFreeVipDeveloperMode() {
     if (error) throw error;
     currentProfile.is_vip = true;
     updatePresenceBaseFromProfile(currentProfile);
-    if (presenceChannel) presenceChannel.track(presenceBaseData).catch(() => {});
+    if (presenceChannel) debouncedPresenceTrack();
     showChatToast('⭐ VIP Activated! Enjoy exclusive nickname/message styles.', 'success');
     renderProfileTab('vip', currentProfile, true);
   } catch (err) {
@@ -3784,105 +4176,266 @@ window.allotCoinsToUser = allotCoinsToUser;
 window.contactAdminForCoins = contactAdminForCoins;
 
 /* ════════════════════════════════════════════════════════════════
-   Online Radio System
+   Online Radio System (v3)
    ════════════════════════════════════════════════════════════════ */
 
-const RADIO_PLAYLISTS = {
-  PK: {
-    name: "Pakistan 🇵🇰",
-    channels: [
-      { name: "Samaa FM 107.4", url: "https://samaapew107-itelservices.radioca.st/stream" },
-      { name: "Mast FM 103", url: "https://stream.zeno.fm/7x3bfa0zu0hvv" },
-      { name: "FM 100 Karachi", url: "https://stream.zeno.fm/9a7d3hpyu0hvv" }
-    ]
-  },
-  US: {
-    name: "United States 🇺🇸",
-    channels: [
-      { name: "Chilltrax (Ambient/Chill)", url: "https://ice64.securenetsystems.net/CHILLTRAX" },
-      { name: "Jazz24 (Seattle)", url: "https://live.jazz24.org/jazz24-mp3" },
-      { name: "KEXP 90.3 FM (Alternative)", url: "https://kexp-mp3-128.streamguys1.com/kexp128.mp3" },
-      { name: "WNYC News (New York)", url: "https://wnyc-am.wnyc.org/wnycam-web" }
-    ]
-  },
-  UK: {
-    name: "United Kingdom 🇬🇧",
-    channels: [
-      { name: "Capital FM London", url: "https://icecast.global.com/capitalmp3" },
-      { name: "Classic FM", url: "https://icecast.global.com/classicmp3" },
-      { name: "LBC London News", url: "https://icecast.global.com/lbcmp3" }
-    ]
-  },
-  IN: {
-    name: "India 🇮🇳",
-    channels: [
-      { name: "Radio Mirchi Love", url: "https://stream.zeno.fm/a87g1p7320hvv" },
-      { name: "Bollywood Retro Hits", url: "https://stream.zeno.fm/6wz38f1h20hvv" },
-      { name: "Radio City Hindi", url: "https://stream.zeno.fm/f8z7c7q20hvv" }
-    ]
-  },
-  FR: {
-    name: "France 🇫🇷",
-    channels: [
-      { name: "FIP Radio (Eclectic)", url: "https://stream.radiofrance.fr/fip/fip.mp3" },
-      { name: "France Inter", url: "https://stream.radiofrance.fr/franceinter/franceinter.mp3" },
-      { name: "NRJ Hits", url: "https://direct.nrj.fr/live/nrj-128.mp3" }
-    ]
-  },
-  DE: {
-    name: "Germany 🇩🇪",
-    channels: [
-      { name: "Deutschlandfunk", url: "https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3" },
-      { name: "TechnoBase.FM", url: "https://listen.technobase.fm/tunein-mp3-hd" },
-      { name: "WDR 1Live", url: "https://wdr-1live-live.sslstream.wdr.de/wdr/1live/live/mp3/128/stream.mp3" }
-    ]
-  }
+// Radio-Browser API Round-Robin Servers
+const RADIO_SERVERS = [
+  'https://de1.api.radio-browser.info',
+  'https://at1.api.radio-browser.info',
+  'https://nl1.api.radio-browser.info',
+  'https://fr1.api.radio-browser.info'
+];
+
+// Curated high-quality fallback stations (Pakistan and India)
+const CURATED_PLAYLISTS = {
+  PK: [
+    { name: "[Sports] Radio Pakistan Sports", url: "https://whmsonic.radio.gov.pk:7003/stream", category: "sports" },
+    { name: "[News] Samaa FM 107.4", url: "https://samaakhi107-itelservices.radioca.st/stream", category: "news" },
+    { name: "[News] Radio Pakistan Lahore News (AM 1332)", url: "https://whmsonic.radio.gov.pk:7004/stream?type=http&nocache=12", category: "news" },
+    { name: "[News] FM 101 Islamabad", url: "https://whmsonic.radio.gov.pk:7008/stream", category: "news" },
+    { name: "[News] FM 101 Karachi", url: "https://whmsonic.radio.gov.pk:8048/stream", category: "news" },
+    { name: "[News] City FM 89", url: "https://radio.cityfm89.com/stream", category: "news" },
+    { name: "[Music] Hum FM 106.2", url: "https://server.mediacast4u.stream/8002/stream", category: "music" },
+    { name: "[Devotional] Mishal Radio (Sufi/Islamic)", url: "https://stream.zeno.fm/yv2k0dp18vzuv", category: "devotional" },
+    { name: "[Punjabi] Radio Awaz FM 105", url: "https://stream.zeno.fm/8ty8szwpwfeuv", category: "punjabi" },
+    { name: "[Punjabi] Suno FM Punjabi", url: "https://stream.zeno.fm/6wz38f1h20hvv", category: "punjabi" }
+  ],
+  IN: [
+    { name: "[Music] Radio Mirchi Hindi", url: "https://eu8.fastcast4u.com/proxy/clyedupq/stream", category: "music" },
+    { name: "[Music] Bollywood Gaane Purane", url: "https://stream.zeno.fm/6n6ewddtad0uv", category: "music" },
+    { name: "[Music] Hindi Gold Radio", url: "https://azuracast.vibesounds.in:8010/radio.mp3", category: "music" },
+    { name: "[Music] Retro Bollywood 90s Hits", url: "https://stream.zeno.fm/rm4i9pdex3cuv", category: "music" },
+    { name: "[Music] Lata Mangeshkar Hits", url: "https://stream.zeno.fm/87xam8pf7tzuv", category: "music" },
+    { name: "[Music] Kishore Kumar Radio", url: "https://stream.zeno.fm/0ghtfp8ztm0uv", category: "music" },
+    { name: "[Music] Mohammad Rafi Hits", url: "https://stream.zeno.fm/v2zfmxef798uv", category: "music" },
+    { name: "[Music] Mirchi Top 20", url: "https://drive.uber.radio/uber/bollywoodnow/icecast.audio", category: "music" },
+    { name: "[News] Vividh Bharati (HLS)", url: "https://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", category: "news" },
+    { name: "[Punjabi] Dhol Radio Punjabi", url: "https://stream.zeno.fm/n2fd0edh9k8uv", category: "punjabi" },
+    { name: "[Punjabi] Radio City Punjabi", url: "https://stream.zeno.fm/f8z7c7q20hvv", category: "punjabi" }
+  ],
+  GB: [
+    { name: "[Music] BBC Asian Network (HLS)", url: "https://as-hls-uk-live.akamaized.net/pool_904/live/uk/bbc_asian_network/bbc_asian_network.isml/bbc_asian_network-audio%3d96000.norewind.m3u8", category: "music" },
+    { name: "[Punjabi] Panjab Radio London", url: "https://stream.zeno.fm/84h97t3ewg0uv", category: "punjabi" },
+    { name: "[Music] Asian Star Radio", url: "https://stream.zeno.fm/eyxg23ky4x8uv", category: "music" },
+    { name: "[Music] Lyca Radio (Bollywood)", url: "https://stream.zeno.fm/6wz38f1h20hvv", category: "music" }
+  ],
+  CA: [
+    { name: "[News/Talk] CIRF Radio Humsafar (Desi)", url: "https://stream.zeno.fm/f8z7c7q20hvv", category: "news" },
+    { name: "[Punjabi] Sher E Punjab AM 600", url: "https://stream.zeno.fm/a87g1p7320hvv", category: "punjabi" },
+    { name: "[Punjabi] Red FM CKYE 93.1 Vancouver", url: "https://stream.zeno.fm/7x3bfa0zu0hvv", category: "punjabi" }
+  ],
+  US: [
+    { name: "[Punjabi] Radio Punjabi USA", url: "https://stream.zeno.fm/n2fd0edh9k8uv", category: "punjabi" },
+    { name: "[Music] Bolly 102.9 FM", url: "https://stream.zeno.fm/87xam8pf7tzuv", category: "music" },
+    { name: "[Music] Desi World Radio USA", url: "https://stream.zeno.fm/0ghtfp8ztm0uv", category: "music" }
+  ],
+  AE: [
+    { name: "[Music] City 101.6 Dubai (Bollywood)", url: "https://stream.zeno.fm/v2zfmxef798uv", category: "music" },
+    { name: "[Music] Hum FM 106.2 Dubai", url: "https://server.mediacast4u.stream/8002/stream", category: "music" }
+  ],
+  AU: [
+    { name: "[Music] SBS PopDesi (Bollywood HLS)", url: "https://sbs-live-audio.akamaized.net/popdesi/popdesi.m3u8", category: "music" }
+  ]
 };
 
+// Global Radio Player Instance
 window.radioPlayer = new Audio();
 window.radioPlayer.preload = "none";
+window.radioPlayer.volume = 0.8; // Set default volume to 80%
+window.hlsInstance = null; // hls.js instance
+
+// Loaded channels cache in memory
+let loadedRadioChannels = [];
+
+// Helper to fetch from Radio-Browser API with fallback round-robin
+async function fetchRadioBrowser(endpoint) {
+  // Shuffle servers to load-balance
+  const shuffledServers = [...RADIO_SERVERS].sort(() => Math.random() - 0.5);
+  
+  for (const server of shuffledServers) {
+    try {
+      const url = `${server}/json${endpoint}`;
+      console.log(`[Radio] Attempting fetch from: ${url}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
+      
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'ChatCornerRadioApp/3.0' },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.warn(`[Radio] Server ${server} failed:`, err);
+    }
+  }
+  return null;
+}
 
 function toggleRadioControls() {
   const container = document.getElementById('radio-selectors');
+  const volContainer = document.getElementById('radio-volume-container');
   if (container) {
     container.classList.toggle('hidden');
   }
+  if (volContainer) {
+    volContainer.classList.toggle('hidden');
+  }
 }
 
-function onRadioCountryChange(countryCode) {
+// Categorize a station dynamically using its name and tags
+function categorizeStation(station) {
+  const name = (station.name || '').toLowerCase();
+  const tags = (station.tags || '').toLowerCase();
+  const combined = `${name} ${tags}`;
+
+  if (combined.includes('punjabi') || combined.includes('panjabi') || combined.includes('bhangra') || combined.includes('singh') || combined.includes('khalsa')) {
+    return 'punjabi';
+  }
+  if (combined.includes('sport') || combined.includes('cricket') || combined.includes('commentary') || combined.includes('khel')) {
+    return 'sports';
+  }
+  if (combined.includes('news') || combined.includes('khabar') || combined.includes('samaa') || combined.includes('politics') || combined.includes('talk') || combined.includes('current affairs') || combined.includes('government') || combined.includes('public')) {
+    return 'news';
+  }
+  if (combined.includes('islamic') || combined.includes('quran') || combined.includes('naat') || combined.includes('hamd') || combined.includes('sufi') || combined.includes('ghazal') || combined.includes('devotional') || combined.includes('bhajan') || combined.includes('shabad') || combined.includes('kirtan') || combined.includes('temple')) {
+    return 'devotional';
+  }
+  // Default category is music for general channels
+  return 'music';
+}
+
+async function onRadioCountryChange(countryCode) {
+  const categorySelect = document.getElementById('radio-category-select');
+  const channelSelect = document.getElementById('radio-channel-select');
+  if (!channelSelect || !categorySelect) return;
+
+  // Reset dropdowns
+  categorySelect.disabled = true;
+  categorySelect.value = "all";
+  channelSelect.disabled = true;
+  channelSelect.innerHTML = '<option value="">-- Loading Channels... --</option>';
+
+  if (!countryCode) {
+    channelSelect.innerHTML = '<option value="">-- Set Channel --</option>';
+    return;
+  }
+
+  showChatToast("Loading radio channels...", "info");
+
+  // Fetch stations from Radio-Browser API (handling diaspora countries differently)
+  let rawStations = [];
+  try {
+    if (countryCode === 'PK' || countryCode === 'IN') {
+      const apiEndpoint = `/stations/search?countrycode=${countryCode}&hidebroken=true&order=clickcount&reverse=true&limit=80`;
+      rawStations = await fetchRadioBrowser(apiEndpoint);
+    } else {
+      // Fetch Hindi, Urdu, and Punjabi streams globally in parallel
+      const promises = ['hindi', 'urdu', 'punjabi'].map(lang => 
+        fetchRadioBrowser(`/stations/search?language=${lang}&hidebroken=true&order=clickcount&reverse=true&limit=100`)
+      );
+      const results = await Promise.all(promises);
+      const allStations = results.filter(r => r !== null).flat();
+      
+      // Filter in-memory for the diaspora country (e.g. GB/UK, US, CA, AE, AU)
+      rawStations = allStations.filter(s => {
+        const cc = (s.countrycode || '').toUpperCase();
+        if (countryCode === 'GB' && cc === 'UK') return true;
+        if (countryCode === 'UK' && cc === 'GB') return true;
+        return cc === countryCode;
+      });
+    }
+  } catch (apiErr) {
+    console.error("[Radio] API fetching threw exception:", apiErr);
+  }
+
+  let apiChannels = [];
+  if (rawStations && Array.isArray(rawStations)) {
+    // Filter and map only secure HTTPS streams, avoiding .pls playlist wrappers
+    apiChannels = rawStations
+      .filter(s => {
+        const streamUrl = s.url_resolved || s.url || '';
+        const isSecure = streamUrl.startsWith('https://');
+        const isPlaylist = streamUrl.endsWith('.pls') || streamUrl.endsWith('.asx');
+        return isSecure && !isPlaylist;
+      })
+      .map(s => {
+        const cat = categorizeStation(s);
+        const namePrefix = cat === 'sports' ? '[Sports]' : cat === 'news' ? '[News]' : cat === 'devotional' ? '[Devotional]' : cat === 'punjabi' ? '[Punjabi]' : '[Music]';
+        return {
+          name: `${namePrefix} ${s.name}`,
+          url: s.url_resolved || s.url,
+          category: cat
+        };
+      });
+  } else {
+    console.warn("[Radio] API unreachable or empty. Using curated fallbacks only.");
+  }
+
+  // Combine curated fallback channels with API channels (removing duplicates by name)
+  const curated = CURATED_PLAYLISTS[countryCode] || [];
+  const uniqueNames = new Set(curated.map(c => c.name));
+  
+  // Merge and prioritize curated channels
+  loadedRadioChannels = [
+    ...curated,
+    ...apiChannels.filter(ac => !uniqueNames.has(ac.name))
+  ];
+
+  categorySelect.disabled = false;
+  populateChannels("all");
+}
+
+function onRadioCategoryChange(categoryCode) {
+  populateChannels(categoryCode);
+}
+
+function populateChannels(categoryCode) {
   const channelSelect = document.getElementById('radio-channel-select');
   if (!channelSelect) return;
-  
-  // Clear previous options
+
   channelSelect.innerHTML = '<option value="">-- Set Channel --</option>';
-  
-  if (!countryCode || !RADIO_PLAYLISTS[countryCode]) {
+
+  // Filter channels based on selected category
+  const filtered = loadedRadioChannels.filter(ch => {
+    if (!categoryCode || categoryCode === "all") return true;
+    return ch.category === categoryCode;
+  });
+
+  if (filtered.length === 0) {
+    channelSelect.innerHTML = '<option value="">-- No channels found --</option>';
     channelSelect.disabled = true;
     return;
   }
-  
-  const data = RADIO_PLAYLISTS[countryCode];
-  data.channels.forEach((ch, idx) => {
+
+  filtered.forEach((ch, idx) => {
     const opt = document.createElement('option');
-    opt.value = idx;
+    // Store original index in loadedRadioChannels to make retrieval simple
+    opt.value = loadedRadioChannels.indexOf(ch);
     opt.textContent = ch.name;
     channelSelect.appendChild(opt);
   });
-  
+
   channelSelect.disabled = false;
 }
 
 async function onRadioChannelChange(channelIdx) {
-  const countryCode = document.getElementById('radio-country-select').value;
+  const countrySelect = document.getElementById('radio-country-select');
   const statusArea = document.getElementById('radio-status-area');
   const statusText = document.getElementById('radio-status-text');
   
-  if (!countryCode || channelIdx === "" || !RADIO_PLAYLISTS[countryCode]) {
+  if (!countrySelect || channelIdx === "" || !loadedRadioChannels[parseInt(channelIdx, 10)]) {
     return;
   }
   
-  const channel = RADIO_PLAYLISTS[countryCode].channels[parseInt(channelIdx, 10)];
-  const countryName = RADIO_PLAYLISTS[countryCode].name.split(" ")[0];
+  const channel = loadedRadioChannels[parseInt(channelIdx, 10)];
+  const countryName = countrySelect.value === 'PK' ? 'Pakistan 🇵🇰' : 'India 🇮🇳';
   
   // Prevent WebRTC Voice Chat from playing at the same time
   if (typeof leaveVoice === 'function') {
@@ -3893,11 +4446,66 @@ async function onRadioChannelChange(channelIdx) {
     statusArea.classList.remove('hidden');
     statusText.textContent = `Playing: ${channel.name} - ${countryName}`;
     
-    window.radioPlayer.src = channel.url;
-    await window.radioPlayer.play();
+    // Clean up any existing HLS player instance
+    if (window.hlsInstance) {
+      window.hlsInstance.destroy();
+      window.hlsInstance = null;
+    }
+
+    const streamUrl = channel.url;
+    console.log(`[Radio] Attempting to play stream: ${streamUrl}`);
+
+    // If stream is HLS (.m3u8), load it via hls.js
+    if (streamUrl.includes('.m3u8') && typeof Hls !== 'undefined') {
+      if (Hls.isSupported()) {
+        window.hlsInstance = new Hls({
+          maxMaxBufferLength: 10,
+          enableWorker: true
+        });
+        window.hlsInstance.loadSource(streamUrl);
+        window.hlsInstance.attachMedia(window.radioPlayer);
+        
+        window.hlsInstance.on(Hls.Events.MANIFEST_PARSED, async () => {
+          try {
+            await window.radioPlayer.play();
+          } catch (playErr) {
+            console.error("[Radio] HLS play start error:", playErr);
+            throw playErr;
+          }
+        });
+
+        window.hlsInstance.on(Hls.Events.ERROR, function (event, data) {
+          if (data.fatal) {
+            console.warn("[Radio] Fatal HLS error encountered, retrying...", data.type);
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                window.hlsInstance.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                window.hlsInstance.recoverMediaError();
+                break;
+              default:
+                stopRadioPlayer();
+                showChatToast("Fatal radio stream playback error.", "error");
+                break;
+            }
+          }
+        });
+      } else if (window.radioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari/iOS)
+        window.radioPlayer.src = streamUrl;
+        await window.radioPlayer.play();
+      } else {
+        throw new Error("HLS streaming not supported by this browser.");
+      }
+    } else {
+      // Standard progressive audio stream (MP3/AAC)
+      window.radioPlayer.src = streamUrl;
+      await window.radioPlayer.play();
+    }
   } catch (err) {
     console.error("Radio play failed:", err);
-    showChatToast("Could not load radio stream: " + err.message, "error");
+    showChatToast("Could not load radio stream: " + (err.message || "playback blocked"), "error");
     stopRadioPlayer();
   }
 }
@@ -3908,6 +4516,13 @@ function stopRadioPlayer() {
     window.radioPlayer.src = "";
     try { window.radioPlayer.load(); } catch(_) {}
   }
+  
+  // Destroy HLS instance if it exists
+  if (window.hlsInstance) {
+    window.hlsInstance.destroy();
+    window.hlsInstance = null;
+  }
+
   const statusArea = document.getElementById('radio-status-area');
   if (statusArea) {
     statusArea.classList.add('hidden');
@@ -3915,6 +4530,60 @@ function stopRadioPlayer() {
   const channelSelect = document.getElementById('radio-channel-select');
   if (channelSelect) {
     channelSelect.value = "";
+  }
+}
+
+let radioVolume = 0.8;
+let isRadioMuted = false;
+
+function onRadioVolumeChange(val) {
+  const vol = parseFloat(val) / 100;
+  radioVolume = vol;
+  if (isRadioMuted && vol > 0) {
+    isRadioMuted = false;
+    const slider = document.getElementById('radio-volume-slider');
+    if (slider) slider.style.opacity = 1;
+  }
+  if (window.radioPlayer) {
+    window.radioPlayer.volume = isRadioMuted ? 0 : vol;
+  }
+  updateVolumeIcon(val);
+  const valText = document.getElementById('radio-volume-val');
+  if (valText) {
+    valText.textContent = isRadioMuted ? 'Mute' : `${val}%`;
+  }
+}
+
+function toggleRadioMute() {
+  isRadioMuted = !isRadioMuted;
+  const btn = document.getElementById('btn-radio-mute');
+  const slider = document.getElementById('radio-volume-slider');
+  const valText = document.getElementById('radio-volume-val');
+  
+  if (isRadioMuted) {
+    if (window.radioPlayer) window.radioPlayer.volume = 0;
+    if (btn) btn.textContent = '🔇';
+    if (slider) slider.style.opacity = 0.5;
+    if (valText) valText.textContent = 'Mute';
+  } else {
+    if (window.radioPlayer) window.radioPlayer.volume = radioVolume;
+    if (btn) btn.textContent = getVolumeIconForValue(radioVolume * 100);
+    if (slider) slider.style.opacity = 1;
+    if (valText) valText.textContent = `${Math.round(radioVolume * 100)}%`;
+  }
+}
+
+function getVolumeIconForValue(val) {
+  if (val == 0) return '🔇';
+  if (val < 30) return '🔈';
+  if (val < 70) return '🔉';
+  return '🔊';
+}
+
+function updateVolumeIcon(val) {
+  const btn = document.getElementById('btn-radio-mute');
+  if (btn && !isRadioMuted) {
+    btn.textContent = getVolumeIconForValue(val);
   }
 }
 
@@ -3963,10 +4632,422 @@ async function clearAllRoomMessages() {
 
 window.toggleRadioControls = toggleRadioControls;
 window.onRadioCountryChange = onRadioCountryChange;
+window.onRadioCategoryChange = onRadioCategoryChange;
 window.onRadioChannelChange = onRadioChannelChange;
 window.stopRadioPlayer = stopRadioPlayer;
+window.onRadioVolumeChange = onRadioVolumeChange;
+window.toggleRadioMute = toggleRadioMute;
 window.clearScreenLocally = clearScreenLocally;
 window.clearAllRoomMessages = clearAllRoomMessages;
 
+// ──────────────────────────────────────────────
+// 📺 IPTV ROOM MODULE
+// ──────────────────────────────────────────────
 
+let _iptvHls = null;
+let _iptvChannels = [];
+let _iptvCurrentChannel = null;
+let _iptvChannelChannel = null; // Supabase realtime channel for IPTV chat
+let _iptvActive = false;
 
+// IPTV M3U sources from iptv-org
+const IPTV_SOURCES = {
+  'country:pk': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'country:in': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/in.m3u',
+  'country:us': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/us.m3u',
+  'country:uk': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/gb.m3u',
+  'country:ca': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/ca.m3u',
+  'cat:news':        'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:sports':      'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:movies':      'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:music':       'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+  'cat:documentary': 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/us.m3u',
+  'cat:kids':        'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/us.m3u',
+  'cat:general':     'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
+};
+
+// Category filter keywords for category-type sources
+const IPTV_CAT_KEYWORDS = {
+  'cat:news':        ['news'],
+  'cat:sports':      ['sports', 'sport'],
+  'cat:movies':      ['movie', 'cinema', 'film'],
+  'cat:music':       ['music', 'entertainment'],
+  'cat:documentary': ['documentary', 'docu'],
+  'cat:kids':        ['kids', 'children', 'family'],
+  'cat:general':     [],
+};
+
+function parseM3U(text) {
+  const lines = text.split(/\r?\n/);
+  const channels = [];
+  let current = null;
+  for (const line of lines) {
+    if (line.startsWith('#EXTINF:')) {
+      current = { name: '', logo: '', group: '', url: '' };
+      const nameMatch = line.match(/,(.+)$/);
+      if (nameMatch) current.name = nameMatch[1].trim();
+      const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+      if (logoMatch) current.logo = logoMatch[1];
+      const groupMatch = line.match(/group-title="([^"]*)"/i);
+      if (groupMatch) current.group = groupMatch[1].toLowerCase();
+    } else if (line && !line.startsWith('#') && current) {
+      current.url = line.trim();
+      if (current.url) channels.push(current);
+      current = null;
+    }
+  }
+  return channels;
+}
+
+function filterChannelsByCategory(channels, key) {
+  if (!key.startsWith('cat:')) return channels;
+  const keywords = IPTV_CAT_KEYWORDS[key] || [];
+  if (!keywords.length) return channels;
+  return channels.filter(ch => keywords.some(k => (ch.group || '').includes(k) || ch.name.toLowerCase().includes(k)));
+}
+
+let _iptvVerificationQueue = [];
+let _iptvVerifying = false;
+
+async function checkChannelReachability(url) {
+  if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+    return false; // Mixed content will be blocked by the browser anyway
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+    await fetch(url, { method: 'GET', mode: 'no-cors', signal: controller.signal });
+    clearTimeout(timeoutId);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function startVerifyingChannels(channelsToCheck) {
+  _iptvVerificationQueue = [...channelsToCheck];
+  if (!_iptvVerifying) {
+    _iptvVerifying = true;
+    verifyNextBatch();
+  }
+}
+
+async function verifyNextBatch() {
+  if (!_iptvActive || _iptvVerificationQueue.length === 0) {
+    _iptvVerifying = false;
+    _iptvVerificationQueue = [];
+    return;
+  }
+
+  const batch = _iptvVerificationQueue.splice(0, 5);
+  const results = await Promise.all(batch.map(async (ch) => {
+    if (!_iptvChannels.some(item => item.url === ch.url)) {
+      return { ch, isReachable: true }; // Already replaced or loaded new
+    }
+    const isReachable = await checkChannelReachability(ch.url);
+    return { ch, isReachable };
+  }));
+
+  results.forEach(({ ch, isReachable }) => {
+    if (!isReachable && _iptvActive) {
+      ch.broken = true;
+      _iptvChannels = _iptvChannels.filter(item => item.url !== ch.url);
+      const li = document.querySelector(`.iptv-channel-list li[data-url="${encodeURIComponent(ch.url)}"]`);
+      if (li) li.remove();
+    }
+  });
+
+  if (_iptvActive && _iptvVerificationQueue.length > 0) {
+    setTimeout(verifyNextBatch, 100);
+  } else {
+    _iptvVerifying = false;
+    _iptvVerificationQueue = [];
+  }
+}
+
+async function loadIPTVChannels(key) {
+  const url = IPTV_SOURCES[key] || IPTV_SOURCES['country:pk'];
+  const listEl = document.getElementById('iptv-channel-list');
+  if (listEl) listEl.innerHTML = '<li style="padding:12px;color:var(--muted)">⏳ Loading channels...</li>';
+  try {
+    let text;
+    try {
+      const resp = await fetch(url, { cache: 'default' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      text = await resp.text();
+    } catch (e) {
+      const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+      const resp2 = await fetch(proxy);
+      const json = await resp2.json();
+      text = json.contents;
+    }
+    let channels = parseM3U(text);
+    if (key.startsWith('cat:')) channels = filterChannelsByCategory(channels, key);
+    _iptvChannels = channels.slice(0, 200);
+    renderIPTVChannelList(_iptvChannels);
+    startVerifyingChannels(_iptvChannels);
+  } catch (err) {
+    console.error('IPTV load error', err);
+    if (listEl) listEl.innerHTML = '<li style="padding:12px;color:#ef4444">❌ Failed to load channels. Try another region.</li>';
+    _iptvChannels = [];
+  }
+}
+
+function renderIPTVChannelList(channels) {
+  const listEl = document.getElementById('iptv-channel-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  if (!channels.length) {
+    listEl.innerHTML = '<li style="padding:12px;color:var(--muted)">No channels found.</li>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  channels.forEach((ch, i) => {
+    const li = document.createElement('li');
+    li.dataset.index = String(i);
+    li.dataset.url = encodeURIComponent(ch.url);
+    if (ch.logo) {
+      const img = document.createElement('img');
+      img.src = ch.logo;
+      img.alt = '';
+      img.className = 'iptv-channel-logo';
+      img.onerror = () => { img.style.display = 'none'; };
+      li.appendChild(img);
+    } else {
+      const span = document.createElement('span');
+      span.textContent = '📺';
+      li.appendChild(span);
+    }
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = ch.name || ('Channel ' + (i + 1));
+    li.appendChild(nameSpan);
+    li.onclick = () => playIPTVChannel(ch, li);
+    frag.appendChild(li);
+  });
+  listEl.appendChild(frag);
+}
+
+function playIPTVChannel(ch, liEl) {
+  _iptvCurrentChannel = ch;
+  document.querySelectorAll('.iptv-channel-list li').forEach(l => l.classList.remove('active'));
+  if (liEl) liEl.classList.add('active');
+
+  const video = document.getElementById('iptv-player');
+  const overlay = document.getElementById('iptv-player-overlay');
+  const loadingText = document.getElementById('iptv-loading-text');
+  if (!video) return;
+
+  if (overlay) overlay.classList.remove('hidden');
+  if (loadingText) loadingText.textContent = 'Loading: ' + ch.name + '...';
+
+  if (_iptvHls) {
+    _iptvHls.destroy();
+    _iptvHls = null;
+  }
+  video.src = '';
+
+  const onReady = () => { if (overlay) overlay.classList.add('hidden'); };
+  const onError = () => {
+    if (overlay) overlay.classList.remove('hidden');
+    if (loadingText) loadingText.textContent = '⚠️ Cannot play this channel. Try another.';
+    
+    // Mark as broken and remove from DOM/list
+    ch.broken = true;
+    _iptvChannels = _iptvChannels.filter(item => item.url !== ch.url);
+    const li = document.querySelector(`.iptv-channel-list li[data-url="${encodeURIComponent(ch.url)}"]`);
+    if (li) li.remove();
+  };
+  video.onplaying = onReady;
+  video.onerror = onError;
+
+  if (ch.url.includes('.m3u8') || ch.url.includes('m3u8')) {
+    if (window.Hls && Hls.isSupported()) {
+      _iptvHls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
+      _iptvHls.loadSource(ch.url);
+      _iptvHls.attachMedia(video);
+      _iptvHls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+      _iptvHls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) onError();
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = ch.url;
+      video.play().catch(onError);
+    } else {
+      onError();
+    }
+  } else {
+    video.src = ch.url;
+    video.play().catch(onError);
+  }
+}
+
+function enterIPTVRoom() {
+  if (_iptvActive) return;
+  _iptvActive = true;
+
+  // Mark sidebar item
+  document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
+  const iptvLi = document.querySelector('#room-list li[data-room-id="iptv-virtual"]');
+  if (iptvLi) iptvLi.classList.add('active');
+
+  // Show IPTV container, hide regular messages area controls
+  const iptvContainer = document.getElementById('iptv-container');
+  if (iptvContainer) iptvContainer.classList.remove('hidden');
+
+  // Show return button
+  const btnReturn = document.getElementById('btn-iptv-return');
+  if (btnReturn) btnReturn.classList.remove('hidden');
+
+  // Update topbar
+  const titleEl = document.getElementById('current-room-name');
+  if (titleEl) titleEl.textContent = '📺 IPTV Live Channels';
+  document.title = '📺 IPTV – ChatCorner';
+
+  // Add page-shell class
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.add('iptv-active');
+
+  // Switch mobile tab to chat
+  if (typeof switchMobileTab === 'function') switchMobileTab('chat');
+
+  // Clear messages and disable voice controls
+  const msgContainer = document.getElementById('messages');
+  if (msgContainer) msgContainer.innerHTML = '';
+  const voiceControls = document.getElementById('voice-controls');
+  if (voiceControls) voiceControls.classList.add('hidden');
+  const barDivider = document.getElementById('bar-divider');
+  if (barDivider) barDivider.classList.add('hidden');
+
+  // Enable input
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn = document.querySelector('.btn-send');
+  const emojiBtn = document.getElementById('btn-emoji');
+  if (msgInput) { msgInput.disabled = false; msgInput.placeholder = '💬 Chat in IPTV room...'; }
+  if (sendBtn) sendBtn.disabled = false;
+  if (emojiBtn) emojiBtn.disabled = false;
+
+  // Wrap messages + input-strip into .iptv-chat-wrapper for left panel
+  const chatMain = document.querySelector('.chat-main');
+  const messages = document.getElementById('messages');
+  const inputStrip = document.querySelector('.input-strip');
+  if (chatMain && messages && inputStrip && !document.querySelector('.iptv-chat-wrapper')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'iptv-chat-wrapper';
+    chatMain.appendChild(wrapper);
+    wrapper.appendChild(messages);
+    wrapper.appendChild(inputStrip);
+  }
+
+  // Set currentRoom to a virtual object so message sending works via realtime broadcast
+  currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: false, _virtual: true };
+
+  // Subscribe to realtime broadcast channel for IPTV chat (no DB writes, broadcast only)
+  if (_iptvChannelChannel) sbClient.removeChannel(_iptvChannelChannel);
+  _iptvChannelChannel = sbClient.channel('iptv-chat-room', {
+    config: { broadcast: { self: true } }
+  });
+  _iptvChannelChannel.on('broadcast', { event: 'message' }, ({ payload }) => {
+    renderIPTVChatMessage(payload);
+  }).subscribe();
+
+  // Load default channels (Pakistan)
+  const catSelect = document.getElementById('iptv-category-select');
+  const defaultVal = catSelect ? catSelect.value : 'country:pk';
+  loadIPTVChannels(defaultVal);
+}
+
+function exitIPTVRoom() {
+  if (!_iptvActive) return;
+  _iptvActive = false;
+
+  const iptvContainer = document.getElementById('iptv-container');
+  if (iptvContainer) iptvContainer.classList.add('hidden');
+
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.remove('iptv-active');
+
+  // Hide return button
+  const btnReturn = document.getElementById('btn-iptv-return');
+  if (btnReturn) btnReturn.classList.add('hidden');
+
+  // Unwrap chat elements back into .chat-main
+  const chatMain = document.querySelector('.chat-main');
+  const wrapper = document.querySelector('.iptv-chat-wrapper');
+  if (chatMain && wrapper) {
+    while (wrapper.firstChild) chatMain.appendChild(wrapper.firstChild);
+    wrapper.remove();
+  }
+
+  // Stop video
+  if (_iptvHls) { _iptvHls.destroy(); _iptvHls = null; }
+  const video = document.getElementById('iptv-player');
+  if (video) { video.pause(); video.src = ''; }
+
+  // Remove realtime channel
+  if (_iptvChannelChannel) { sbClient.removeChannel(_iptvChannelChannel); _iptvChannelChannel = null; }
+
+  // Clear channel list
+  const listEl = document.getElementById('iptv-channel-list');
+  if (listEl) listEl.innerHTML = '';
+}
+
+function exitIPTVRoomAndShowRooms() {
+  if (cachedRooms && cachedRooms.length > 0) {
+    enterRoom(cachedRooms[0]);
+  }
+  if (typeof switchMobileTab === 'function') {
+    switchMobileTab('rooms');
+  }
+}
+
+function renderIPTVChatMessage(payload) {
+  const container = document.getElementById('messages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'message';
+  const username = payload.username || 'Anonymous';
+  const text = String(payload.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}</span><span class="msg-text">${text}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+// Patch sendMessage to support IPTV broadcast when in IPTV room
+const _origSendMessage = window.sendMessage;
+window.sendMessage = async function() {
+  if (!_iptvActive || !currentRoom?._virtual) {
+    if (typeof _origSendMessage === 'function') return _origSendMessage();
+    return;
+  }
+  const input = document.getElementById('msg-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  autoResizeTextarea(input);
+  const counter = document.getElementById('msg-char-counter');
+  if (counter) counter.textContent = '0/500';
+  const payload = {
+    username: currentProfile?.username || currentUser?.email?.split('@')[0] || 'Guest',
+    text,
+    ts: Date.now()
+  };
+  if (_iptvChannelChannel) {
+    await _iptvChannelChannel.send({ type: 'broadcast', event: 'message', payload });
+  }
+};
+
+window.enterIPTVRoom = enterIPTVRoom;
+window.exitIPTVRoom = exitIPTVRoom;
+window.exitIPTVRoomAndShowRooms = exitIPTVRoomAndShowRooms;
+
+window.changeIPTVCategoryOrCountry = function(val) {
+  loadIPTVChannels(val);
+};
+
+window.onIPTVChannelSearchInput = function(query) {
+  if (!_iptvChannels.length) return;
+  const q = query.toLowerCase().trim();
+  const filtered = q ? _iptvChannels.filter(ch => ch.name.toLowerCase().includes(q)) : _iptvChannels;
+  renderIPTVChannelList(filtered);
+};

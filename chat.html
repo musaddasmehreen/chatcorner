@@ -2,19 +2,81 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ChatCorner – Live Chat</title>
-  <link rel="manifest" href="manifest.json"/>
-  <meta name="theme-color" content="#c41e3a"/>
-  <link rel="stylesheet" href="css/style.css"/>
-  <link rel="stylesheet" href="css/chat-extras.css"/>
-  <link rel="stylesheet" href="css/resizable-layout.css"/>
-  <link rel="stylesheet" href="css/chatroom-layout.css"/>
-  <link rel="stylesheet" href="css/games.css"/>
-  <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
-</head>
-<body class="chat-page layout-classic">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>ChatCorner – Real-Time Chat & Rooms</title>
+  <meta name="description" content="ChatCorner - Join public chatrooms, connect with users, make voice calls, send voice notes, and share media in real-time."/>
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="ChatCorner – Real-Time Chat & Rooms"/>
+  <meta property="og:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
+  <meta property="og:image" content="https://chatcorner.qzz.io/manifest.json"/>
+  <meta property="og:url" content="https://chatcorner.qzz.io/"/>
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="ChatCorner – Real-Time Chat & Rooms"/>
+  <meta name="twitter:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
 
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#8b6ded"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="ChatCorner"/>
+  <!-- Security headers -->
+  <meta name="referrer" content="strict-origin-when-cross-origin"/>
+  <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
+  <meta http-equiv="X-Frame-Options" content="DENY"/>
+  <link rel="stylesheet" href="css/style.css?v=1.3"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=1.5"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=1.2"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
+  <script>
+    // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
+    const CURRENT_VERSION = 'v18';
+    if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          let p = [];
+          for (let r of registrations) {
+            p.push(r.unregister());
+          }
+          Promise.all(p).then(() => {
+            localStorage.setItem('cc-sw-version', CURRENT_VERSION);
+            location.reload(true);
+          });
+        });
+      } else {
+        localStorage.setItem('cc-sw-version', CURRENT_VERSION);
+      }
+    }
+
+    window.addEventListener('error', function(e) {
+      var div = document.createElement('div');
+      div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
+      // Use textContent only — never innerHTML with user/runtime data
+      div.textContent = '🚨 Runtime Error: ' + (e.message || '') + ' at ' + (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '');
+      document.body && document.body.appendChild(div);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var div = document.createElement('div');
+      div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#f59e0b;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
+      div.textContent = '🚨 Promise Rejection: ' + (e.reason ? (e.reason.message || String(e.reason)) : 'Unknown reason');
+      document.body && document.body.appendChild(div);
+    });
+  </script>
+</head>
+<body class="chat-page">
+
+  <!-- ── Connection Error Banner ────────────────────────────────────────────── -->
+  <div id="connection-error-banner" class="connection-error-banner hidden" role="alert">
+    <span class="banner-text">⚠️ Connection lost or room limit reached. Reconnecting...</span>
+    <button class="banner-close" onclick="this.parentElement.classList.add('hidden')" title="Dismiss">✕</button>
+  </div>
+
+  <!-- ── VPN Block Overlay ───────────────────────────────────────────────────── -->
   <div id="vpn-overlay" class="vpn-overlay hidden" role="alertdialog" aria-modal="true" aria-label="VPN Detected">
     <div class="vpn-modal">
       <div class="vpn-modal-icon">🛡️</div>
@@ -24,6 +86,7 @@
     </div>
   </div>
 
+  <!-- ── Avatar Upload Modal ─────────────────────────────────────────────────── -->
   <div id="avatar-upload-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Update Avatar">
     <div class="avatar-upload-box">
       <h3>🖼️ Update Avatar</h3>
@@ -41,15 +104,23 @@
     </div>
   </div>
 
+  <!-- ── Permissions Banner ──────────────────────────────────────────────────── -->
+  <div id="permissions-backdrop" class="sidebar-backdrop" style="display:none; z-index:998; background:rgba(0,0,0,0.6)" aria-hidden="true"></div>
   <div id="permissions-banner" class="perms-banner" style="display:none">
     <div class="perms-left">
       <span class="perms-title">🔐 Allow Permissions</span>
       <span class="perms-sub">ChatCorner needs access to work properly</span>
     </div>
     <div class="perms-indicators">
-      <span class="perm-item" title="Notifications">🔔 Notifications <span id="perm-notif" class="perm-dot perm-prompt"></span></span>
-      <span class="perm-item" title="Microphone">🎤 Microphone <span id="perm-mic" class="perm-dot perm-prompt"></span></span>
-      <span class="perm-item" title="Camera">📷 Camera <span id="perm-cam" class="perm-dot perm-prompt"></span></span>
+      <span class="perm-item" title="Notifications">
+        🔔 Notifications <span id="perm-notif" class="perm-dot perm-prompt"></span>
+      </span>
+      <span class="perm-item" title="Microphone">
+        🎤️ Microphone <span id="perm-mic" class="perm-dot perm-prompt"></span>
+      </span>
+      <span class="perm-item" title="Camera">
+        📷 Camera <span id="perm-cam" class="perm-dot perm-prompt"></span>
+      </span>
     </div>
     <div class="perms-actions">
       <button class="btn-allow btn-primary" onclick="requestAllPermissions()">✅ Allow All</button>
@@ -59,133 +130,250 @@
 
   <div class="page-shell">
 
-    <!-- TOP BAR -->
-    <header class="topbar topbar-classic">
-      <div class="topbar-brand">
-        <span class="topbar-logo">💬 ChatCorner</span>
-        <span class="topbar-welcome">Welcome, <strong id="welcome-nick">Guest</strong></span>
+    <!-- TOPBAR -->
+    <header class="topbar" role="banner">
+      <!-- Mobile: Rooms sidebar toggle -->
+      <button class="topbar-mobile-toggle" id="btn-toggle-left-sidebar" onclick="toggleLeftSidebar()" aria-label="Toggle rooms list" title="Rooms">
+        <span class="hamburger-icon">☰</span>
+      </button>
+
+      <div class="topbar-logo-area">
+        <strong class="topbar-logo">💬 ChatCorner</strong>
+        <div class="theme-bar" id="theme-bar">
+          <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
+          <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember 🔥"></button>
+          <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic ❄️"></button>
+          <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" onclick="setTheme('matrix')" title="Matrix"></button>
+          <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose 🌸"></button>
+        </div>
       </div>
-      <div class="topbar-room" id="current-room-name">Select a Room</div>
+      <div class="topbar-room">
+        <span id="current-room-name">Select a Room</span>
+        <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">🔙 Return to Rooms</button>
+      </div>
       <div class="topbar-search" id="topbar-search">
-        <input type="search" id="search-input" class="search-input" placeholder="Search messages…" aria-label="Search messages" autocomplete="off" oninput="searchMessages(this.value)"/>
+        <input
+          type="search"
+          id="search-input"
+          class="search-input"
+          placeholder="🔍 Search messages…"
+          aria-label="Search messages in this room"
+          autocomplete="off"
+          oninput="searchMessages(this.value)"
+        />
         <span id="search-count" class="search-count" aria-live="polite"></span>
         <button class="search-clear-btn" onclick="clearSearch()" title="Clear search" aria-label="Clear search">✕</button>
       </div>
       <div class="topbar-actions">
+        <div class="topbar-clears-stack" id="topbar-clears-stack">
+          <button class="topbar-clear-btn" id="btn-clear-my-messages" onclick="clearMyMessages()" title="Delete my messages for everyone in this room">Clear My Messages</button>
+          <button class="topbar-clear-btn" id="btn-clear-screen" onclick="clearScreenLocally()" title="Clear screen locally for me">Clear Screen</button>
+          <button class="topbar-clear-btn hidden" id="btn-clear-all" onclick="clearAllRoomMessages()" title="Delete all messages in this room (Admins/Mods)">Clear For All</button>
+        </div>
         <span id="user-badge" class="user-badge" aria-label="Current user"></span>
-        <button class="topbar-btn" id="btn-edit-avatar" onclick="openAvatarUpload()" style="display:none" aria-label="Update avatar">🖼️</button>
-        <a class="topbar-btn topbar-admin hidden" id="btn-admin-link" href="admin.html" title="Admin panel">Admin</a>
+        <button class="topbar-btn" id="btn-edit-avatar" onclick="showProfileModal(currentUser.id, 'profile')" style="display:none" aria-label="Update avatar">🖼️</button>
         <button class="topbar-btn" onclick="logout()" aria-label="Log out">Logout</button>
       </div>
+
+      <!-- Mobile: Users sidebar toggle -->
+      <button class="topbar-mobile-toggle" id="btn-toggle-right-sidebar" onclick="toggleRightSidebar()" aria-label="Toggle users list" title="Users">
+        👥
+      </button>
     </header>
 
-    <!-- MAIN LAYOUT: wide chat + right user list -->
-    <div class="layout layout-classic-body">
+    <!-- Mobile Navigation Tabs (visible only on mobile) -->
+    <nav class="mobile-tabs" id="mobile-tabs" aria-label="Mobile navigation">
+      <button class="mobile-tab-btn" onclick="switchMobileTab('rooms')" id="tab-rooms">Rooms</button>
+      <button class="mobile-tab-btn active" onclick="switchMobileTab('chat')" id="tab-chat">Chat</button>
+      <button class="mobile-tab-btn" onclick="switchMobileTab('users')" id="tab-users">Users</button>
+    </nav>
 
-      <main class="chat-main chat-main-classic">
-        <!-- Room tabs (horizontal, like chatroomcorner) -->
-        <div class="room-tabs-bar">
-          <nav class="room-tabs" id="room-tabs" aria-label="Chat rooms"></nav>
-          <div class="theme-bar-compact" id="theme-bar">
-            <button class="theme-dot" data-theme="classic" style="background:linear-gradient(135deg,#fff,#e8f5e9)" onclick="setTheme('classic')" title="Classic"></button>
-            <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
-            <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember"></button>
-            <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic"></button>
-            <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" onclick="setTheme('matrix')" title="Matrix"></button>
-            <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose"></button>
-          </div>
-        </div>
+    <!-- Mobile sidebar backdrop overlay -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="closeAllSidebars()" aria-hidden="true"></div>
 
-        <div class="rooms-topbar hidden" id="rooms-topbar" aria-label="Private chats"></div>
-        <div class="room-meta-bar" aria-label="Room details">
-          <div class="room-meta-primary">
-            <span class="room-meta-label" id="room-meta-label">Public room</span>
-            <span class="room-meta-pill" id="room-presence-pill">0 online</span>
-            <span class="room-meta-pill" id="room-type-pill">Text chat</span>
-          </div>
-          <div class="room-users-bar" id="room-users-bar" aria-label="Active users in room"></div>
-        </div>
+    <!-- THREE COLUMNS -->
+    <div class="layout">
 
-        <div class="chat-box">
-          <button id="btn-load-older" class="btn-load-older hidden" onclick="loadOlderMessages()" aria-label="Load older messages">⬆ Load older messages</button>
-          <div class="messages messages-classic" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
-          <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom">↓ New messages</button>
-        </div>
+      <!-- LEFT SIDEBAR -->
+      <aside class="sidebar sidebar-left" id="sidebar-left">
 
-        <div class="mini-cams-bar" id="minimized-cams-bar"></div>
-        <div class="typing-indicator-host" id="typing-indicator-host" aria-live="polite"></div>
+        <!-- Pin button (Feature 2) -->
+        <button class="btn-pin-rooms" id="btn-pin-rooms" title="Pin/Unpin rooms sidebar" aria-label="Pin rooms sidebar">📌 Pin</button>
 
-        <!-- Voice bar -->
-        <div class="audio-bar hidden" id="audio-bar">
-          <span class="audio-icon">🎤</span>
-          <span id="audio-status" class="audio-status-text">Voice: Off</span>
-          <canvas class="voice-visualizer hidden" id="voice-visualizer" width="60" height="24"></canvas>
-          <div class="peers-list" id="peers-list"></div>
-          <button class="btn-join-voice hidden" id="btn-join-voice" onclick="joinVoice()">Join Voice</button>
-          <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
-          <button class="btn-audio hidden" id="btn-mute" onclick="toggleMute()" type="button">🔇 Mute</button>
-          <button class="btn-audio hidden" id="btn-toggle-camera" onclick="toggleCamera()" type="button">📷 Camera On</button>
-        </div>
-        <div class="video-grid hidden" id="video-grid"></div>
-        <video id="local-video" class="local-video hidden" autoplay playsinline muted></video>
 
-        <!-- Composer -->
-        <div class="composer-classic">
-          <div class="composer-toolbar">
-            <button class="toolbar-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" type="button">😊</button>
-            <button class="toolbar-btn" id="btn-image-url" title="Share image" type="button">🖼️</button>
-            <button class="toolbar-btn" id="btn-voice-note" onclick="sendVoiceNote()" title="Voice note" type="button">🎙️</button>
-            <button class="toolbar-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick()" title="Voice chat" type="button">🔊</button>
-            <span id="voice-note-timer" class="voice-note-timer"></span>
-            <div id="emoji-picker" class="emoji-picker hidden" role="dialog"></div>
-            <div id="room-image-url-popover" class="room-image-url-popover hidden">
-              <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
-              <button class="btn-sm" id="btn-room-image-url-clear" title="Clear" type="button">✕</button>
-            </div>
-            <div id="voice-note-preview-popover" class="room-image-url-popover hidden" style="display:flex; align-items:center; gap: 8px; padding: 4px;">
-              <audio id="voice-note-preview-audio" controls style="height: 30px; max-width: 200px;"></audio>
-              <button class="btn-sm" id="btn-voice-note-send" type="button" style="background:var(--accent, #7c3aed); color:white; border:none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Send</button>
-              <button class="btn-sm" id="btn-voice-note-cancel" type="button" style="background:var(--red, #ef4444); color:white; border:none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Cancel</button>
-            </div>
-          </div>
-          <div class="composer-input-row">
-            <input id="msg-input" class="msg-input msg-input-classic" type="text" placeholder="Type your message here…" maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off" aria-label="Message input"/>
-            <span id="msg-char-counter" class="char-counter" aria-live="polite">0/500</span>
-            <button class="btn-send-classic" id="btn-send" onclick="sendMessage()" type="button">SEND</button>
-          </div>
-          <div class="composer-footer">
-            <button class="btn-clear-msgs" id="btn-clear-my-messages" onclick="clearMyMessages()" type="button">Clear My Messages</button>
-          </div>
-        </div>
-      </main>
-
-      <!-- RIGHT: online users -->
-      <aside class="sidebar sidebar-right sidebar-classic" id="sidebar-right">
-        <div class="online-header">
-          <span class="online-header-title">People In Room</span>
-          <span class="online-header-count"><span id="online-count">0</span> online</span>
-        </div>
-        <ul class="user-list user-list-classic" id="user-list"></ul>
+        <!-- Rooms list -->
+        <div class="sidebar-section-label">🏠 ROOMS</div>
+        <ul class="room-list" id="room-list"></ul>
       </aside>
 
-      <!-- Hidden room list for JS compat -->
-      <ul class="room-list hidden" id="room-list" aria-hidden="true"></ul>
+      <!-- CENTER -->
+      <main class="chat-main">
+        <!-- IPTV player and channel explorer -->
+        <div id="iptv-container" class="iptv-container hidden">
+          <div class="iptv-sidebar">
+            <div class="iptv-category-select-wrapper">
+              <select id="iptv-category-select" onchange="changeIPTVCategoryOrCountry(this.value)">
+                <option value="country:pk">🇵🇰 Pakistan Channels</option>
+                <option value="country:in">🇮🇳 India Channels</option>
+                <option value="country:us">🇺🇸 United States Channels</option>
+                <option value="country:uk">🇬🇧 United Kingdom Channels</option>
+                <option value="country:ca">🇨🇦 Canada Channels</option>
+                <option value="cat:news">📰 News Channels</option>
+                <option value="cat:sports">⚽ Sports Channels</option>
+                <option value="cat:movies">🍿 Movies Channels</option>
+                <option value="cat:music">🎵 Music Channels</option>
+                <option value="cat:documentary">🧪 Documentaries</option>
+                <option value="cat:kids">🧸 Kids Channels</option>
+                <option value="cat:general">🌍 General Channels</option>
+              </select>
+            </div>
+            <div class="iptv-search-bar">
+              <input type="text" id="iptv-channel-search" placeholder="Search channels..." oninput="onIPTVChannelSearchInput(this.value)"/>
+            </div>
+            <ul class="iptv-channel-list" id="iptv-channel-list"></ul>
+          </div>
+          <div class="iptv-player-wrapper">
+            <video id="iptv-player" controls autoplay playsinline></video>
+            <div id="iptv-player-overlay" class="iptv-player-overlay hidden">
+              <div class="spinner"></div>
+              <span id="iptv-loading-text">Loading Channel...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video elements for voice room -->
+        <div id="video-grid" class="video-grid hidden"></div>
+        <video id="local-video" class="local-video hidden" autoplay playsinline muted></video>
+
+        <!-- Private chats top bar -->
+        <div class="rooms-topbar hidden" id="rooms-topbar" aria-label="Private chats"></div>
+
+        <!-- Load older messages button -->
+        <button id="btn-load-older" class="btn-load-older hidden" onclick="loadOlderMessages()" aria-label="Load older messages">
+          ⬆ Load older messages
+        </button>
+
+        <!-- Messages -->
+        <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
+
+        <!-- Scroll to bottom button -->
+        <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom">↓ New messages</button>
+
+        <!-- Minimized cams bar -->
+        <div class="mini-cams-bar" id="minimized-cams-bar"></div>
+      </main>
+
+      <!-- RIGHT SIDEBAR -->
+      <aside class="sidebar sidebar-right" id="sidebar-right">
+        <div class="sidebar-section-label">👥 USERS IN ROOM</div>
+        <ul class="user-list" id="user-list"></ul>
+      </aside>
+
+    </div><!-- end .layout -->
+
+    <!-- BOTTOM INPUT ROW (full width, split into 3 zones) -->
+    <div class="input-strip">
+      <div class="input-strip-left">
+        <div id="emoji-picker" class="emoji-picker hidden" role="dialog"></div>
+        <div id="room-image-url-popover" class="room-image-url-popover hidden">
+          <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
+          <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
+        </div>
+        
+        <!-- Hamburger extras button (visible on mobile, positioned on the left side) -->
+        <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options">☰</button>
+
+        <div id="input-buttons-group" class="input-buttons-group">
+          <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
+          <button class="input-btn" id="btn-image-url" onclick="closeInputExtras()" title="Share image or GIF" aria-label="Share image or GIF">🖼️</button>
+          <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote();closeInputExtras()" title="Send a voice note" aria-label="Record and send voice note">🎙️</button>
+          <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick();closeInputExtras()" title="Join Voice Chat" aria-label="Join voice chat">🔊</button>
+        </div>
+        <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
+      </div>
+      <div class="input-strip-center">
+        <textarea id="msg-input" class="msg-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
+        <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap" aria-live="polite" aria-label="Character count">0/500</span>
+      </div>
+      <div class="input-strip-right">
+        <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
+      </div>
     </div>
 
+    <!-- Audio and Radio bar (voice room status & free online radio, inside chat-main area) -->
+    <div class="audio-bar" id="audio-bar">
+      <!-- Voice controls -->
+      <div class="voice-controls" id="voice-controls">
+        <span class="audio-icon">🎤</span>
+        <span id="audio-status" class="audio-status-text">Voice: Off</span>
+        <canvas class="voice-visualizer hidden" id="voice-visualizer" width="60" height="24"></canvas>
+        <div class="peers-list" id="peers-list"></div>
+        <button class="btn-join-voice hidden" id="btn-join-voice" onclick="joinVoice()">Join Voice</button>
+        <button class="btn-mute hidden" id="btn-mute" onclick="toggleMute()">🔇 Mute</button>
+        <button class="btn-toggle-camera hidden" id="btn-toggle-camera" onclick="toggleCamera()">📷 Camera Off</button>
+        <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
+      </div>
+
+      <!-- Visual spacer / divider between voice and radio -->
+      <div class="bar-divider" id="bar-divider"></div>
+
+      <!-- Radio controls -->
+      <div class="radio-controls" id="radio-controls">
+        <button class="radio-toggle-btn" id="btn-radio-toggle" onclick="toggleRadioControls()" title="Toggle Online Radio">📻 Radio</button>
+        
+        <!-- Volume Control -->
+        <div class="radio-volume-container hidden" id="radio-volume-container">
+          <button class="volume-btn" id="btn-radio-mute" onclick="toggleRadioMute()" title="Mute/Unmute">🔊</button>
+          <input type="range" id="radio-volume-slider" min="0" max="100" value="80" class="radio-volume-slider" title="Radio Volume" oninput="onRadioVolumeChange(this.value)"/>
+          <span class="volume-val" id="radio-volume-val">80%</span>
+        </div>
+        
+        <div class="radio-selectors hidden" id="radio-selectors">
+          <select id="radio-country-select" class="radio-select" onchange="onRadioCountryChange(this.value)">
+            <option value="">-- Country --</option>
+            <option value="PK">Pakistan 🇵🇰</option>
+            <option value="IN">India 🇮🇳</option>
+            <option value="GB">United Kingdom 🇬🇧</option>
+            <option value="CA">Canada 🇨🇦</option>
+            <option value="US">United States 🇺🇸</option>
+            <option value="AE">United Arab Emirates 🇦🇪</option>
+            <option value="AU">Australia 🇦🇺</option>
+          </select>
+          
+          <select id="radio-category-select" class="radio-select" onchange="onRadioCategoryChange(this.value)" disabled>
+            <option value="">-- Category --</option>
+            <option value="all">All Categories</option>
+            <option value="music">🎵 Music & Hits</option>
+            <option value="punjabi">🌾 Punjabi Hits</option>
+            <option value="news">📰 News & Talk</option>
+            <option value="sports">⚽ Sports Live</option>
+            <option value="devotional">🕌 Devotional / Sufi</option>
+          </select>
+          
+          <select id="radio-channel-select" class="radio-select" onchange="onRadioChannelChange(this.value)" disabled>
+            <option value="">-- Set Channel --</option>
+          </select>
+        </div>
+
+        <div class="radio-status-area hidden" id="radio-status-area">
+          <span class="radio-status-text" id="radio-status-text"></span>
+          <div class="radio-sound-wave" id="radio-sound-wave">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <button class="btn-stop-radio" id="btn-stop-radio" onclick="stopRadioPlayer()">⏹️ Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Guest notice -->
     <div id="guest-notice-bar" class="guest-bar" style="display:none">
       👤 Guest mode — <a href="login.html">sign in or register</a> for a persistent account
     </div>
 
-    <div class="cam-window-area" id="cam-window-area" style="display:none">
-      <div class="cam-window-header">
-        <span class="cam-window-username" id="cam-window-username"></span>
-        <button class="cam-btn" id="btn-cam-minimize" title="Minimize" type="button">−</button>
-        <button class="cam-btn" id="btn-cam-close" title="Close" type="button">✕</button>
-      </div>
-      <video id="cam-video" autoplay playsinline muted></video>
-    </div>
-
-  </div>
+  </div><!-- end .page-shell -->
 
   <div id="audio-elements"></div>
   <div id="pm-root" class="pm-root"></div>
@@ -197,19 +385,148 @@
     <video id="floating-camera-video" autoplay playsinline></video>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/permissions.js"></script>
-  <script src="js/chat.js"></script>
-  <script src="js/pm.js"></script>
-  <script src="js/games.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/resizable-layout.js"></script>
+  <!-- Mobile Download App Modal -->
+  <div id="download-app-modal" class="download-modal hidden" role="dialog" aria-modal="true">
+    <div class="download-modal-content">
+      <button class="download-modal-close" onclick="closeDownloadModal()" title="Dismiss">✕</button>
+      <div class="download-modal-icon">📱</div>
+      <h3>Get ChatCorner for Android</h3>
+      <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
+      <a href="chatcorner-updated.apk" class="download-modal-btn" download>Download for Android</a>
+      <div style="font-family: monospace; font-size: 11px; margin-top: 10px; color: rgba(255,255,255,0.6); word-break: break-all; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2);">
+        SHA-256: <span id="apk-sha256">a8000174421f29a6af56658d24734d48b06f4155f07814a601202b954cccb80c</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="js/security.js?v=3.3" defer></script>
+  <script src="js/config.js?v=1.6" defer></script>
+  <script src="js/auth.js?v=1.6" defer></script>
+  <script src="js/permissions.js?v=1.6" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
+  <script src="js/chat-v3.js?v=1.7" defer></script>
+  <script src="js/pm.js?v=1.6" defer></script>
+  <script src="js/audio-v3.js?v=1.3" defer></script>
+  <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
     }
+  </script>
+
+  <!-- Mobile Sidebar Drawer Logic -->
+  <script>
+    (function() {
+      const MOBILE_BP = 768;
+
+      function isMobile() { return window.innerWidth <= MOBILE_BP; }
+
+      function getBackdrop() { return document.getElementById('sidebar-backdrop'); }
+      function getLeftSidebar() { return document.getElementById('sidebar-left'); }
+      function getRightSidebar() { return document.getElementById('sidebar-right'); }
+
+      // Mobile Tabs Logic
+      window.switchMobileTab = function(tabName) {
+        const tabs = document.querySelectorAll('.mobile-tab-btn');
+        tabs.forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.getElementById('tab-' + tabName);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        const shell = document.querySelector('.page-shell');
+        if (shell) {
+          if (tabName === 'rooms') {
+            shell.classList.add('mobile-rooms-active');
+            shell.classList.remove('mobile-users-active');
+          } else if (tabName === 'users') {
+            shell.classList.remove('mobile-rooms-active');
+            shell.classList.add('mobile-users-active');
+          } else {
+            shell.classList.remove('mobile-rooms-active');
+            shell.classList.remove('mobile-users-active');
+          }
+        }
+      };
+
+      window.toggleLeftSidebar = function() {
+        if (isMobile()) switchMobileTab('rooms');
+      };
+
+      window.toggleRightSidebar = function() {
+        if (isMobile()) switchMobileTab('users');
+      };
+
+      window.closeAllSidebars = function() {
+        // Compatibility
+      };
+
+      // Input Strip Extras Menu Logic
+      window.toggleInputExtrasMenu = function(event) {
+        event?.stopPropagation();
+        const group = document.getElementById('input-buttons-group');
+        if (group) group.classList.toggle('open');
+      };
+
+      window.closeInputExtras = function() {
+        const group = document.getElementById('input-buttons-group');
+        if (group) group.classList.remove('open');
+      };
+
+      document.addEventListener('click', (event) => {
+        const group = document.getElementById('input-buttons-group');
+        const btn = document.getElementById('btn-input-extras');
+        if (group && btn && !group.contains(event.target) && event.target !== btn) {
+          group.classList.remove('open');
+        }
+      });
+
+      // Mobile Download App Modal Logic
+      window.checkShowDownloadModal = function() {
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const isCapacitor = window.hasOwnProperty('Capacitor');
+        
+        if (isAndroid && !isCapacitor) {
+          const modal = document.getElementById('download-app-modal');
+          if (modal) modal.classList.remove('hidden');
+        }
+      };
+      
+      window.closeDownloadModal = function() {
+        const modal = document.getElementById('download-app-modal');
+        if (modal) modal.classList.add('hidden');
+      };
+
+      // Call on load
+      setTimeout(checkShowDownloadModal, 1500);
+
+      // Auto-close sidebars when window resizes above mobile breakpoint
+      window.addEventListener('resize', function() {
+        if (!isMobile()) {
+          const shell = document.querySelector('.page-shell');
+          if (shell) {
+            shell.classList.remove('mobile-rooms-active');
+            shell.classList.remove('mobile-users-active');
+          }
+        }
+      });
+
+      // Feature 2 — Rooms sidebar pin/unpin logic
+      (function initRoomsPin() {
+        const isPinned = localStorage.getItem('cc-rooms-pinned') !== 'false'; // default: pinned
+        if (!isPinned) document.body.classList.add('rooms-unpinned');
+
+        const pinBtn = document.getElementById('btn-pin-rooms');
+        if (pinBtn) {
+          pinBtn.textContent = isPinned ? '📌 Pinned' : '📌 Pin';
+          pinBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const nowUnpinned = document.body.classList.toggle('rooms-unpinned');
+            localStorage.setItem('cc-rooms-pinned', String(!nowUnpinned));
+            pinBtn.textContent = nowUnpinned ? '📌 Pin' : '📌 Pinned';
+          });
+        }
+      })();
+    })();
   </script>
 </body>
 </html>

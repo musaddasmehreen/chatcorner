@@ -1,5 +1,5 @@
-/ /chat 302
-/index.html /chat 302
+/ /chat.html 302
+/index.html /chat.html 302
 /chat /chat.html 200
 /chat/ /chat.html 200
 /adminup /adminup.html 200

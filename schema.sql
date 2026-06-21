@@ -1,142 +1,189 @@
 -- =====================================================================
--- CHATCORNER — COMPLETE SUPABASE SCHEMA (matches js/chat.js)
--- Run this entire script in Supabase SQL Editor
+-- CHATCORNER - COMPLETE SUPABASE SQL SCHEMA
+-- Execute this entire script in Supabase SQL Editor to initialize the database
 -- =====================================================================
 
--- PROFILES
+-- 1. TABLE: profiles
 CREATE TABLE IF NOT EXISTS public.profiles (
-    id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    username text NOT NULL,
-    email text,
-    avatar_color text DEFAULT '#7c3aed',
-    avatar_url text,
-    is_registered boolean DEFAULT false,
-    is_admin boolean DEFAULT false,
-    is_mod boolean DEFAULT false,
-    is_owner boolean DEFAULT false,
-    is_vip boolean DEFAULT false,
-    is_banned boolean DEFAULT false,
-    banned_at timestamptz,
-    banned_by uuid,
-    ban_reason text,
-    ban_expires_at timestamptz,
-    kicked_until timestamptz,
-    created_at timestamptz DEFAULT now()
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT,
+    avatar_color TEXT,
+    avatar_url TEXT,
+    is_registered BOOLEAN DEFAULT true,
+    is_admin BOOLEAN DEFAULT false,
+    is_mod BOOLEAN DEFAULT false,
+    is_owner BOOLEAN DEFAULT false,
+    is_vip BOOLEAN DEFAULT false,
+    is_banned BOOLEAN DEFAULT false,
+    banned_at TIMESTAMP WITH TIME ZONE,
+    banned_by UUID,
+    ban_reason TEXT,
+    ban_expires_at TIMESTAMP WITH TIME ZONE,
+    kicked_until TIMESTAMP WITH TIME ZONE,
+    has_2fa_enabled BOOLEAN DEFAULT false,
+    two_fa_secret TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ROOMS
-CREATE TABLE IF NOT EXISTS public.rooms (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    name text UNIQUE NOT NULL,
-    description text,
-    is_audio_enabled boolean DEFAULT false,
-    is_locked boolean DEFAULT false,
-    created_at timestamptz DEFAULT now()
-);
-
--- MESSAGES
-CREATE TABLE IF NOT EXISTS public.messages (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    room_id uuid NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
-    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    username text NOT NULL,
-    content text NOT NULL,
-    type text NOT NULL DEFAULT 'text',
-    created_at timestamptz DEFAULT now(),
-    CONSTRAINT message_length_check CHECK (char_length(content) <= 5000)
-);
-
--- PRIVATE MESSAGES
-CREATE TABLE IF NOT EXISTS public.private_messages (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    sender_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    recipient_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    content text NOT NULL,
-    type text NOT NULL DEFAULT 'text',
-    created_at timestamptz DEFAULT now()
-);
-
--- APP SETTINGS
-CREATE TABLE IF NOT EXISTS public.app_settings (
-    key text PRIMARY KEY,
-    value text,
-    updated_at timestamptz DEFAULT now()
-);
-
--- BROADCASTS (admin)
-CREATE TABLE IF NOT EXISTS public.broadcasts (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    message text,
-    sent_by uuid REFERENCES public.profiles(id),
-    room_id uuid REFERENCES public.rooms(id),
-    created_at timestamptz DEFAULT now()
-);
-
--- INDEXES
-CREATE INDEX IF NOT EXISTS idx_messages_room_id ON public.messages(room_id);
-CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_room_created ON public.messages(room_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles(username);
-
--- SEED DEFAULT ROOMS
-INSERT INTO public.rooms (name, description, is_audio_enabled)
-VALUES
-    ('General', 'Main public chat room', false),
-    ('Voice Lounge', 'Voice and video enabled room', true)
-ON CONFLICT (name) DO NOTHING;
-
--- ROW LEVEL SECURITY
+-- RLS for profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access to profiles" ON public.profiles
+    FOR SELECT USING (true);
+
+CREATE POLICY "Allow users to update their own profile" ON public.profiles
+    FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Allow users to insert their own profile" ON public.profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
+
+-- 2. TABLE: rooms
+CREATE TABLE IF NOT EXISTS public.rooms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT UNIQUE NOT NULL,
+    description TEXT,
+    is_audio_enabled BOOLEAN DEFAULT false,
+    is_locked BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS for rooms
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable read access to rooms for all users" ON public.rooms
+    FOR SELECT USING (true);
+
+CREATE POLICY "Enable insert for authenticated users" ON public.rooms
+    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+
+-- 3. TABLE: messages
+CREATE TABLE IF NOT EXISTS public.messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id UUID REFERENCES public.rooms(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    username TEXT NOT NULL,
+    content TEXT NOT NULL,
+    type TEXT DEFAULT 'text',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS for messages
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable read access to messages for all users" ON public.messages
+    FOR SELECT USING (true);
+
+CREATE POLICY "Enable insert access to messages for all users" ON public.messages
+    FOR INSERT WITH CHECK (true);
+
+
+-- 4. TABLE: active_users
+CREATE TABLE IF NOT EXISTS public.active_users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    peer_id TEXT NOT NULL,
+    room_id TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT peer_id_not_empty CHECK (LENGTH(peer_id) > 0),
+    CONSTRAINT username_not_empty CHECK (LENGTH(username) > 0)
+);
+
+-- RLS for active_users
+ALTER TABLE public.active_users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable read access for active users" ON public.active_users
+    FOR SELECT USING (true);
+
+CREATE POLICY "Enable insert/update for all users" ON public.active_users
+    FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Enable update for all users" ON public.active_users
+    FOR UPDATE USING (true) WITH CHECK (true);
+
+
+-- 5. TABLE: app_settings
+CREATE TABLE IF NOT EXISTS public.app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS for app_settings
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read to app_settings" ON public.app_settings
+    FOR SELECT USING (true);
+
+
+-- 6. TABLE: broadcasts
+CREATE TABLE IF NOT EXISTS public.broadcasts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message TEXT NOT NULL,
+    sent_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    room_id UUID REFERENCES public.rooms(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS for broadcasts
+ALTER TABLE public.broadcasts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable read access to broadcasts for all users" ON public.broadcasts
+    FOR SELECT USING (true);
+
+
+-- 7. TABLE: private_messages
+CREATE TABLE IF NOT EXISTS public.private_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    recipient_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    type TEXT DEFAULT 'text',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS for private_messages
 ALTER TABLE public.private_messages ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "profiles_read" ON public.profiles;
-DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
-DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
-DROP POLICY IF EXISTS "rooms_read" ON public.rooms;
-DROP POLICY IF EXISTS "messages_read" ON public.messages;
-DROP POLICY IF EXISTS "messages_insert_own" ON public.messages;
-DROP POLICY IF EXISTS "pm_read" ON public.private_messages;
-DROP POLICY IF EXISTS "pm_insert" ON public.private_messages;
+CREATE POLICY "Allow users to read their own PMs" ON public.private_messages
+    FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = recipient_id);
 
-CREATE POLICY "profiles_read" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "profiles_insert_own" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Allow users to send PMs" ON public.private_messages
+    FOR INSERT WITH CHECK (auth.uid() = sender_id);
 
-CREATE POLICY "rooms_read" ON public.rooms FOR SELECT USING (true);
 
-CREATE POLICY "messages_read" ON public.messages FOR SELECT USING (true);
-CREATE POLICY "messages_insert_own" ON public.messages FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "pm_read" ON public.private_messages FOR SELECT USING (
-    auth.uid() = sender_id OR auth.uid() = recipient_id
-);
-CREATE POLICY "pm_insert" ON public.private_messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
-
--- REALTIME
+-- =====================================================================
+-- REAL-TIME REPLICATION SETUP
+-- =====================================================================
 ALTER TABLE public.messages REPLICA IDENTITY FULL;
+ALTER TABLE public.active_users REPLICA IDENTITY FULL;
+ALTER TABLE public.rooms REPLICA IDENTITY FULL;
 ALTER TABLE public.profiles REPLICA IDENTITY FULL;
+ALTER TABLE public.private_messages REPLICA IDENTITY FULL;
 
-DO $$
-BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+BEGIN;
+    DROP PUBLICATION IF EXISTS supabase_realtime;
+    CREATE PUBLICATION supabase_realtime FOR TABLE 
+        public.messages, 
+        public.active_users, 
+        public.rooms, 
+        public.profiles, 
+        public.private_messages;
+COMMIT;
 
-DO $$
-BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
--- OPTIONAL: purge messages older than 24 hours (requires pg_cron)
--- CREATE EXTENSION IF NOT EXISTS pg_cron;
--- SELECT cron.schedule('purge-messages-24h', '0 0 * * *',
---   'DELETE FROM public.messages WHERE created_at < NOW() - INTERVAL ''24 hours''');
 
 -- =====================================================================
--- AFTER FIRST LOGIN: promote your account to admin (replace email)
--- UPDATE public.profiles SET is_admin = true, is_registered = true
--- WHERE email = 'your-email@example.com';
+-- AUTOMATED MAINTENANCE: PG_CRON SCHEDULER
 -- =====================================================================
+
+-- Enable pg_cron extension
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Purge inactive guest profiles created more than 2 hours ago
+SELECT cron.schedule(
+    'purge-guest-profiles-2h',
+    '0 * * * *', -- Run every hour
+    'DELETE FROM public.profiles WHERE is_registered = false AND created_at < NOW() - INTERVAL ''2 hours'''
+);

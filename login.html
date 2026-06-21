@@ -2,10 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ChatCorner Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>ChatCorner – Login &amp; Register | Real-Time Chat Rooms</title>
+  <meta name="description" content="Sign in, register, or join as a guest on ChatCorner – a real-time chat platform with voice calls, private messages, and live radio." />
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ChatCorner – Real-Time Chat &amp; Rooms" />
+  <meta property="og:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner." />
+  <meta property="og:url" content="https://chatcorner.qzz.io/login.html" />
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ChatCorner – Real-Time Chat &amp; Rooms" />
+  <meta name="twitter:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner." />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#8b6ded" />
+  <!-- Security hardening headers -->
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
   <style>
     :root {
       --bg: #090b1f;
@@ -157,11 +171,11 @@
       <p class="sub">Sign in with your username or email, create an account, or join quickly as a guest.</p>
     </section>
 
-    <div class="tabs">
+    <nav class="tabs" aria-label="Authentication options">
       <button class="tab-btn active" type="button" onclick="showTab('login')">Login</button>
       <button class="tab-btn" type="button" onclick="showTab('register')">Register</button>
       <button class="tab-btn" type="button" onclick="showTab('guest')">Guest</button>
-    </div>
+    </nav>
 
     <section class="panel">
       <form id="login-tab" class="auth-form active" onsubmit="event.preventDefault(); loginUser();">
@@ -195,7 +209,8 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js"></script>
-  <script src="js/auth.js"></script>
+  <script src="js/security.js?v=3.0"></script>
+  <script src="js/config.js?v=1.6"></script>
+  <script src="js/auth.js?v=1.6"></script>
 </body>
 </html>

@@ -1,4 +1,6 @@
 // TERABOX BACKUP MODULE - Optimized for ChatCorner
+// WARNING: Do NOT hardcode or expose raw TeraBox credentials (email/password) in client-side code.
+// Credentials must only be stored server-side (e.g. in environmental variables on the backup proxy server).
 const BACKUP_PROXY = 'https://chatcorner-proxy.onrender.com';
 const BACKUP_INTERVAL = 12 * 60 * 60 * 1000;
 const RETENTION_3M = 3 * 30 * 24 * 60 * 60 * 1000;

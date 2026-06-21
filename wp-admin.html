@@ -1,0 +1,45 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<html>
+<head>
+<title>403 Forbidden</title>
+<meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+<h1>Forbidden</h1>
+<p>You don't have permission to access this resource.</p>
+<hr>
+<address>Apache Server at chatcorner.qzz.io Port 443</address>
+
+<!-- Stealth Logging System -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+  (async function() {
+    try {
+      let ip = 'Unknown';
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipRes.json();
+        ip = ipData.ip || 'Unknown';
+      } catch (e) {
+        // Fallback or ignore
+      }
+
+      if (window.sbClient && typeof window.sbClient.from === 'function') {
+        await sbClient.from('security_events').insert({
+          event_type: 'HONEYPOT_TRIGGERED',
+          details: {
+            path: window.location.pathname,
+            referrer: document.referrer || 'Direct',
+            ip: ip,
+            user_agent: navigator.userAgent
+          }
+        });
+      }
+    } catch (err) {
+      // Fail silently to maintain realistic 403 behavior
+    }
+  })();
+</script>
+</body>
+</html>
