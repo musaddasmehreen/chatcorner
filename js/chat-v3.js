@@ -61,8 +61,10 @@ function applyTheme(name, animate) {
 /* ══ Emoji Insertion ════════════════════════════════════════════
    Inserts emoji at cursor position in #msg-input.
 ═══════════════════════════════════════════════════════════════ */
+let activeEmojiInput = null;
+
 function insertEmoji(emoji) {
-  const input = document.getElementById('msg-input');
+  const input = activeEmojiInput || document.getElementById('msg-input');
   if (!input || input.disabled) return;
   const start = input.selectionStart ?? input.value.length;
   const end   = input.selectionEnd   ?? input.value.length;
@@ -73,22 +75,63 @@ function insertEmoji(emoji) {
   closeEmojiPicker();
 }
 
-function toggleEmojiPicker(event) {
+function toggleEmojiPicker(event, targetInput = null) {
   event?.stopPropagation();
   const picker = document.getElementById('emoji-picker');
-  const input = document.getElementById('msg-input');
-  if (!picker || input?.disabled) return;
-  picker.classList.toggle('hidden');
-  if (!picker.classList.contains('hidden')) {
-    if (typeof window.closeInputExtras === 'function') {
-      window.closeInputExtras();
+  if (!picker) return;
+
+  const isCurrentlyOpen = !picker.classList.contains('hidden');
+  const target = targetInput || document.getElementById('msg-input');
+
+  if (isCurrentlyOpen && activeEmojiInput === target) {
+    closeEmojiPicker();
+    return;
+  }
+
+  activeEmojiInput = target;
+  if (activeEmojiInput?.disabled) return;
+
+  picker.classList.remove('hidden');
+
+  if (targetInput) {
+    const btn = event.currentTarget || event.target;
+    if (btn) {
+      btn.parentNode.appendChild(picker);
+      picker.style.left = 'auto';
+      picker.style.right = '10px';
+      picker.style.bottom = '40px';
+      picker.style.position = 'absolute';
     }
+  } else {
+    const mainComposer = document.querySelector('.composer-toolbar');
+    if (mainComposer) {
+      mainComposer.appendChild(picker);
+      picker.style.left = '0.8rem';
+      picker.style.right = 'auto';
+      picker.style.bottom = 'calc(100% + 0.5rem)';
+      picker.style.position = 'absolute';
+    }
+  }
+
+  if (typeof window.closeInputExtras === 'function') {
+    window.closeInputExtras();
   }
 }
 
 function closeEmojiPicker() {
   const picker = document.getElementById('emoji-picker');
-  if (picker) picker.classList.add('hidden');
+  if (picker) {
+    picker.classList.add('hidden');
+    // Return picker to main composer toolbar so it's not orphaned in a PM toolbar
+    const mainComposer = document.querySelector('.composer-toolbar');
+    if (mainComposer && picker.parentNode !== mainComposer) {
+      mainComposer.appendChild(picker);
+      picker.style.left = '0.8rem';
+      picker.style.right = 'auto';
+      picker.style.bottom = 'calc(100% + 0.5rem)';
+    }
+  }
+  activeEmojiInput = null;
 }
 
 function renderEmojiPicker() {
@@ -819,8 +862,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('click', (event) => {
     const picker = document.getElementById('emoji-picker');
     const emojiBtn = document.getElementById('btn-emoji');
+    const pmEmojiBtn = event.target.closest('.pm-emoji-btn');
     if (picker && !picker.classList.contains('hidden')) {
-      if (!(picker.contains(event.target) || emojiBtn?.contains(event.target))) {
+      if (!(picker.contains(event.target) || emojiBtn?.contains(event.target) || pmEmojiBtn)) {
         closeEmojiPicker();
       }
     }

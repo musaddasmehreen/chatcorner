@@ -1551,6 +1551,7 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   gap: 0.45rem;
   padding: 0 0.45rem 0.32rem;
   background: rgba(var(--accent-rgb),0.04);
+  position: relative;
 }
 
 .pm-input-row {

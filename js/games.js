@@ -67,7 +67,8 @@
 
   // Toggle the game picker popover attached to the 🎮 button
   function toggleGamePicker(userId, btn) {
-    let popover = btn.querySelector('.pm-game-picker-popover');
+    const toolbar = btn.closest('.pm-toolbar');
+    let popover = toolbar ? toolbar.querySelector('.pm-game-picker-popover') : btn.querySelector('.pm-game-picker-popover');
     if (popover) {
       popover.remove();
       return;
@@ -77,8 +78,7 @@
     document.querySelectorAll('.pm-game-picker-popover').forEach(p => p.remove());
 
     popover = document.createElement('div');
-    popover.className = 'emoji-picker'; // Reuse emoji-picker styling constraints or customize
-    popover.classList.add('pm-game-picker-popover');
+    popover.className = 'pm-game-picker-popover';
     popover.style.position = 'absolute';
     popover.style.bottom = '40px';
     popover.style.right = '10px';
@@ -113,7 +113,18 @@
       }
     });
 
-    btn.appendChild(popover);
+    (toolbar || btn).appendChild(popover);
+
+    // Close game picker on outside click
+    setTimeout(() => {
+      const closeHandler = (e) => {
+        if (!popover.contains(e.target) && !btn.contains(e.target)) {
+          popover.remove();
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      document.addEventListener('click', closeHandler);
+    }, 0);
   }
 
   // Send an invitation to another player
@@ -819,8 +830,9 @@
       indicator.className = 'turn-indicator ' + (isMyTurn ? 'active' : 'opponent');
       
       const checkText = this.isKingInCheck(this.board, this.currentTurn) ? " (Check!)" : "";
+      const colorName = this.myColor === 'w' ? 'White' : 'Black';
       text.textContent = isMyTurn 
-        ? `Your Turn (Move White)${checkText}` 
+        ? `Your Turn (${colorName})${checkText}` 
         : `Opponent Moving...${checkText}`;
     }
 
