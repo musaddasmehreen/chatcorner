@@ -104,6 +104,7 @@
   font-family: var(--game-font-title);
   color: var(--game-text-light);
   overflow: hidden;
+  pointer-events: auto;
   resize: both;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
