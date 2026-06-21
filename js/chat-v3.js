@@ -2245,11 +2245,6 @@ async function sendVoiceNote() {
         return;
       }
 
-      if (!checkGlobalRateLimit()) {
-        showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
-        return;
-      }
-
       if (!chunks.length) {
         appendSystemMessage('Voice note cancelled.');
         return;
@@ -2258,23 +2253,72 @@ async function sendVoiceNote() {
       try {
         const blob = new Blob(chunks, { type: mimeType });
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
-        const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
-          room_id: roomIdForVoiceNote,
-          user_id: currentUser.id,
-          username: currentProfile.username,
-          content: dataUrl,
-          type: 'voice'
-        }).select('id');
-        if (error) {
-          appendSystemMessage('Could not send voice note. Please try again.');
-        } else if (!isRegisteredUser()) {
-          if (insertedMsgs?.[0]?.id) {
-            void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
+
+        const previewPopover = document.getElementById('voice-note-preview-popover');
+        const previewAudio = document.getElementById('voice-note-preview-audio');
+        const sendBtn = document.getElementById('btn-voice-note-send');
+        const cancelBtn = document.getElementById('btn-voice-note-cancel');
+
+        if (previewPopover && previewAudio) {
+          previewAudio.src = dataUrl;
+          previewPopover.classList.remove('hidden');
+
+          sendBtn.onclick = async () => {
+            if (!checkGlobalRateLimit()) {
+              showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
+              return;
+            }
+            previewPopover.classList.add('hidden');
+            previewAudio.src = '';
+
+            const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
+              room_id: roomIdForVoiceNote,
+              user_id: currentUser.id,
+              username: currentProfile.username,
+              content: dataUrl,
+              type: 'voice'
+            }).select('id');
+            if (error) {
+              appendSystemMessage('Could not send voice note. Please try again.');
+            } else if (!isRegisteredUser()) {
+              if (insertedMsgs?.[0]?.id) {
+                void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
+              }
+              const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
+              localStorage.setItem('cc-guest-voice-used', String(newCount));
+              if (newCount >= GUEST_VOICE_LIMIT) {
+                setTimeout(() => showRegisterForVoice(), 800);
+              }
+            }
+          };
+
+          cancelBtn.onclick = () => {
+            previewPopover.classList.add('hidden');
+            previewAudio.src = '';
+          };
+        } else {
+          if (!checkGlobalRateLimit()) {
+            showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
+            return;
           }
-          const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
-          localStorage.setItem('cc-guest-voice-used', String(newCount));
-          if (newCount >= GUEST_VOICE_LIMIT) {
-            setTimeout(() => showRegisterForVoice(), 800);
+          const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
+            room_id: roomIdForVoiceNote,
+            user_id: currentUser.id,
+            username: currentProfile.username,
+            content: dataUrl,
+            type: 'voice'
+          }).select('id');
+          if (error) {
+            appendSystemMessage('Could not send voice note. Please try again.');
+          } else if (!isRegisteredUser()) {
+            if (insertedMsgs?.[0]?.id) {
+              void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
+            }
+            const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
+            localStorage.setItem('cc-guest-voice-used', String(newCount));
+            if (newCount >= GUEST_VOICE_LIMIT) {
+              setTimeout(() => showRegisterForVoice(), 800);
+            }
           }
         }
       } catch (_) {
