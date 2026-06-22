@@ -882,6 +882,77 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   await loadRooms();
 
+  // ── Exponential-Backoff Reconnect Engine ────────────────────────────
+  // Prevents the "thundering herd" problem: when hundreds of clients
+  // reconnect at the same moment (e.g. after a network outage or server
+  // restart) they would all hammer Supabase at the same instant without
+  // jitter.  This engine adds randomised jitter so attempts are spread
+  // out over time, and caps retry delay at 30 s.
+  const _reconnect = (() => {
+    const BASE_MS  = 1000;   // 1 s initial delay
+    const MAX_MS   = 30000;  // 30 s cap
+    const MAX_TRIES = 10;    // give up after 10 consecutive failures
+    let _attempt  = 0;
+    let _timer    = null;
+    let _active   = false;
+
+    function _delay(attempt) {
+      // Full-jitter exponential back-off: random in [0, min(cap, base * 2^attempt)]
+      const exp  = Math.min(MAX_MS, BASE_MS * Math.pow(2, attempt));
+      return Math.floor(Math.random() * exp);
+    }
+
+    async function _doReconnect() {
+      if (!currentRoom) { reset(); return; }
+      const banner = document.getElementById('connection-error-banner');
+      try {
+        await enterRoom(currentRoom, true);
+        // Success — reset counter and hide banner
+        reset();
+        if (banner) banner.classList.add('hidden');
+        showChatToast('✅ Connection restored.', 'success', 2500);
+      } catch (err) {
+        _attempt++;
+        if (_attempt >= MAX_TRIES) {
+          console.warn('[CC-RECONNECT] Max retries reached — giving up.');
+          if (banner) {
+            banner.querySelector('.banner-text').textContent =
+              '⚠️ Could not reconnect. Please refresh the page.';
+            banner.classList.remove('hidden');
+          }
+          reset();
+          return;
+        }
+        const wait = _delay(_attempt);
+        console.warn(`[CC-RECONNECT] Attempt ${_attempt} failed — retrying in ${wait}ms`);
+        if (banner) {
+          banner.querySelector('.banner-text').textContent =
+            `⚠️ Connection lost. Retrying in ${Math.round(wait/1000)}s… (attempt ${_attempt}/${MAX_TRIES})`;
+          banner.classList.remove('hidden');
+        }
+        _timer = setTimeout(_doReconnect, wait);
+      }
+    }
+
+    /** Trigger a reconnect sequence (idempotent — ignores if already running). */
+    function trigger() {
+      if (_active) return; // already in progress
+      _active = true;
+      const wait = _delay(_attempt);
+      _timer = setTimeout(_doReconnect, wait);
+    }
+
+    /** Cancel any pending reconnect and reset the counter. */
+    function reset() {
+      clearTimeout(_timer);
+      _timer   = null;
+      _attempt = 0;
+      _active  = false;
+    }
+
+    return { trigger, reset };
+  })();
+
   // ── Offline / Online reconnect recovery ─────────────────────────────
   window.addEventListener('offline', () => {
     const banner = document.getElementById('connection-error-banner');
@@ -891,30 +962,30 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  window.addEventListener('online', async () => {
-    const banner = document.getElementById('connection-error-banner');
-    if (banner) banner.classList.add('hidden');
-    // Re-subscribe to Supabase channels if currently in a room
-    if (currentRoom) {
-      showChatToast('🔄 Reconnecting...', 'info', 2000);
-      await enterRoom(currentRoom, true);
-    }
+  window.addEventListener('online', () => {
+    // Network came back — let the backoff engine handle the Supabase re-subscribe
+    // so clients don't all hit the DB at exactly the same millisecond.
+    showChatToast('🌐 Network restored — reconnecting...', 'info', 2000);
+    _reconnect.trigger();
   });
 
   // Re-subscribe after tab was hidden for more than 90 seconds
   let _hiddenAt = 0;
-  document.addEventListener('visibilitychange', async () => {
+  document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       _hiddenAt = Date.now();
     } else {
       const gapMs = Date.now() - _hiddenAt;
       if (_hiddenAt > 0 && gapMs > 90_000 && currentRoom) {
         showChatToast('🔄 Refreshing connection...', 'info', 2000);
-        await enterRoom(currentRoom, true);
+        _reconnect.trigger();
       }
       _hiddenAt = 0;
     }
   });
+
+  // Expose so channel-error callbacks (below, outside DOMContentLoaded) can use it
+  window._ccReconnect = _reconnect;
 });
 
 let _roomCountInterval = null;
@@ -1158,11 +1229,15 @@ async function enterRoom(room, force = false) {
       const banner = document.getElementById('connection-error-banner');
       if (status === 'SUBSCRIBED') {
         if (banner) banner.classList.add('hidden');
+        // Successful subscribe cancels any pending backoff sequence
+        window._ccReconnect?.reset();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (banner) {
           banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
           banner.classList.remove('hidden');
         }
+        // Use the backoff engine instead of immediately retrying
+        window._ccReconnect?.trigger();
       }
     });
 
@@ -1218,12 +1293,14 @@ async function enterRoom(room, force = false) {
       const banner = document.getElementById('connection-error-banner');
       if (status === 'SUBSCRIBED') {
         if (banner) banner.classList.add('hidden');
+        window._ccReconnect?.reset();
         await presenceChannel.track(presenceBaseData);
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (banner) {
           banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
           banner.classList.remove('hidden');
         }
+        window._ccReconnect?.trigger();
       }
     });
 

@@ -547,20 +547,33 @@ async function sendPrivateText(userId) {
   }
 
   const createdAt = new Date().toISOString();
+
+  // ── Security: validate & sanitise PM text before sending ──
+  let safeText = text;
+  if (!isSendingImage) {
+    const validation = window.ccValidatePmText ? window.ccValidatePmText(text) : { ok: true };
+    if (!validation.ok) {
+      if (typeof showChatToast === 'function') showChatToast('⚠️ ' + validation.reason, 'warning');
+      return;
+    }
+    // Use the pre-sanitised text from the validator (HTML stripped, URI schemes removed)
+    safeText = validation.sanitised ?? (window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text);
+  }
+
   if (!isSendingImage) input.value = '';
 
   const message = isSendingImage
     ? { from: currentUser.id, type: 'image', imageUrl, createdAt }
-    : { from: currentUser.id, type: 'text', text, createdAt };
+    : { from: currentUser.id, type: 'text', text: safeText, createdAt };
   appendPmHistoryMessage(userId, message, true);
 
   if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
   pmTextHistory[userId].push(message);
 
-  await sendPmBroadcast(isSendingImage ? { to: userId, type: 'image', imageUrl } : { to: userId, type: 'text', text });
+  await sendPmBroadcast(isSendingImage ? { to: userId, type: 'image', imageUrl } : { to: userId, type: 'text', text: safeText });
   // Registered users also persist to DB for history
   if (currentProfile?.is_registered) {
-    await persistPmToDb(userId, isSendingImage ? imageUrl : text, isSendingImage ? 'image' : 'text');
+    await persistPmToDb(userId, isSendingImage ? imageUrl : safeText, isSendingImage ? 'image' : 'text');
   }
   if (isSendingImage) {
     closePmImageInput(userId);

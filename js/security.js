@@ -130,12 +130,39 @@ window.ccSanitize = (function() {
       .slice(0, 32);
   }
 
-  // Sanitise free-form chat text (allow Unicode, strip HTML)
+  // Sanitise free-form chat text (strip ALL HTML tags + dangerous patterns,
+  // allow Unicode emoji, limit length to maxLen chars)
   function chatText(str, maxLen = 500) {
     if (!str) return '';
-    return String(str)
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // control chars except \n\r\t
-      .slice(0, maxLen);
+    let s = String(str);
+    // 1. Strip control characters (keep \n \r \t which are safe)
+    s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    // 2. Remove ALL HTML tags (defence-in-depth — escHtml() is the primary layer)
+    s = s.replace(/<[^>]*>/g, '');
+    // 3. Kill javascript: / vbscript: / data: URI schemes anywhere in the text
+    s = s.replace(/(?:javascript|vbscript|data)\s*:/gi, '');
+    // 4. Kill on* event handler attributes that survived tag stripping
+    s = s.replace(/\bon\w+\s*=/gi, '');
+    // 5. Collapse sequences of the HTML entity marker & to avoid double-escaping
+    s = s.replace(/&amp;amp;/gi, '&amp;');
+    // 6. Enforce max length
+    return s.slice(0, maxLen);
+  }
+
+  // Validate avatar / profile URLs — must be http(s) pointing to an image
+  function avatarUrl(raw) {
+    if (!raw) return '';
+    const s = String(raw).trim();
+    // Only allow http(s)
+    if (!/^https?:\/\//i.test(s)) return '';
+    // Must look like an image or a recognised CDN path
+    // (permissive enough for data-URLs returned by Supabase storage)
+    const noQuery = s.split('?')[0].split('#')[0];
+    if (/\.(png|jpe?g|gif|webp|avif|svg|ico)(\b|$)/i.test(noQuery)) return s;
+    // Accept Supabase storage public URLs (no extension needed)
+    if (s.includes('.supabase.co/storage/')) return s;
+    // Everything else is rejected
+    return '';
   }
 
   // Validate that a value is a safe UUID (36-char hex-dash)
@@ -143,7 +170,7 @@ window.ccSanitize = (function() {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str));
   }
 
-  return { html, stripTags, url, username, chatText, isUUID };
+  return { html, stripTags, url, username, chatText, avatarUrl, isUUID };
 })();
 
 /* ── 6. Rate-Limiter (client-side auxiliary layer) ─────────────
@@ -501,17 +528,36 @@ if (typeof requestIdleCallback === 'function') {
   window.addEventListener('load', () => setTimeout(_ccDeferredSecurityInit, 400));
 }
 
-/* ── 19. Message Content Validator ─────────────────────────────
+/* ── 19. Message Content Validator ───────────────────────────────
    Synchronous — called per-message before DB insert.             */
 window.ccValidateMessage = function(text) {
   if (!text || typeof text !== 'string') return { ok: false, reason: 'Empty message' };
-  if (text.length > 500) return { ok: false, reason: 'Message too long' };
-  const scan = window.ccThreatDetect?.scan(text) || { clean: true };
+  if (text.length > 500) return { ok: false, reason: 'Message too long (max 500 chars)' };
+  // Strip HTML before threat-scanning so encoded payloads don’t slip through
+  const stripped = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
+  if (stripped.length === 0) return { ok: false, reason: 'Message is empty after sanitisation' };
+  const scan = window.ccThreatDetect?.scan(stripped) || { clean: true };
   if (!scan.clean) {
     window.ccSecLog?.record('SUSPICIOUS_MESSAGE', { preview: text.slice(0, 40) });
     return { ok: false, reason: 'Message contains disallowed content' };
   }
-  return { ok: true };
+  return { ok: true, sanitised: stripped };
+};
+
+/* ── 19b. PM Message Validator ─────────────────────────────────
+   Same rules as room messages, exposed separately so pm.js can    
+   call it without depending on chat-v3.js internals.              */
+window.ccValidatePmText = function(text) {
+  if (!text || typeof text !== 'string') return { ok: false, reason: 'Empty message' };
+  if (text.length > 500) return { ok: false, reason: 'Message too long (max 500 chars)' };
+  const stripped = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
+  if (stripped.length === 0) return { ok: false, reason: 'Message is empty after sanitisation' };
+  const scan = window.ccThreatDetect?.scan(stripped) || { clean: true };
+  if (!scan.clean) {
+    window.ccSecLog?.record('SUSPICIOUS_PM', { preview: text.slice(0, 40) });
+    return { ok: false, reason: 'Message contains disallowed content' };
+  }
+  return { ok: true, sanitised: stripped };
 };
 
 /* ── 20. securityManager Compatibility Shim ──────────────────────
