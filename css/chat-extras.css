@@ -294,6 +294,40 @@ body.guest-mode .emoji-bar { display: none; }
   display: inline-flex;
 }
 
+/* ══ Context Menu for Message Delete ═══════════════════════════ */
+.msg-context-menu {
+  background: var(--panel, #22223a);
+  border: 1px solid var(--border, #32325a);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  min-width: 160px;
+  animation: ctxFadeIn 0.12s ease;
+}
+@keyframes ctxFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.msg-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text, #dde3f0);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.msg-context-menu button:hover {
+  background: rgba(248,113,113,0.15);
+  color: #fca5a5;
+}
+
 .media-url-popover {
   position: absolute;
   left: 0.8rem;

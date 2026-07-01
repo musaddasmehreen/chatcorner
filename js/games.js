@@ -99,7 +99,7 @@
       </div>
       <button type="button" class="btn-primary btn-sm" style="background:#00f0ff; color:#000; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="tictactoe">Tic-Tac-Toe</button>
       <button type="button" class="btn-primary btn-sm" style="background:#8b6ded; color:#fff; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="chess">Chess</button>
-      <button type="button" class="btn-primary btn-sm" style="background:#ff007f; color:#fff; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="ludo">Streamlined Ludo</button>
+      <button type="button" class="btn-primary btn-sm" style="background:#ff007f; color:#fff; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="ludo">Ludo (4-Player)</button>
     `;
 
     // Click handler to select and send invitation
@@ -400,6 +400,7 @@
 
     gw.el.style.left = `${left}px`;
     gw.el.style.top = `${top}px`;
+    gw.el.style.transform = 'none';
   });
 
   document.addEventListener('pointerup', (e) => {
@@ -427,6 +428,7 @@
     
     gw.el.style.left = `${Math.max(12, left)}px`;
     gw.el.style.top = `${pm.top || 110}px`;
+    gw.el.style.transform = 'none';
   }
 
   // Hook triggered when pm.js repositions or toggles active state
@@ -519,6 +521,9 @@
     } else if (gameType === 'chess') {
       gw.activeGameInstance = new ChessGame(opponentId, canvas, role);
     } else if (gameType === 'ludo') {
+      // Ludo needs more space for the 4-player board
+      gw.el.style.width = '420px';
+      gw.el.style.height = '560px';
       gw.activeGameInstance = new LudoGame(opponentId, canvas, role);
     }
   }
@@ -1205,69 +1210,91 @@
   // GAME 3: STREAMLINED 2-PLAYER LUDO
   // ==========================================================================
   class LudoGame {
+    /**
+     * Pakistani-style 4-player Ludo
+     * Board: 52 main cells, 4 colors (Red, Blue, Green, Yellow)
+     * Each online player controls 2 colors
+     * Inviter: Red + Yellow, Acceptor: Blue + Green
+     * 4 tokens per color, need 6 to deploy, extra turn on 6
+     */
     constructor(opponentId, container, role) {
       this.opponentId = opponentId;
       this.container = container;
       this.role = role;
       this.isGameOver = false;
 
-      // Player roles and colors
-      // Inviter is Blue, Acceptor is Pink
-      this.myColor = role === 'inviter' ? 'blue' : 'pink';
-      this.currentTurn = 'blue'; // Blue goes first
+      // Colors and assignment
+      this.COLORS = ['red', 'blue', 'green', 'yellow'];
+      this.COLOR_HEX = { red: '#e63946', blue: '#1d8cf8', green: '#2ecc71', yellow: '#f1c40f' };
 
-      // 2 tokens each. 
-      // State representation: 
-      // - 'yard': at home base
-      // - number (0 to 23): on the main track circle
-      // - 'h0', 'h1', 'h2': in home stretch (3 steps)
-      // - 'goal': reached the end!
-      this.tokens = {
-        blue: [ { pos: 'yard' }, { pos: 'yard' } ],
-        pink: [ { pos: 'yard' }, { pos: 'yard' } ]
-      };
+      // Inviter controls Red+Yellow, Acceptor controls Blue+Green
+      this.myColors = role === 'inviter' ? ['red', 'yellow'] : ['blue', 'green'];
+      this.oppColors = role === 'inviter' ? ['blue', 'green'] : ['red', 'yellow'];
+
+      // Turn order: Red -> Blue -> Green -> Yellow
+      this.currentTurn = 'red';
+
+      // 4 tokens per color, all start in yard
+      this.tokens = {};
+      this.COLORS.forEach(c => {
+        this.tokens[c] = [
+          { pos: 'yard' }, { pos: 'yard' }, { pos: 'yard' }, { pos: 'yard' }
+        ];
+      });
+
+      // Start positions on the 52-cell track
+      this.START_POS = { red: 0, blue: 13, green: 26, yellow: 39 };
+      // Entry to home stretch after completing loop
+      this.HOME_ENTRY = { red: 50, blue: 11, green: 24, yellow: 37 };
+
+      this.TRACK_SIZE = 52;
+      this.HOME_STRETCH_SIZE = 6;
 
       this.diceValue = 1;
       this.hasRolledThisTurn = false;
       this.movableTokenIndices = [];
+      this.consecutiveSixes = 0;
 
       this.initUI();
       this.drawBoard();
       this.updateStatus();
     }
 
+    isMyTurn() {
+      return this.myColors.includes(this.currentTurn);
+    }
+
     initUI() {
       const wrapper = document.createElement('div');
       wrapper.className = 'ludo-container';
 
-      // SVG Board
       const boardWrap = document.createElement('div');
       boardWrap.className = 'ludo-board-wrapper';
       boardWrap.innerHTML = `
-        <svg class="ludo-board-svg" viewBox="-20 -20 240 240">
+        <svg class="ludo-board-svg" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <radialGradient id="ludo-goal-gradient" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#fff" />
-              <stop offset="60%" stop-color="#7c3aed" />
-              <stop offset="100%" stop-color="#111" />
+            <radialGradient id="ludo-goal-grad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.9"/>
+              <stop offset="100%" stop-color="#333" stop-opacity="0.6"/>
             </radialGradient>
           </defs>
+          <g id="ludo-board-bg"></g>
           <g id="ludo-board-cells"></g>
           <g id="ludo-tokens-layer"></g>
         </svg>
       `;
 
-      // Dice panel
       const dicePanel = document.createElement('div');
       dicePanel.className = 'ludo-dice-area';
       dicePanel.innerHTML = `
-        <div class="ludo-dice-label">Dice:</div>
+        <div class="ludo-dice-label" id="ludo-turn-label">RED's Turn</div>
         <div class="ludo-dice-box" id="ludo-dice">
           <svg class="dice-svg" viewBox="0 0 100 100">
             <rect x="5" y="5" width="90" height="90" rx="15" fill="none" />
             <g id="dice-dots"></g>
           </svg>
         </div>
+        <div class="ludo-dice-label" id="ludo-dice-val" style="min-width:20px;text-align:center;">-</div>
       `;
 
       wrapper.appendChild(boardWrap);
@@ -1275,140 +1302,204 @@
       this.container.appendChild(wrapper);
 
       this.diceBox = dicePanel.querySelector('#ludo-dice');
+      this.turnLabel = dicePanel.querySelector('#ludo-turn-label');
+      this.diceValLabel = dicePanel.querySelector('#ludo-dice-val');
       this.diceBox.onclick = () => this.rollDice();
       this.drawDiceDots(1);
 
+      this.boardBg = boardWrap.querySelector('#ludo-board-bg');
       this.boardCellsGroup = boardWrap.querySelector('#ludo-board-cells');
       this.tokensGroup = boardWrap.querySelector('#ludo-tokens-layer');
     }
 
-    // Layout cells coordinates in SVG space
-    // Standard ring circle of 24 spaces
-    // Blue Yard, Pink Yard, Goal Center
-    getCellCoords(pos, color) {
-      const cx = 100, cy = 100;
-      const radius = 80;
+    // Get XY coordinates for a track position (0-51)
+    getTrackCoords(pos) {
+      // Standard Ludo board layout - 52 cells arranged in a cross pattern
+      // The board is 600x600, track cells arranged around the perimeter
+      const cells = this._getTrackLayout();
+      if (pos >= 0 && pos < cells.length) return cells[pos];
+      return { x: 300, y: 300 };
+    }
 
-      // Main Loop positions: 24 steps
-      if (typeof pos === 'number') {
-        const angle = (pos * (360 / 24) - 90) * (Math.PI / 180);
-        return {
-          x: cx + radius * Math.cos(angle),
-          y: cy + radius * Math.sin(angle)
-        };
+    _getTrackLayout() {
+      if (this._trackCache) return this._trackCache;
+      const cells = [];
+      const s = 38; // cell spacing
+      const ox = 30, oy = 30; // offset
+
+      // Bottom-left to top (Red's path start) - column going up (cells 0-5)
+      for (let i = 0; i < 6; i++) cells.push({ x: ox + 6 * s, y: oy + (13 - i) * s });
+      // Top-left row going right (cells 6-11)
+      for (let i = 0; i < 6; i++) cells.push({ x: ox + (i) * s, y: oy + 6 * s });
+      // Corner up (cell 12)
+      cells.push({ x: ox + 6 * s, y: oy + 0 * s });
+      // No wait - let me use a simpler circular approach for the 52 cells
+
+      // Actually use a proper standard cross-shaped Ludo board path
+      // Let me lay out 52 positions in a cross shape on a 15x15 grid
+      this._trackCache = this._computeCrossPath();
+      return this._trackCache;
+    }
+
+    _computeCrossPath() {
+      // Standard Ludo board: 15x15 grid, track goes around the cross
+      // Cell size in SVG coordinates (600/15 = 40)
+      const cs = 38;
+      const off = 15; // offset from edge
+
+      const gx = (col) => off + col * cs;
+      const gy = (row) => off + row * cs;
+
+      // Path definition: 52 cells going clockwise
+      // Starting from Red's start (bottom of left arm)
+      const path = [
+        // Red start area - going UP along column 6 (cells 0-4)
+        [6, 13], [6, 12], [6, 11], [6, 10], [6, 9],
+        // Turn left at top of left arm (cells 5-10) - going LEFT along row 8
+        [5, 8], [4, 8], [3, 8], [2, 8], [1, 8], [0, 8],
+        // Turn up (cells 11-12) 
+        [0, 7], [0, 6],
+        // Blue start - going RIGHT along row 6 (cells 13-17)
+        [1, 6], [2, 6], [3, 6], [4, 6], [5, 6],
+        // Turn down into top arm (cells 18-23) - going UP along column 6 -> wait
+        // Actually let me use a well-known 52-cell ludo path
+
+        // Top arm going up (cells 18-22)
+        [6, 5], [6, 4], [6, 3], [6, 2], [6, 1],
+        // Corner (cells 23-24)
+        [6, 0], [7, 0],
+        // Going down on right side of top arm (cells 25-26)  
+        [8, 0], [8, 1],
+        // Green start - going DOWN (cells 27-31)
+        [8, 2], [8, 3], [8, 4], [8, 5], [8, 6],
+        // Turn right (cells 32-37)
+        [9, 6], [10, 6], [11, 6], [12, 6], [13, 6], [14, 6],
+        // Corner (cells 38-39)
+        [14, 7], [14, 8],
+        // Yellow start - going LEFT (cells 40-44)
+        [13, 8], [12, 8], [11, 8], [10, 8], [9, 8],
+        // Turn into bottom arm going DOWN (cells 45-49)
+        [8, 9], [8, 10], [8, 11], [8, 12], [8, 13],
+        // Corner (cells 50-51)
+        [8, 14], [7, 14]
+      ];
+
+      return path.map(([col, row]) => ({ x: gx(col), y: gy(row) }));
+    }
+
+    getHomeStretchCoords(color, step) {
+      // Home stretches go from the edge towards center (6 cells each)
+      const cs = 38, off = 15;
+      const gx = (col) => off + col * cs;
+      const gy = (row) => off + row * cs;
+
+      const stretches = {
+        red:    Array.from({length: 6}, (_, i) => ({ x: gx(7), y: gy(13 - i) })),
+        blue:   Array.from({length: 6}, (_, i) => ({ x: gx(1 + i), y: gy(7) })),
+        green:  Array.from({length: 6}, (_, i) => ({ x: gx(7), y: gy(1 + i) })),
+        yellow: Array.from({length: 6}, (_, i) => ({ x: gx(13 - i), y: gy(7) }))
+      };
+
+      return stretches[color][step] || { x: 300, y: 300 };
+    }
+
+    getYardCoords(color, tokenIdx) {
+      // Yard positions for 4 tokens in each corner
+      const positions = {
+        red:    [{ x: 80, y: 460 }, { x: 130, y: 460 }, { x: 80, y: 510 }, { x: 130, y: 510 }],
+        blue:   [{ x: 80, y: 80 }, { x: 130, y: 80 }, { x: 80, y: 130 }, { x: 130, y: 130 }],
+        green:  [{ x: 460, y: 80 }, { x: 510, y: 80 }, { x: 460, y: 130 }, { x: 510, y: 130 }],
+        yellow: [{ x: 460, y: 460 }, { x: 510, y: 460 }, { x: 460, y: 510 }, { x: 510, y: 510 }]
+      };
+      return positions[color][tokenIdx] || { x: 300, y: 300 };
+    }
+
+    getTokenCoords(color, tok, idx) {
+      if (tok.pos === 'yard') return this.getYardCoords(color, idx);
+      if (tok.pos === 'goal') return { x: 300, y: 300 };
+      if (typeof tok.pos === 'string' && tok.pos.startsWith('h')) {
+        const step = parseInt(tok.pos.substring(1));
+        return this.getHomeStretchCoords(color, step);
       }
-
-      // Home stretches
-      if (pos.startsWith('h')) {
-        const step = parseInt(pos.charAt(1));
-        const rStretch = 60 - step * 15;
-        // Blue home stretch goes downwards (from top index 23/0 towards center)
-        // Pink home stretch goes upwards (from bottom index 12 towards center)
-        const angle = (color === 'blue' ? -90 : 90) * (Math.PI / 180);
-        return {
-          x: cx + rStretch * Math.cos(angle),
-          y: cy + rStretch * Math.sin(angle)
-        };
-      }
-
-      // Goal Center
-      if (pos === 'goal') {
-        return { x: cx, y: cy };
-      }
-
-      // Yards (Yard index for token placement)
-      if (pos.startsWith('yard_')) {
-        const tokenIdx = parseInt(pos.split('_')[1]);
-        const offset = tokenIdx === 0 ? -15 : 15;
-        if (color === 'blue') {
-          return { x: 30 + offset, y: 30 };
-        } else {
-          return { x: 170 + offset, y: 170 };
-        }
-      }
-
-      return { x: cx, y: cy };
+      if (typeof tok.pos === 'number') return this.getTrackCoords(tok.pos);
+      return { x: 300, y: 300 };
     }
 
     drawBoard() {
-      this.boardCellsGroup.innerHTML = '';
-      
-      // Draw Yards Background
-      this.boardCellsGroup.innerHTML += `
-        <rect x="5" y="5" width="50" height="50" rx="6" fill="rgba(0, 240, 255, 0.08)" stroke="var(--game-border-neon-blue)" stroke-width="1.5" />
-        <text x="30" y="22" fill="var(--game-border-neon-blue)" font-size="8" text-anchor="middle" font-weight="700">BLUE</text>
-        
-        <rect x="145" y="145" width="50" height="50" rx="6" fill="rgba(255, 0, 127, 0.08)" stroke="var(--game-border-neon-pink)" stroke-width="1.5" />
-        <text x="170" y="162" fill="var(--game-border-neon-pink)" font-size="8" text-anchor="middle" font-weight="700">PINK</text>
-
-        <!-- Center Goal -->
-        <circle cx="100" cy="100" r="14" class="ludo-cell goal" />
+      // Draw yard backgrounds
+      this.boardBg.innerHTML = `
+        <!-- Red yard (bottom-left) -->
+        <rect x="15" y="410" width="180" height="180" rx="12" fill="rgba(230,57,70,0.12)" stroke="${this.COLOR_HEX.red}" stroke-width="2"/>
+        <text x="105" y="440" fill="${this.COLOR_HEX.red}" font-size="14" text-anchor="middle" font-weight="700">RED</text>
+        <!-- Blue yard (top-left) -->
+        <rect x="15" y="15" width="180" height="180" rx="12" fill="rgba(29,140,248,0.12)" stroke="${this.COLOR_HEX.blue}" stroke-width="2"/>
+        <text x="105" y="45" fill="${this.COLOR_HEX.blue}" font-size="14" text-anchor="middle" font-weight="700">BLUE</text>
+        <!-- Green yard (top-right) -->
+        <rect x="405" y="15" width="180" height="180" rx="12" fill="rgba(46,204,113,0.12)" stroke="${this.COLOR_HEX.green}" stroke-width="2"/>
+        <text x="495" y="45" fill="${this.COLOR_HEX.green}" font-size="14" text-anchor="middle" font-weight="700">GREEN</text>
+        <!-- Yellow yard (bottom-right) -->
+        <rect x="405" y="410" width="180" height="180" rx="12" fill="rgba(241,196,15,0.12)" stroke="${this.COLOR_HEX.yellow}" stroke-width="2"/>
+        <text x="495" y="440" fill="${this.COLOR_HEX.yellow}" font-size="14" text-anchor="middle" font-weight="700">YELLOW</text>
+        <!-- Center goal -->
+        <circle cx="300" cy="300" r="28" fill="url(#ludo-goal-grad)" stroke="#fff" stroke-width="2"/>
+        <text x="300" y="305" fill="#fff" font-size="11" text-anchor="middle" font-weight="700">HOME</text>
       `;
 
-      // Draw Main Track: 24 cells
-      for (let i = 0; i < 24; i++) {
-        const coords = this.getCellCoords(i);
-        let cellClass = 'ludo-cell';
-        if (i === 0) cellClass += ' red-start'; // Blue start
-        if (i === 12) cellClass += ' green-start'; // Pink start
-        
-        this.boardCellsGroup.innerHTML += `
-          <circle cx="${coords.x}" cy="${coords.y}" r="8" class="${cellClass}" data-step="${i}" />
-          <text x="${coords.x}" y="${coords.y + 2.5}" fill="rgba(255,255,255,0.3)" font-size="7" font-weight="600" text-anchor="middle">${i}</text>
-        `;
+      // Draw track cells
+      this.boardCellsGroup.innerHTML = '';
+      const track = this._computeCrossPath();
+      for (let i = 0; i < 52; i++) {
+        const { x, y } = track[i];
+        let fill = 'rgba(255,255,255,0.06)';
+        let stroke = 'rgba(255,255,255,0.2)';
+        // Color start positions
+        if (i === this.START_POS.red) { fill = 'rgba(230,57,70,0.3)'; stroke = this.COLOR_HEX.red; }
+        else if (i === this.START_POS.blue) { fill = 'rgba(29,140,248,0.3)'; stroke = this.COLOR_HEX.blue; }
+        else if (i === this.START_POS.green) { fill = 'rgba(46,204,113,0.3)'; stroke = this.COLOR_HEX.green; }
+        else if (i === this.START_POS.yellow) { fill = 'rgba(241,196,15,0.3)'; stroke = this.COLOR_HEX.yellow; }
+
+        this.boardCellsGroup.innerHTML += `<circle cx="${x}" cy="${y}" r="12" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
       }
 
-      // Draw Home Stretches
-      for (let s = 0; s < 3; s++) {
-        // Blue home path
-        const bCoords = this.getCellCoords(`h${s}`, 'blue');
-        this.boardCellsGroup.innerHTML += `
-          <circle cx="${bCoords.x}" cy="${bCoords.y}" r="7" fill="rgba(0, 240, 255, 0.2)" stroke="var(--game-border-neon-blue)" stroke-width="1" />
-        `;
-        // Pink home path
-        const pCoords = this.getCellCoords(`h${s}`, 'pink');
-        this.boardCellsGroup.innerHTML += `
-          <circle cx="${pCoords.x}" cy="${pCoords.y}" r="7" fill="rgba(255, 0, 127, 0.2)" stroke="var(--game-border-neon-pink)" stroke-width="1" />
-        `;
-      }
+      // Draw home stretches
+      this.COLORS.forEach(color => {
+        for (let s = 0; s < this.HOME_STRETCH_SIZE; s++) {
+          const { x, y } = this.getHomeStretchCoords(color, s);
+          this.boardCellsGroup.innerHTML += `<circle cx="${x}" cy="${y}" r="10" fill="${this.COLOR_HEX[color]}22" stroke="${this.COLOR_HEX[color]}" stroke-width="1.2"/>`;
+        }
+      });
 
       this.renderTokens();
     }
 
     renderTokens() {
       this.tokensGroup.innerHTML = '';
+      const opId = this.opponentId;
 
-      // Draw Blue Tokens
-      this.tokens.blue.forEach((tok, idx) => {
-        const pos = tok.pos === 'yard' ? `yard_${idx}` : tok.pos;
-        const coords = this.getCellCoords(pos, 'blue');
-        const movable = this.currentTurn === this.myColor && this.movableTokenIndices.includes(idx) && this.myColor === 'blue';
-        
-        this.tokensGroup.innerHTML += `
-          <g class="ludo-token color-blue ${movable ? 'movable' : ''}" data-color="blue" data-index="${idx}" transform="translate(${coords.x}, ${coords.y})" onclick="window.handleLudoTokenClick('${this.opponentId}', 'blue', ${idx})">
-            <circle cx="0" cy="0" r="6" fill="#00f0ff" stroke="#000" stroke-width="1.5" />
-            <circle cx="0" cy="0" r="3" fill="#fff" opacity="0.8" />
-          </g>
-        `;
+      this.COLORS.forEach(color => {
+        this.tokens[color].forEach((tok, idx) => {
+          const coords = this.getTokenCoords(color, tok, idx);
+          const isMovable = this.currentTurn === color && this.isMyTurn() && this.movableTokenIndices.includes(idx);
+          const hex = this.COLOR_HEX[color];
+          // Slight offset for stacked tokens
+          const offsetX = (idx % 2) * 8 - 4;
+          const offsetY = Math.floor(idx / 2) * 8 - 4;
+
+          this.tokensGroup.innerHTML += `
+            <g class="ludo-token ${isMovable ? 'movable' : ''}" style="color:${hex}" 
+               data-color="${color}" data-index="${idx}" 
+               transform="translate(${coords.x + offsetX}, ${coords.y + offsetY})"
+               onclick="window.__ludoTokenClick('${opId}', '${color}', ${idx})">
+              <circle cx="0" cy="0" r="9" fill="${hex}" stroke="#000" stroke-width="2" opacity="0.95"/>
+              <circle cx="0" cy="0" r="4" fill="#fff" opacity="0.7"/>
+              <text x="0" y="3" fill="#000" font-size="7" text-anchor="middle" font-weight="700">${idx + 1}</text>
+            </g>
+          `;
+        });
       });
 
-      // Draw Pink Tokens
-      this.tokens.pink.forEach((tok, idx) => {
-        const pos = tok.pos === 'yard' ? `yard_${idx}` : tok.pos;
-        const coords = this.getCellCoords(pos, 'pink');
-        const movable = this.currentTurn === this.myColor && this.movableTokenIndices.includes(idx) && this.myColor === 'pink';
-
-        this.tokensGroup.innerHTML += `
-          <g class="ludo-token color-pink ${movable ? 'movable' : ''}" data-color="pink" data-index="${idx}" transform="translate(${coords.x}, ${coords.y})" onclick="window.handleLudoTokenClick('${this.opponentId}', 'pink', ${idx})">
-            <circle cx="0" cy="0" r="6" fill="#ff007f" stroke="#000" stroke-width="1.5" />
-            <circle cx="0" cy="0" r="3" fill="#fff" opacity="0.8" />
-          </g>
-        `;
-      });
-
-      // Expose globally so inline SVG onclicks can route to this instance
-      window.handleLudoTokenClick = (opponentId, color, index) => {
-        const gw = activeGameWindows[opponentId];
+      window.__ludoTokenClick = (oppId, color, index) => {
+        const gw = activeGameWindows[oppId];
         if (gw && gw.activeGameInstance && gw.activeGameInstance instanceof LudoGame) {
           gw.activeGameInstance.onTokenClick(color, index);
         }
@@ -1417,6 +1508,7 @@
 
     drawDiceDots(val) {
       const dotsGroup = this.diceBox.querySelector('#dice-dots');
+      if (!dotsGroup) return;
       dotsGroup.innerHTML = '';
 
       const dotCoords = {
@@ -1428,8 +1520,7 @@
         6: [[25, 25], [25, 50], [25, 75], [75, 25], [75, 50], [75, 75]]
       };
 
-      const coords = dotCoords[val] || [];
-      coords.forEach(([cx, cy]) => {
+      (dotCoords[val] || []).forEach(([cx, cy]) => {
         dotsGroup.innerHTML += `<circle cx="${cx}" cy="${cy}" r="7" class="dice-dot" />`;
       });
     }
@@ -1442,120 +1533,107 @@
       const text = parent.querySelector('.game-status-text');
 
       if (this.isGameOver) {
-        indicator.className = 'turn-indicator';
+        if (indicator) indicator.className = 'turn-indicator';
         return;
       }
 
-      const isMyTurn = this.myColor === this.currentTurn;
-      indicator.className = 'turn-indicator ' + (isMyTurn ? 'active' : 'opponent');
+      const myTurn = this.isMyTurn();
+      if (indicator) indicator.className = 'turn-indicator ' + (myTurn ? 'active' : 'opponent');
 
-      if (isMyTurn) {
+      // Update turn label color
+      if (this.turnLabel) {
+        this.turnLabel.style.color = this.COLOR_HEX[this.currentTurn];
+        this.turnLabel.textContent = `${this.currentTurn.toUpperCase()}'s Turn`;
+      }
+
+      if (myTurn) {
         if (!this.hasRolledThisTurn) {
-          text.textContent = "Your Turn: ROLL THE DICE!";
+          if (text) text.textContent = `Your Turn (${this.currentTurn.toUpperCase()}): Roll!`;
           this.diceBox.classList.remove('disabled');
         } else if (this.movableTokenIndices.length > 0) {
-          text.textContent = "Click a glowing token to move!";
+          if (text) text.textContent = "Pick a token to move!";
           this.diceBox.classList.add('disabled');
         } else {
-          text.textContent = "No legal moves! Skipping turn...";
+          if (text) text.textContent = "No moves! Passing...";
           this.diceBox.classList.add('disabled');
         }
       } else {
-        text.textContent = "Opponent rolling...";
+        if (text) text.textContent = `Waiting for opponent (${this.currentTurn.toUpperCase()})...`;
         this.diceBox.classList.add('disabled');
       }
     }
 
     rollDice() {
-      if (this.currentTurn !== this.myColor || this.hasRolledThisTurn || this.isGameOver) return;
+      if (!this.isMyTurn() || this.hasRolledThisTurn || this.isGameOver) return;
 
       this.diceBox.classList.add('rolling');
-      
-      // Roll calculation
       const roll = Math.floor(Math.random() * 6) + 1;
-      
+
       setTimeout(() => {
         this.diceBox.classList.remove('rolling');
         this.diceValue = roll;
         this.drawDiceDots(roll);
+        if (this.diceValLabel) this.diceValLabel.textContent = roll;
         this.hasRolledThisTurn = true;
 
         this.calculateMovableTokens(roll);
-
-        // Send roll packet to opponent
-        sendGamePacket(this.opponentId, 'game_move', { action: 'roll', roll });
-
+        sendGamePacket(this.opponentId, 'game_move', { action: 'roll', roll, color: this.currentTurn });
         this.updateStatus();
         this.renderTokens();
 
-        // If no moves, advance turn automatically
         if (this.movableTokenIndices.length === 0) {
-          setTimeout(() => this.passTurn(), 1500);
+          setTimeout(() => this.advanceTurn(), 1200);
         }
-      }, 600);
+      }, 500);
     }
 
     calculateMovableTokens(roll) {
       this.movableTokenIndices = [];
-      const myTokens = this.tokens[this.myColor];
+      const color = this.currentTurn;
+      const myTokens = this.tokens[color];
 
       myTokens.forEach((tok, idx) => {
-        // Goal tokens cannot move
         if (tok.pos === 'goal') return;
 
-        // In yard: requires roll of 6 to deploy (or any roll if we want fast gameplay)
-        // Let's require 6 to deploy from Yard to start space, standard rules!
         if (tok.pos === 'yard') {
           if (roll === 6) this.movableTokenIndices.push(idx);
           return;
         }
 
-        // On track: check path constraints
         if (typeof tok.pos === 'number') {
-          // Check if moving exceeds home stretch bounds
-          const currentProgress = this.getTokenProgress(tok.pos, this.myColor);
-          if (currentProgress + roll <= 27) { // 24 cells on track + 3 in home stretch = goal at 27
+          const progress = this.getProgress(tok.pos, color);
+          const newProgress = progress + roll;
+          // Can't exceed track + home stretch
+          if (newProgress <= this.TRACK_SIZE + this.HOME_STRETCH_SIZE) {
             this.movableTokenIndices.push(idx);
           }
           return;
         }
 
-        // In home stretch: must land exactly
-        if (tok.pos.startsWith('h')) {
-          const step = parseInt(tok.pos.charAt(1));
-          if (step + roll <= 3) { // h0 (step 0), h1 (1), h2 (2), goal at index 3
+        if (typeof tok.pos === 'string' && tok.pos.startsWith('h')) {
+          const step = parseInt(tok.pos.substring(1));
+          if (step + roll <= this.HOME_STRETCH_SIZE) {
             this.movableTokenIndices.push(idx);
           }
         }
       });
     }
 
-    // Get track distance progress for user color
-    getTokenProgress(trackIndex, color) {
-      if (color === 'blue') {
-        // Blue starts at index 0, circles up to index 22, then exits
-        return trackIndex;
-      } else {
-        // Pink starts at 12, loops around index 23 -> 0 -> index 10, then exits
-        if (trackIndex >= 12) return trackIndex - 12;
-        return trackIndex + 12;
-      }
+    // How many steps a token has traveled from its start
+    getProgress(trackPos, color) {
+      const start = this.START_POS[color];
+      if (trackPos >= start) return trackPos - start;
+      return (this.TRACK_SIZE - start) + trackPos;
     }
 
-    // Reverse progress distance back to track coordinate index
-    getProgressToTrackIndex(progress, color) {
-      if (color === 'blue') {
-        return progress;
-      } else {
-        const val = progress + 12;
-        return val >= 24 ? val - 24 : val;
-      }
+    // Convert progress back to track position
+    progressToTrack(progress, color) {
+      return (this.START_POS[color] + progress) % this.TRACK_SIZE;
     }
 
     onTokenClick(color, index) {
-      if (this.currentTurn !== this.myColor || color !== this.myColor || !this.movableTokenIndices.includes(index)) return;
-
-      this.moveToken(this.myColor, index, this.diceValue);
+      if (!this.isMyTurn() || color !== this.currentTurn || !this.movableTokenIndices.includes(index)) return;
+      this.moveToken(color, index, this.diceValue);
     }
 
     moveToken(color, index, roll) {
@@ -1563,64 +1641,75 @@
       let newPos = tok.pos;
 
       if (tok.pos === 'yard') {
-        newPos = color === 'blue' ? 0 : 12; // deploy
-      } 
-      else if (typeof tok.pos === 'number') {
-        const progress = this.getTokenProgress(tok.pos, color);
-        const nextProgress = progress + roll;
-        if (nextProgress >= 24) {
-          const homeIdx = nextProgress - 24;
-          newPos = homeIdx === 3 ? 'goal' : `h${homeIdx}`;
+        // Deploy to start position
+        newPos = this.START_POS[color];
+      } else if (typeof tok.pos === 'number') {
+        const progress = this.getProgress(tok.pos, color);
+        const newProgress = progress + roll;
+        if (newProgress >= this.TRACK_SIZE) {
+          // Enter home stretch
+          const homeStep = newProgress - this.TRACK_SIZE;
+          newPos = homeStep >= this.HOME_STRETCH_SIZE ? 'goal' : `h${homeStep}`;
         } else {
-          newPos = this.getProgressToTrackIndex(nextProgress, color);
+          newPos = this.progressToTrack(newProgress, color);
         }
-      } 
-      else if (tok.pos.startsWith('h')) {
-        const step = parseInt(tok.pos.charAt(1));
-        const nextStep = step + roll;
-        newPos = nextStep === 3 ? 'goal' : `h${nextStep}`;
+      } else if (typeof tok.pos === 'string' && tok.pos.startsWith('h')) {
+        const step = parseInt(tok.pos.substring(1));
+        const newStep = step + roll;
+        newPos = newStep >= this.HOME_STRETCH_SIZE ? 'goal' : `h${newStep}`;
       }
 
       tok.pos = newPos;
 
-      // Handle Captures (if landing on opponent's token on track)
+      // Capture logic: if landing on track, send opponent tokens back to yard
       if (typeof newPos === 'number') {
-        const oppColor = color === 'blue' ? 'pink' : 'blue';
-        const oppTokens = this.tokens[oppColor];
-        oppTokens.forEach(ot => {
-          if (ot.pos === newPos) {
-            ot.pos = 'yard'; // Send captured token back to base!
-          }
+        this.COLORS.forEach(otherColor => {
+          if (otherColor === color) return;
+          this.tokens[otherColor].forEach(otherTok => {
+            if (otherTok.pos === newPos) {
+              otherTok.pos = 'yard'; // Captured!
+            }
+          });
         });
       }
 
-      // Send move packet
-      if (color === this.myColor) {
-        sendGamePacket(this.opponentId, 'game_move', { action: 'move', index, roll });
+      // Broadcast move
+      if (this.myColors.includes(color)) {
+        sendGamePacket(this.opponentId, 'game_move', { action: 'move', color, index, roll });
       }
 
       this.movableTokenIndices = [];
       this.hasRolledThisTurn = false;
       this.renderTokens();
 
-      // Check win condition
+      // Win condition: all 4 tokens of a color reached goal
       if (this.tokens[color].every(t => t.pos === 'goal')) {
         this.endGame(color);
         return;
       }
 
-      // Standard Ludo Rule: rolling a 6 awards an extra turn!
+      // Extra turn on 6 (max 3 consecutive to prevent infinite loop)
       if (roll === 6) {
-        this.updateStatus();
+        this.consecutiveSixes++;
+        if (this.consecutiveSixes >= 3) {
+          this.consecutiveSixes = 0;
+          this.advanceTurn();
+        } else {
+          this.updateStatus();
+        }
       } else {
-        this.passTurn();
+        this.consecutiveSixes = 0;
+        this.advanceTurn();
       }
     }
 
-    passTurn() {
-      this.currentTurn = this.currentTurn === 'blue' ? 'pink' : 'blue';
+    advanceTurn() {
+      const order = ['red', 'blue', 'green', 'yellow'];
+      const idx = order.indexOf(this.currentTurn);
+      this.currentTurn = order[(idx + 1) % 4];
       this.hasRolledThisTurn = false;
       this.movableTokenIndices = [];
+      this.consecutiveSixes = 0;
       this.updateStatus();
       this.renderTokens();
     }
@@ -1629,12 +1718,13 @@
       if (move.action === 'roll') {
         this.diceValue = move.roll;
         this.drawDiceDots(move.roll);
+        if (this.diceValLabel) this.diceValLabel.textContent = move.roll;
         this.hasRolledThisTurn = true;
+        this.calculateMovableTokens(move.roll);
         this.updateStatus();
-      } 
-      else if (move.action === 'move') {
-        const oppColor = this.myColor === 'blue' ? 'pink' : 'blue';
-        this.moveToken(oppColor, move.index, move.roll);
+        this.renderTokens();
+      } else if (move.action === 'move') {
+        this.moveToken(move.color || this.currentTurn, move.index, move.roll);
       }
     }
 
@@ -1646,14 +1736,14 @@
       let title = "";
       let subtitle = "";
 
-      if (winnerColor === this.myColor) {
+      if (this.myColors.includes(winnerColor)) {
         title = "Victory! 🏆";
-        subtitle = "Both tokens successfully made it home.";
+        subtitle = `${winnerColor.toUpperCase()} got all tokens home!`;
         if (roles.isMeUser1) scores.winsUser1++;
         else scores.winsUser2++;
       } else {
         title = "Defeat 😢";
-        subtitle = "Opponent got their tokens home first.";
+        subtitle = `${winnerColor.toUpperCase()} reached home first.`;
         if (roles.isMeUser1) scores.winsUser2++;
         else scores.winsUser1++;
       }
@@ -1681,13 +1771,15 @@
 
     reset(sendRestart) {
       this.isGameOver = false;
-      this.tokens = {
-        blue: [ { pos: 'yard' }, { pos: 'yard' } ],
-        pink: [ { pos: 'yard' }, { pos: 'yard' } ]
-      };
-      this.currentTurn = 'blue';
+      this.COLORS.forEach(c => {
+        this.tokens[c] = [
+          { pos: 'yard' }, { pos: 'yard' }, { pos: 'yard' }, { pos: 'yard' }
+        ];
+      });
+      this.currentTurn = 'red';
       this.hasRolledThisTurn = false;
       this.movableTokenIndices = [];
+      this.consecutiveSixes = 0;
 
       const overlay = this.container.querySelector('.game-over-overlay');
       if (overlay) overlay.remove();
