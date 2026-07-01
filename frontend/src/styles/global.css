@@ -1,0 +1,491 @@
+/* ==========================================================================
+   ChatCorner – Global Styles
+   SEO Content Hub + Chat Application
+   ========================================================================== */
+
+:root {
+  --color-primary: #8b6ded;
+  --color-primary-dark: #6b4fcf;
+  --color-bg: #0d1117;
+  --color-surface: #161b22;
+  --color-surface-light: #21262d;
+  --color-text: #e6edf3;
+  --color-text-muted: #8b949e;
+  --color-border: #30363d;
+  --color-accent: #58a6ff;
+  --font-body: 'Exo 2', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-heading: 'Orbitron', 'Exo 2', sans-serif;
+  --max-width: 1200px;
+  --radius: 8px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: var(--color-primary);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ==========================================================================
+   Site Header & Navigation
+   ========================================================================== */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  backdrop-filter: blur(8px);
+}
+
+.site-nav {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-logo {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.site-logo:hover {
+  color: var(--color-primary-dark);
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 1.5rem;
+}
+
+.nav-links a {
+  color: var(--color-text);
+  font-weight: 500;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  transition: background 0.2s, color 0.2s;
+}
+
+.nav-links a:hover {
+  background: var(--color-surface-light);
+  color: var(--color-primary);
+}
+
+/* ==========================================================================
+   Main Content Area
+   ========================================================================== */
+
+.site-main {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  min-height: 60vh;
+}
+
+/* ==========================================================================
+   Footer
+   ========================================================================== */
+
+.site-footer {
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.site-footer nav {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+}
+
+/* ==========================================================================
+   Hero Section
+   ========================================================================== */
+
+.hero-section {
+  text-align: center;
+  padding: 4rem 1rem;
+}
+
+.hero-section h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  margin-bottom: 0.5rem;
+}
+
+.hero-tagline {
+  color: var(--color-text-muted);
+  font-size: 1.2rem;
+  margin-bottom: 2rem;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   CTA Buttons
+   ========================================================================== */
+
+.cta-button {
+  display: inline-block;
+  padding: 0.8rem 1.8rem;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 1rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.cta-button.primary,
+.chat-cta-widget .cta-button {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.cta-button.primary:hover,
+.chat-cta-widget .cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(139, 109, 237, 0.4);
+  color: #fff;
+}
+
+.cta-button.secondary {
+  background: var(--color-surface-light);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.cta-button.secondary:hover {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+}
+
+/* ==========================================================================
+   Grid Layouts
+   ========================================================================== */
+
+.category-grid,
+.articles-grid,
+.related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.category-card,
+.article-card,
+.related-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.category-card:hover,
+.article-card:hover,
+.related-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+}
+
+.category-card h3,
+.article-card h3,
+.related-card h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.article-card-meta,
+.related-meta {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  display: flex;
+  gap: 1rem;
+}
+
+/* ==========================================================================
+   Blog Directory
+   ========================================================================== */
+
+.blog-directory h1,
+.category-page h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.blog-intro,
+.category-description {
+  color: var(--color-text-muted);
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.categories-section,
+.all-posts-section {
+  margin-bottom: 3rem;
+}
+
+/* ==========================================================================
+   Article Page Layout
+   ========================================================================== */
+
+.article-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .article-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.article-content {
+  min-width: 0;
+}
+
+.article-header h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  line-height: 1.3;
+  margin-bottom: 0.75rem;
+}
+
+.article-meta {
+  display: flex;
+  gap: 1.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.article-body {
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.article-body h2 {
+  font-size: 1.4rem;
+  margin: 2rem 0 1rem;
+  color: var(--color-primary);
+}
+
+.article-body p {
+  margin-bottom: 1rem;
+}
+
+/* ==========================================================================
+   Breadcrumb
+   ========================================================================== */
+
+.breadcrumb ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.breadcrumb li::after {
+  content: '/';
+  margin-left: 0.5rem;
+  color: var(--color-border);
+}
+
+.breadcrumb li:last-child::after {
+  content: '';
+}
+
+.breadcrumb li[aria-current="page"] {
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Chat CTA Widget
+   ========================================================================== */
+
+.chat-cta-widget {
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  position: sticky;
+  top: 5rem;
+}
+
+.chat-cta-widget h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.chat-cta-widget p {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+/* ==========================================================================
+   Related Posts
+   ========================================================================== */
+
+.related-posts {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.related-posts h2 {
+  margin-bottom: 0.5rem;
+}
+
+/* ==========================================================================
+   RTL Layout Support (Urdu / Arabic)
+   ========================================================================== */
+
+.rtl-layout {
+  direction: rtl;
+  text-align: right;
+}
+
+.rtl-layout .breadcrumb ol {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+}
+
+.rtl-layout .breadcrumb li::after {
+  content: '\\';
+  margin-left: 0;
+  margin-right: 0.5rem;
+}
+
+.rtl-layout .article-body {
+  font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', 'Segoe UI', Tahoma, sans-serif;
+  font-size: 1.15rem;
+  line-height: 2.2;
+  text-align: justify;
+}
+
+.rtl-layout .article-header h1 {
+  font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', var(--font-heading);
+}
+
+/* ==========================================================================
+   Chat Page
+   ========================================================================== */
+
+.chat-page h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.chat-description {
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.chat-embed-container {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.chat-iframe {
+  border: none;
+  display: block;
+}
+
+/* ==========================================================================
+   Error Pages
+   ========================================================================== */
+
+.error-page {
+  text-align: center;
+  padding: 4rem 1rem;
+}
+
+.error-page h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+/* ==========================================================================
+   Utility
+   ========================================================================== */
+
+.home-cta-section {
+  margin-top: 3rem;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.content-categories,
+.latest-articles {
+  margin-top: 3rem;
+}
+
+.content-categories h2,
+.latest-articles h2 {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.no-articles {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
