@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ChatCorner – Real-Time Chat & Rooms</title>
   <meta name="description" content="ChatCorner - Join public chatrooms, connect with users, make voice calls, send voice notes, and share media in real-time."/>
   
@@ -10,19 +10,45 @@
   <meta property="og:type" content="website"/>
   <meta property="og:title" content="ChatCorner – Real-Time Chat & Rooms"/>
   <meta property="og:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
-  <meta property="og:image" content="https://chatcorner.qzz.io/manifest.json"/>
+  <meta property="og:image" content="https://chatcorner.qzz.io/og-image.svg"/>
   <meta property="og:url" content="https://chatcorner.qzz.io/"/>
   
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image"/>
   <meta name="twitter:title" content="ChatCorner – Real-Time Chat & Rooms"/>
   <meta name="twitter:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
+  <meta name="twitter:image" content="https://chatcorner.qzz.io/og-image.svg"/>
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://chatcorner.qzz.io/chat.html"/>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+  <link rel="apple-touch-icon" href="favicon.svg"/>
 
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#8b6ded"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="ChatCorner"/>
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "ChatCorner",
+    "url": "https://chatcorner.qzz.io/",
+    "description": "Real-time chat platform with public rooms, voice calls, private messages, and media sharing.",
+    "applicationCategory": "CommunicationApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
   <!-- Security headers -->
   <meta name="referrer" content="strict-origin-when-cross-origin"/>
   <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
@@ -70,6 +96,9 @@
   </script>
 </head>
 <body class="chat-page">
+
+  <!-- SEO: Visually hidden h1 for search engines and screen readers -->
+  <h1 class="sr-only">ChatCorner – Real-Time Chat Rooms with Voice Calls and Private Messages</h1>
 
   <!-- ── Connection Error Banner ────────────────────────────────────────────── -->
   <div id="connection-error-banner" class="connection-error-banner hidden" role="alert">
