@@ -7,6 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
   <meta http-equiv="X-Frame-Options" content="DENY" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta name="robots" content="noindex, nofollow" />
   <title>ChatCorner Admin Login - Secure Access</title>
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/admin.css" />
@@ -105,7 +106,7 @@
     </form>
 
     <p class="admin-note">
-      🔒 Only users with admin privileges can access this dashboard.<br>
+      🔒 Only the owner can access this dashboard.<br>
       <strong>All login attempts are logged and monitored.</strong>
     </p>
     
@@ -197,11 +198,11 @@
 
       const { data: profile } = await sbClient
         .from('profiles')
-        .select('id,is_admin')
+        .select('id,is_owner')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (profile?.is_admin) {
+      if (profile?.is_owner) {
         const isSessionValid = window.adminSecurityManager.validateAdminSession();
         if (isSessionValid) {
           window.location.href = 'admin.html';
@@ -240,7 +241,7 @@
         // Lookup user by username
         const { data: profile, error: lookupErr } = await sbClient
           .from('profiles')
-          .select('id,email,is_admin,has_2fa_enabled,two_fa_secret')
+          .select('id,email,is_admin,is_owner,has_2fa_enabled,two_fa_secret')
           .eq('username', username)
           .maybeSingle();
 
@@ -274,16 +275,16 @@
           return;
         }
 
-        // Verify admin status
+        // Verify owner status - only owner-level users can access admin
         const { data: freshProfile, error: profileErr } = await sbClient
           .from('profiles')
-          .select('id,is_admin')
+          .select('id,is_admin,is_owner')
           .eq('id', data.user.id)
           .maybeSingle();
 
-        if (profileErr || !freshProfile?.is_admin) {
+        if (profileErr || !freshProfile?.is_owner) {
           await sbClient.auth.signOut();
-          window.adminSecurityManager.recordLoginAttempt(username, false, { reason: 'NOT_ADMIN' });
+          window.adminSecurityManager.recordLoginAttempt(username, false, { reason: 'NOT_OWNER' });
           window.securityManager.logSecurityEvent('UNAUTHORIZED_ADMIN_ACCESS_ATTEMPT', { username });
           setLoginMsg(window.securityManager.getGenericErrorMessage(), 'error');
           loginBtn.disabled = false;
