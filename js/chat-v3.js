@@ -2681,6 +2681,68 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+/* ════════════════════════════════════════════════════════════════
+   Context Menu for Messages — Right-click to Delete
+════════════════════════════════════════════════════════════════ */
+(function initMessageContextMenu() {
+  let ctxMenu = null;
+
+  function removeContextMenu() {
+    if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+  }
+
+  document.addEventListener('click', removeContextMenu);
+  document.addEventListener('scroll', removeContextMenu, true);
+
+  document.addEventListener('contextmenu', (e) => {
+    const row = e.target.closest('.msg-row');
+    if (!row) return;
+
+    const targetUserId = row.dataset.userId || '';
+    const messageId = row.dataset.messageId || '';
+    if (!messageId) return;
+    if (!canDeleteMessageForUserId(targetUserId)) return;
+
+    e.preventDefault();
+    removeContextMenu();
+
+    ctxMenu = document.createElement('div');
+    ctxMenu.className = 'msg-context-menu';
+
+    const targetUsername = row.querySelector('.msg-username')?.textContent || 'Unknown';
+    const isOwn = targetUserId === currentUser?.id;
+
+    ctxMenu.innerHTML = `
+      <button type="button" class="msg-ctx-delete" data-msg-id="${escHtml(messageId)}" data-user-id="${escHtml(targetUserId)}">
+        🗑️ ${isOwn ? 'Delete Message' : 'Delete (Mod)'}
+      </button>
+    `;
+
+    ctxMenu.style.position = 'fixed';
+    ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+    ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 50) + 'px';
+    ctxMenu.style.zIndex = '9999';
+
+    document.body.appendChild(ctxMenu);
+
+    ctxMenu.querySelector('.msg-ctx-delete').onclick = async () => {
+      removeContextMenu();
+      const deleteBtn = row.querySelector('.msg-local-delete');
+      row.classList.add('is-deleting');
+      if (deleteBtn) { deleteBtn.disabled = true; deleteBtn.textContent = '…'; }
+      archiveClearedMessageRows([row], 'single-message-remove');
+      try {
+        await deleteMessageForEveryone(messageId, targetUserId, targetUsername);
+        removeMessageNodeById(messageId);
+      } catch (error) {
+        row.classList.remove('is-deleting');
+        if (deleteBtn) { deleteBtn.disabled = false; deleteBtn.textContent = '🗑️'; }
+        showChatToast(`Could not delete message: ${error.message || 'Please try again.'}`, 'warning', 3200);
+      }
+    };
+  });
+})();
+
 document.addEventListener('click', async (event) => {
   const reportBtn = event.target.closest('.msg-local-report');
   if (!reportBtn) return;

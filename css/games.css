@@ -92,6 +92,11 @@
   height: 480px;
   min-width: 320px;
   min-height: 400px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 100px);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   background: var(--game-bg-frosted);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -101,12 +106,12 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  font-family: var(--game-font-title);
+  font-family: var(--game-font-title), 'Segoe UI', system-ui, sans-serif;
   color: var(--game-text-light);
   overflow: hidden;
   pointer-events: auto;
   resize: both;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.2s ease;
 }
 .game-window.hidden {
   display: none !important;
@@ -464,15 +469,15 @@
 }
 
 /* ==========================================================================
-   GAME 3: STREAMLINED LUDO BOARD STYLE
+   GAME 3: PAKISTANI-STYLE 4-PLAYER LUDO BOARD
    ========================================================================== */
 .ludo-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 290px;
-  gap: 12px;
+  max-width: 360px;
+  gap: 10px;
 }
 .ludo-board-wrapper {
   position: relative;
@@ -482,7 +487,7 @@
   border: 3px solid #000;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.6);
-  padding: 8px;
+  padding: 4px;
 }
 .ludo-board-svg {
   width: 100%;
@@ -583,17 +588,12 @@
 .ludo-token {
   filter: drop-shadow(0 3px 3px rgba(0,0,0,0.6));
   cursor: pointer;
-  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), filter 0.2s;
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), filter 0.2s;
 }
 .ludo-token.movable {
   animation: tokenBounce 0.8s infinite alternate;
   filter: drop-shadow(0 0 8px currentColor);
-}
-.ludo-token.color-blue {
-  color: var(--game-border-neon-blue);
-}
-.ludo-token.color-pink {
-  color: var(--game-border-neon-pink);
+  cursor: pointer;
 }
 @keyframes tokenBounce {
   from { transform: translateY(0); }
