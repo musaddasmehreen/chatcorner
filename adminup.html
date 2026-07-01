@@ -3,38 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src 'self' https://zefcqrnhaeounzdmjscc.supabase.co https://api.ipify.org;">
-  <meta http-equiv="X-Frame-Options" content="DENY" />
-  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>ChatCorner Admin Login - Secure Access</title>
+  <title>ChatCorner Admin Login</title>
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/admin.css" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
   <style>
-    .security-warning { color: #ff6600; font-size: 12px; margin-top: 8px; padding: 8px; background: rgba(255, 102, 0, 0.1); border-radius: 4px; }
-    .lockout-msg { color: #ff0000; font-weight: bold; padding: 12px; background: rgba(255, 0, 0, 0.1); border-radius: 4px; margin: 10px 0; }
-    .twofa-container { margin-top: 20px; padding: 15px; background: rgba(0, 255, 0, 0.05); border: 1px solid #00ff00; border-radius: 4px; }
-    .twofa-input { font-size: 20px; letter-spacing: 8px; text-align: center; width: 100%; padding: 12px; font-family: monospace; }
-    .security-question-container { margin-top: 20px; padding: 15px; background: rgba(0, 150, 255, 0.05); border: 1px solid #0096ff; border-radius: 4px; }
-    .security-question-input { width: 100%; padding: 12px; margin-top: 8px; }
-    .device-info { font-size: 11px; color: #aaa; margin-top: 10px; padding-top: 10px; border-top: 1px solid #333; }
-    .attempt-counter { color: #ff9900; font-size: 12px; margin-top: 8px; }
-    .success-state { color: #00ff00; }
-    .error-state { color: #ff0000; }
     .hidden { display: none !important; }
-    .question-hint { font-size: 11px; color: #0096ff; margin-top: 5px; font-style: italic; }
   </style>
 </head>
 <body class="auth-page admin-auth-page">
   <div class="auth-container admin-auth-container">
     <div class="logo-area">
       <h1 class="logo">🛡️ ChatCorner</h1>
-      <p class="tagline">Admin Access Portal - Enterprise Secured</p>
+      <p class="tagline">Admin Access Portal</p>
     </div>
 
-    <!-- Login Form -->
     <form id="admin-login-form" class="auth-form active">
       <label class="field-label" for="admin-username">Username</label>
       <input 
@@ -58,64 +42,11 @@
       <button class="btn-primary" id="admin-login-btn" type="submit">Login</button>
       
       <div id="admin-login-msg" class="msg"></div>
-      <div id="attempt-info" class="attempt-counter"></div>
-      <div id="lockout-warning" class="lockout-msg hidden"></div>
-    </form>
-
-    <!-- Security Question Form (Hidden Initially) -->
-    <form id="security-question-form" class="auth-form hidden">
-      <div class="security-question-container">
-        <label class="field-label">Security Verification</label>
-        <p id="question-text" style="font-size: 14px; color: #fff; margin: 12px 0;">Loading question...</p>
-        <input 
-          type="text" 
-          id="security-answer" 
-          class="security-question-input" 
-          placeholder="Enter your answer" 
-          required 
-          spellcheck="false"
-        />
-        <p class="question-hint" id="question-hint"></p>
-        <button class="btn-primary" type="submit">Verify Answer</button>
-        <button class="btn ghost" type="button" id="cancel-security-question-btn">Back</button>
-      </div>
-      <div id="security-question-msg" class="msg"></div>
-    </form>
-
-    <!-- 2FA Form (Hidden Initially) -->
-    <form id="twofa-form" class="auth-form hidden">
-      <div class="twofa-container">
-        <label class="field-label">Two-Factor Authentication</label>
-        <p style="font-size: 12px; color: #aaa; margin-bottom: 12px;">
-          Enter the 6-digit code from your authenticator app
-        </p>
-        <input 
-          type="text" 
-          id="twofa-code" 
-          class="twofa-input" 
-          placeholder="000000" 
-          maxlength="6"
-          inputmode="numeric"
-          pattern="[0-9]{6}"
-          required 
-        />
-        <button class="btn-primary" type="submit">Verify Code</button>
-        <button class="btn ghost" type="button" id="cancel-twofa-btn">Back</button>
-      </div>
-      <div id="twofa-msg" class="msg"></div>
     </form>
 
     <p class="admin-note">
-      🔒 Only the owner can access this dashboard.<br>
-      <strong>All login attempts are logged and monitored.</strong>
+      🔒 Only users with admin privileges can access this dashboard.
     </p>
-    
-    <div class="device-info">
-      <small>
-        Device: <span id="device-type">Detecting...</span><br>
-        Security Level: <span id="security-score">Calculating...</span>
-      </small>
-    </div>
 
     <a class="back-link" href="chat.html" title="Return to the chat app">← Back to Chat</a>
   </div>
@@ -125,11 +56,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/security.js"></script>
-  <script src="js/admin-security.js"></script>
-  <script src="js/security-questions.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/auth.js"></script>
   <script src="js/admin-login.js"></script>
 </body>
 </html>

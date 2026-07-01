@@ -19,35 +19,27 @@
 <body class="admin-page">
   <!-- Security Validation Guard -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/security.js"></script>
-  <script src="js/admin-security.js"></script>
   <script src="js/config.js"></script>
   <script>
-    // Comprehensive security validation BEFORE rendering
+    // Simple security validation - check Supabase auth + owner status
     (async function securityGate() {
-      // Check session validity first
-      if (!window.adminSecurityManager.validateAdminSession()) {
+      // Check if admin_authenticated flag exists
+      if (!sessionStorage.getItem('admin_authenticated')) {
         document.documentElement.style.display = 'none';
         window.location.replace('adminup.html?denied=1');
         return;
-      }
-
-      // Check for device fingerprint match
-      const anomaly = await window.securityManager.detectAnomalousActivity();
-      if (anomaly.deviceMismatch) {
-        window.securityManager.logSecurityEvent('ADMIN_DEVICE_MISMATCH', anomaly);
-        // Allow but log - could be legitimate (new browser/device)
       }
 
       // Check Supabase auth
       const { data: { session } } = await sbClient.auth.getSession();
       if (!session?.user) {
         document.documentElement.style.display = 'none';
+        sessionStorage.removeItem('admin_authenticated');
         window.location.replace('adminup.html');
         return;
       }
 
-      // Verify admin status
+      // Verify admin/owner status
       const { data: profile } = await sbClient
         .from('profiles')
         .select('is_admin,is_owner,username,email')
@@ -56,20 +48,17 @@
 
       if (!profile?.is_owner) {
         await sbClient.auth.signOut();
-        window.adminSecurityManager.endAdminSession('ADMIN_FLAG_REVOKED');
+        sessionStorage.removeItem('admin_authenticated');
         document.documentElement.style.display = 'none';
         window.location.replace('adminup.html?denied=1');
         return;
       }
 
-      // Log admin access
-      window.securityManager.logSecurityEvent('ADMIN_PANEL_ACCESSED', {
-        username: profile.username || profile.email,
-        timestamp: new Date().toISOString()
-      });
-
       // Display admin name in banner
-      document.getElementById('admin-name').textContent = profile.username || profile.email || 'Admin';
+      const adminNameEl = document.getElementById('admin-name');
+      if (adminNameEl) {
+        adminNameEl.textContent = profile.username || profile.email || 'Admin';
+      }
     })();
   </script>
 
@@ -342,42 +331,12 @@
   <script src="js/admin.js"></script>
 
   <script>
-    // Session monitoring and display
-    setInterval(() => {
-      const summary = window.adminSecurityManager.getSessionSummary();
-      if (summary) {
-        const sessionEl = document.getElementById('session-info');
-        sessionEl.classList.remove('hidden');
-        sessionEl.innerHTML = `
-          ✓ Session active<br>
-          ${Math.floor(summary.lastActivity / 1000)}s idle<br>
-          Actions: ${summary.activityCount}
-        `;
-      }
-    }, 5000);
-
     // Logout handler
     document.getElementById('admin-logout').addEventListener('click', async () => {
-      window.adminSecurityManager.endAdminSession('USER_LOGOUT');
+      sessionStorage.removeItem('admin_authenticated');
       await sbClient.auth.signOut();
       window.location.href = 'adminup.html';
     });
-
-    // Detect intrusions/anomalies
-    document.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        window.securityManager.logSecurityEvent('ADMIN_SAVE_SHORTCUT_BLOCKED', {});
-      }
-    });
-
-    // Warn on suspicious activity
-    setInterval(() => {
-      const suspicion = window.adminSecurityManager.detectSuspiciousActivity();
-      if (suspicion.suspicious) {
-        window.securityManager.logSecurityEvent('SUSPICIOUS_ADMIN_ACTIVITY_DETECTED', suspicion);
-      }
-    }, 10000);
   </script>
 </body>
 </html>
