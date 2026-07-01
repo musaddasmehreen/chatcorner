@@ -1639,7 +1639,7 @@ function renderUserList() {
       ${roleBadge}
       <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${escHtml(u.username)}</button>
       ${viewerEye}
-      <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${u.userId}" title="View camera">\ud83d\udcf7</button>
+      <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${escHtml(u.userId)}" title="View camera">\ud83d\udcf7</button>
     `;
 
     const nameBtn = li.querySelector('.user-name-btn');
@@ -3640,7 +3640,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
               <div class="cc-profile-color-row">
                 <input type="text" id="cc-edit-nickcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.nick_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="updateColorPreview(this, 'cc-edit-nickcolor-picker')" />
                 <div class="cc-profile-color-picker-btn">
-                  <input type="color" id="cc-edit-nickcolor-picker" value="${profile.nick_color || '#ffffff'}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-nickcolor')" />
+                  <input type="color" id="cc-edit-nickcolor-picker" value="${escHtml(profile.nick_color || '#ffffff')}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-nickcolor')" />
                 </div>
               </div>
               <div class="cc-profile-checkbox-row">
@@ -3654,7 +3654,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
               <div class="cc-profile-color-row">
                 <input type="text" id="cc-edit-msgcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.msg_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="updateColorPreview(this, 'cc-edit-msgcolor-picker')" />
                 <div class="cc-profile-color-picker-btn">
-                  <input type="color" id="cc-edit-msgcolor-picker" value="${profile.msg_color || '#ffffff'}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-msgcolor')" />
+                  <input type="color" id="cc-edit-msgcolor-picker" value="${escHtml(profile.msg_color || '#ffffff')}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-msgcolor')" />
                 </div>
               </div>
               <div class="cc-profile-checkbox-row">
