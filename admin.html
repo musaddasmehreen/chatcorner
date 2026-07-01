@@ -7,6 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
   <meta http-equiv="X-Frame-Options" content="DENY" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta name="robots" content="noindex, nofollow" />
   <title>ChatCorner Admin Dashboard</title>
   <link rel="stylesheet" href="css/admin.css" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
@@ -49,11 +50,11 @@
       // Verify admin status
       const { data: profile } = await sbClient
         .from('profiles')
-        .select('is_admin,username,email')
+        .select('is_admin,is_owner,username,email')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (!profile?.is_admin) {
+      if (!profile?.is_owner) {
         await sbClient.auth.signOut();
         window.adminSecurityManager.endAdminSession('ADMIN_FLAG_REVOKED');
         document.documentElement.style.display = 'none';
