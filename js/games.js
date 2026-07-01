@@ -158,13 +158,15 @@
       const gameName = gameType === 'tictactoe' ? 'Tic-Tac-Toe' : gameType === 'chess' ? 'Chess' : 'Ludo';
       const box = getPmMessagesBox(fromUserId);
       if (box) {
+        const safeFromUserId = escHtml(fromUserId);
+        const safeGameType = escHtml(gameType);
         // Prevent duplicate invitation UI
-        if (box.querySelector(`[data-invite-from="${fromUserId}"][data-game="${gameType}"]`)) return;
+        if (box.querySelector(`[data-invite-from="${safeFromUserId}"][data-game="${safeGameType}"]`)) return;
 
         const row = document.createElement('div');
         row.className = 'pm-msg';
         row.innerHTML = `
-          <div class="pm-game-invite-bubble" data-invite-from="${fromUserId}" data-game="${gameType}">
+          <div class="pm-game-invite-bubble" data-invite-from="${safeFromUserId}" data-game="${safeGameType}">
             <div class="pm-game-invite-title">
               <span>🎮</span>
               <span><strong>${escHtml(payload.username || 'Opponent')}</strong> invited you to play <strong>${gameName}</strong>!</span>
