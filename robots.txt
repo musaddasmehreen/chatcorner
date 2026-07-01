@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /adminup.html
+Disallow: /wp-admin.html
+Disallow: /setup-admin.html
+Disallow: /mypanel.html
+
+Sitemap: https://chatcorner.qzz.io/sitemap.xml
