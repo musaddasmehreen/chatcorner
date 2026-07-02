@@ -799,10 +799,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   const initialRooms = roomsResult.data || [];
 
   if (!prof) {
-    const username = 'User_' + currentUser.id.substr(0,5);
-    await sbClient.from('profiles').insert({ id: currentUser.id, username, avatar_color: randomColor(), is_registered: false });
-    const { data: refetchedProf } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
-    prof = refetchedProf || {
+    const username = 'Guest' + currentUser.id.substr(0,4);
+    // [EPHEMERAL GUEST FIX] Do not insert guest into DB 'profiles' table
+    // Guests only exist in memory and in the messages table
+    prof = {
       id: currentUser.id,
       username: username,
       avatar_color: randomColor(),
