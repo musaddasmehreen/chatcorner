@@ -347,9 +347,32 @@
   <script>
     // Logout handler
     document.getElementById('admin-logout').addEventListener('click', async () => {
-      sessionStorage.removeItem('admin_authenticated');
-      await sbClient.auth.signOut();
-      window.location.href = 'adminup.html';
+      // 1. Clear the enterprise security session
+      if (window.adminSecurityManager) {
+        window.adminSecurityManager.endAdminSession('USER_LOGOUT');
+      } else {
+        sessionStorage.removeItem('admin_sec_session');
+      }
+      
+      // 2. Sign out of Supabase
+      try {
+        await sbClient.auth.signOut();
+      } catch (e) {
+        console.warn('Supabase sign out error:', e);
+      }
+      
+      // 3. Force-clear local storage tokens to prevent auto-login loop
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sb-') && key.includes('-auth-token')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      // 4. Redirect to login
+      window.location.replace('adminup.html');
     });
   </script>
 </body>
