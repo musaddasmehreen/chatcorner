@@ -149,10 +149,12 @@ window.ccSanitize = (function() {
     return s.slice(0, maxLen);
   }
 
-  // Validate avatar / profile URLs — must be http(s) pointing to an image
+  // Validate avatar / profile URLs — must be http(s) pointing to an image OR data-URL
   function avatarUrl(raw) {
     if (!raw) return '';
     const s = String(raw).trim();
+    // Allow data-URLs for images
+    if (/^data:image\/(png|jpe?g|gif|webp|avif|svg|ico);base64,/i.test(s)) return s;
     // Only allow http(s)
     if (!/^https?:\/\//i.test(s)) return '';
     // Must look like an image or a recognised CDN path

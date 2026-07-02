@@ -7,6 +7,23 @@ const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arcti
 const GUEST_VOICE_LIMIT = 2;
 const EMOJI_GROUPS = [
   {
+    label: 'Super Icons',
+    items: [
+      { emoji: '[super-wreath]', title: 'Wreath' },
+      { emoji: '[super-car]', title: 'Sports Car' },
+      { emoji: '[super-dance]', title: 'Silhouette Girl' },
+      { emoji: '[super-screamer]', title: 'Orange Screaming' },
+      { emoji: '[super-welcome]', title: 'Welcome smiles' },
+      { emoji: '[super-swing]', title: 'Swinging Smiley' },
+      { emoji: '[super-motorcycle]', title: 'Motorcycle Smiley' },
+      { emoji: '[super-kissing]', title: 'Kissing under Umbrella' },
+      { emoji: '[super-shooting]', title: 'Shooting' },
+      { emoji: '[super-sleeping]', title: 'Sleeping' },
+      { emoji: '[super-kitty]', title: 'Hello Kitty' },
+      { emoji: '[super-bunny]', title: 'Rabbit in Basket' }
+    ]
+  },
+  {
     label: 'Live',
     items: [
       { emoji: '😊', title: 'Happy', live: 'live-bounce' },
@@ -36,6 +53,31 @@ const EMOJI_GROUPS = [
   }
 ];
 
+function parseSuperEmojisHtml(text) {
+  if (typeof text !== 'string') return text;
+  
+  const superEmojisMap = {
+    '[super-wreath]': `<div class="super-emoji-container se-wreath" style="font-size:2.2rem;">🌸😊🌸</div>`,
+    '[super-car]': `<div class="super-emoji-container se-car" style="font-size:2.2rem;">🚗💨</div>`,
+    '[super-dance]': `<div class="super-emoji-container se-dance" style="font-size:2.2rem;">💃✨</div>`,
+    '[super-screamer]': `<div class="super-emoji-container se-screamer" style="font-size:2.2rem;position:relative;margin-bottom:10px;">😱🔊<span class="se-screamer-text">Please..!</span></div>`,
+    '[super-welcome]': `<div class="super-emoji-container se-welcome" style="font-size:1.4rem;">👋WELCOME👋</div>`,
+    '[super-swing]': `<div class="super-emoji-container se-swing" style="font-size:2.2rem;">🤸‍♂️⛓️</div>`,
+    '[super-motorcycle]': `<div class="super-emoji-container se-motorcycle" style="font-size:2.2rem;">🏍️🔥</div>`,
+    '[super-kissing]': `<div class="super-emoji-container se-kiss" style="font-size:2.2rem;">💏☂️</div>`,
+    '[super-shooting]': `<div class="super-emoji-container se-shoot" style="font-size:2.2rem;position:relative;">🔫<span class="se-laser-beam"></span></div>`,
+    '[super-sleeping]': `<div class="super-emoji-container se-sleep" style="font-size:2.2rem;position:relative;">😴<span class="se-sleep-z" style="top:-10px;left:15px;">z</span><span class="se-sleep-z" style="top:-18px;left:25px;">Z</span><span class="se-sleep-z" style="top:-25px;left:35px;">Z</span></div>`,
+    '[super-kitty]': `<div class="super-emoji-container se-kitty" style="font-size:2.2rem;">🐱🎀</div>`,
+    '[super-bunny]': `<div class="super-emoji-container se-bunny" style="font-size:2.2rem;">🐰🧺</div>`
+  };
+
+  let result = text;
+  Object.keys(superEmojisMap).forEach(code => {
+    result = result.split(code).join(superEmojisMap[code]);
+  });
+  return result;
+}
+
 (function initTheme() {
   const saved = localStorage.getItem('cc-theme') || 'nebula';
   applyTheme(saved, false);
@@ -60,7 +102,7 @@ function applyTheme(name, animate) {
 
 /* ══ Emoji Insertion ════════════════════════════════════════════
    Inserts emoji at cursor position in #msg-input.
-═══════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 let activeEmojiTarget = null;
 
 function insertEmoji(emoji) {
@@ -107,7 +149,12 @@ function renderEmojiPicker() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'emoji-btn' + (config.live ? ` ${config.live}` : '');
-      btn.textContent = config.emoji;
+      if (group.label === 'Super Icons') {
+        btn.innerHTML = parseSuperEmojisHtml(config.emoji);
+        btn.style.fontSize = '1.3rem';
+      } else {
+        btn.textContent = config.emoji;
+      }
       btn.title = config.title || config.emoji;
       btn.setAttribute('aria-label', config.title || config.emoji);
       btn.onclick = () => insertEmoji(config.emoji);
@@ -669,7 +716,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   currentUser = session.user;
 
-  let { data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+  // Optimize: Fetch profile and room list in parallel to reduce sequential database network roundtrips
+  const [profileResult, roomsResult] = await Promise.all([
+    sbClient.from('profiles').select('*').eq('id', currentUser.id).single(),
+    sbClient.from('rooms').select('*').order('name')
+  ]);
+
+  let prof = profileResult.data;
+  const initialRooms = roomsResult.data || [];
 
   if (!prof) {
     const username = 'User_' + currentUser.id.substr(0,5);
@@ -800,15 +854,21 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Feature 2 — VPN check (non-blocking; shows overlay if VPN detected)
   checkVpnOnEntry();
 
-  await loadRooms();
+  // Pass pre-fetched rooms list to avoid duplicate loading queries
+  await loadRooms(initialRooms);
 });
 
 let _roomCountInterval = null;
 
-async function loadRooms() {
+async function loadRooms(preloadedRooms = null) {
   try {
-    const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
-    if (error || !rooms?.length) return;
+    let rooms = preloadedRooms;
+    if (!rooms || !rooms.length) {
+      const { data, error } = await sbClient.from('rooms').select('*').order('name');
+      if (error) throw error;
+      rooms = data;
+    }
+    if (!rooms?.length) return;
     cachedRooms = rooms;
     const textList = document.getElementById('room-list');
     if (textList) textList.innerHTML = '';
@@ -822,7 +882,8 @@ async function loadRooms() {
       if (textList) textList.appendChild(li);
     });
     renderRoomsTopbar(rooms);
-    enterRoom(rooms[0]);
+    // Optimization: skip redundant moderation status check on the first load since we just did it
+    enterRoom(rooms[0], false, true);
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
 }
@@ -851,8 +912,9 @@ function renderRoomsTopbar(rooms) {
   bar.classList.add('hidden');
 }
 
-async function enterRoom(room) {
-  if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
+async function enterRoom(room, force = false, skipModRefresh = false) {
+  // Optimization: skip redundant db lookup if skipModRefresh is true
+  if (!(await enforceCurrentUserModerationState({ refresh: !skipModRefresh }))) return;
   if (currentRoom?.id === room.id) return;
   if (roomVoiceNoteRecorder?.state === 'recording') {
     discardRoomVoiceNoteOnStop = true;
@@ -1757,9 +1819,8 @@ function setMessageRowData(row, msg, content) {
 function normalizeImageUrl(value) {
   if (!value) return '';
   try {
-    const parsed = new URL(value);
+    const parsed = new URL(value.trim());
     if (!['http:', 'https:'].includes(parsed.protocol)) return '';
-    if (!/\.(apng|avif|bmp|gif|ico|jpe?g|jfif|png|svg|webp)$/i.test(parsed.pathname)) return '';
     return parsed.href;
   } catch (_) {
     return '';
@@ -2057,7 +2118,10 @@ async function sendVoiceNote() {
       }
 
       try {
-        const blob = new Blob(chunks, { type: mimeType });
+        let blob = new Blob(chunks, { type: mimeType });
+        if (typeof compressVoiceNote === 'function') {
+          blob = await compressVoiceNote(blob);
+        }
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
         const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
           room_id: roomIdForVoiceNote,
@@ -2419,16 +2483,20 @@ let _pcTimer  = null;
 let _pcHide   = null;
 let _pcActive = null;
 let _pcSessionId = 0;
+let _pcPendingPinned = false;
 
 function scheduleProfileCard(u, anchor) {
   clearTimeout(_pcTimer);
   clearTimeout(_pcHide);
-  const currentSession = ++_pcSessionId;
-  _pcTimer = setTimeout(() => showProfileCard(u, anchor, currentSession), 350);
+  _pcTimer = setTimeout(() => showProfileCard(u, anchor), 350);
 }
 
 function cancelProfileCard() {
   clearTimeout(_pcTimer);
+  if (_pcPendingPinned) {
+    return;
+  }
+  _pcSessionId++; // Invalidate any pending async fetch
   // Do NOT close the profile card if it is in pinned mode
   if (_pcActive && _pcActive.classList.contains('pinned')) {
     return;
@@ -2438,6 +2506,7 @@ function cancelProfileCard() {
 }
 
 function hideProfileCard() {
+  _pcPendingPinned = false;
   if (_pcActive) {
     _pcActive.remove();
     _pcActive = null;
@@ -2446,6 +2515,8 @@ function hideProfileCard() {
 
 async function showProfileCard(u, anchor, pinned = false) {
   hideProfileCard();
+  _pcPendingPinned = pinned;
+  const currentSession = ++_pcSessionId;
 
   // Fetch full profile for join date, IP, avatar, VIP status
   let profile = null;
@@ -2455,7 +2526,8 @@ async function showProfileCard(u, anchor, pinned = false) {
   } catch (_) {}
   
   // Abort if session changed (mouse left anchor before request finished)
-  if (_pcSessionId !== sessionId) return;
+  if (currentSession !== _pcSessionId) return;
+  _pcPendingPinned = false;
   
   if (!profile) return;
 

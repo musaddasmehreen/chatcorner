@@ -176,3 +176,15 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_month integer;
 -- UPDATE: COINS SYSTEM
 -- =====================================================================
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS coins integer DEFAULT 150;
+
+-- =====================================================================
+-- UPDATE: PERFORMANCE OPTIMIZATION INDEXES (MIGRATION RUN ON 2026-06-22)
+-- =====================================================================
+CREATE INDEX IF NOT EXISTS idx_messages_room_created ON public.messages(room_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_private_messages_sender_recipient ON public.private_messages(sender_id, recipient_id);
+CREATE INDEX IF NOT EXISTS idx_private_messages_created ON public.private_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_profiles_is_registered ON public.profiles(is_registered);
+
+-- Add is_read and is_listened columns to public.private_messages
+ALTER TABLE public.private_messages ADD COLUMN IF NOT EXISTS is_read boolean DEFAULT false;
+ALTER TABLE public.private_messages ADD COLUMN IF NOT EXISTS is_listened boolean DEFAULT false;

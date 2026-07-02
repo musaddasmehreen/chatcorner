@@ -309,6 +309,13 @@
           <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
           <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
         </div>
+        <div id="voice-note-preview-popover" class="voice-preview-popover hidden">
+          <button id="btn-voice-note-play" class="btn-sm" style="background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">▶ Play</button>
+          <span style="font-size:0.75rem;color:var(--text);margin:0 8px;">Preview Ready</span>
+          <audio id="voice-note-preview-audio" class="hidden"></audio>
+          <button id="btn-voice-note-send" class="btn-sm" style="background:#10b981;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;margin-right:4px;">Send</button>
+          <button id="btn-voice-note-cancel" class="btn-sm" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">Discard</button>
+        </div>
         
         <!-- Hamburger extras button (visible on mobile, positioned on the left side) -->
         <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options">☰</button>
@@ -420,9 +427,9 @@
     <div class="download-modal-content">
       <button class="download-modal-close" onclick="closeDownloadModal()" title="Dismiss">✕</button>
       <div class="download-modal-icon">📱</div>
-      <h3>Get ChatCorner for Android</h3>
+      <h3>Download ChatCorner Android App</h3>
       <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
-      <a href="chatcorner-updated.apk" class="download-modal-btn" download>Download for Android</a>
+      <a href="https://github.com/musaddasmehreen/chatcorner/raw/main/chatcorner-updated.apk" class="download-modal-btn" download>Download for Android</a>
       <div style="font-family: monospace; font-size: 11px; margin-top: 10px; color: rgba(255,255,255,0.6); word-break: break-all; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2);">
         SHA-256: <span id="apk-sha256">a8000174421f29a6af56658d24734d48b06f4155f07814a601202b954cccb80c</span>
       </div>
@@ -439,6 +446,7 @@
   <script src="js/pm.js?v=1.6" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=1.3" defer></script>
+  <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
   <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
@@ -449,7 +457,7 @@
   <!-- Mobile Sidebar Drawer Logic -->
   <script>
     (function() {
-      const MOBILE_BP = 768;
+      const MOBILE_BP = 1024;
 
       function isMobile() { return window.innerWidth <= MOBILE_BP; }
 
@@ -527,8 +535,12 @@
         if (modal) modal.classList.add('hidden');
       };
 
-      // Call on load
-      setTimeout(checkShowDownloadModal, 1500);
+      // Call on load instantly
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkShowDownloadModal);
+      } else {
+        checkShowDownloadModal();
+      }
 
       // Auto-close sidebars when window resizes above mobile breakpoint
       window.addEventListener('resize', function() {

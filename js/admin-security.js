@@ -24,6 +24,21 @@ class AdminSecurityManager {
     this.initIdleDetection();
   }
 
+  // Monitor session validity on a timer (prevent stale/expired sessions)
+  initSessionMonitoring() {
+    // Check session validity every 60 seconds
+    setInterval(() => {
+      const session = this.getStorageData(`${this.prefix}session`, null);
+      if (session) {
+        const age = Date.now() - session.lastActivity;
+        if (age > this.sessionTimeout) {
+          this.endAdminSession('SESSION_MONITOR_TIMEOUT');
+          window.location.replace('adminup.html?denied=1');
+        }
+      }
+    }, 60000);
+  }
+
   // 2FA Setup (TOTP - Time-based One-Time Password)
   async generate2FASecret() {
     // Generate random 32-character base32 string

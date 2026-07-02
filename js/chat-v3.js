@@ -7,6 +7,23 @@ const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arcti
 const GUEST_VOICE_LIMIT = 2;
 const EMOJI_GROUPS = [
   {
+    label: 'Super Icons',
+    items: [
+      { emoji: '[super-wreath]', title: 'Wreath' },
+      { emoji: '[super-car]', title: 'Sports Car' },
+      { emoji: '[super-dance]', title: 'Silhouette Girl' },
+      { emoji: '[super-screamer]', title: 'Orange Screaming' },
+      { emoji: '[super-welcome]', title: 'Welcome smiles' },
+      { emoji: '[super-swing]', title: 'Swinging Smiley' },
+      { emoji: '[super-motorcycle]', title: 'Motorcycle Smiley' },
+      { emoji: '[super-kissing]', title: 'Kissing under Umbrella' },
+      { emoji: '[super-shooting]', title: 'Shooting' },
+      { emoji: '[super-sleeping]', title: 'Sleeping' },
+      { emoji: '[super-kitty]', title: 'Hello Kitty' },
+      { emoji: '[super-bunny]', title: 'Rabbit in Basket' }
+    ]
+  },
+  {
     label: 'Live',
     items: [
       { emoji: '😊', title: 'Happy', live: 'live-bounce' },
@@ -35,6 +52,31 @@ const EMOJI_GROUPS = [
     items: ['🔥','✨','🌈','⭐','⚡','🎉','🎊','🎈','🎵','🎶','💯','💥','🌸','🍕','☕','🎮']
   }
 ];
+
+function parseSuperEmojisHtml(text) {
+  if (typeof text !== 'string') return text;
+  
+  const superEmojisMap = {
+    '[super-wreath]': `<div class="super-emoji-container se-wreath" style="font-size:2.2rem;">🌸😊🌸</div>`,
+    '[super-car]': `<div class="super-emoji-container se-car" style="font-size:2.2rem;">🚗💨</div>`,
+    '[super-dance]': `<div class="super-emoji-container se-dance" style="font-size:2.2rem;">💃✨</div>`,
+    '[super-screamer]': `<div class="super-emoji-container se-screamer" style="font-size:2.2rem;position:relative;margin-bottom:10px;">😱🔊<span class="se-screamer-text">Please..!</span></div>`,
+    '[super-welcome]': `<div class="super-emoji-container se-welcome" style="font-size:1.4rem;">👋WELCOME👋</div>`,
+    '[super-swing]': `<div class="super-emoji-container se-swing" style="font-size:2.2rem;">🤸‍♂️⛓️</div>`,
+    '[super-motorcycle]': `<div class="super-emoji-container se-motorcycle" style="font-size:2.2rem;">🏍️🔥</div>`,
+    '[super-kissing]': `<div class="super-emoji-container se-kiss" style="font-size:2.2rem;">💏☂️</div>`,
+    '[super-shooting]': `<div class="super-emoji-container se-shoot" style="font-size:2.2rem;position:relative;">🔫<span class="se-laser-beam"></span></div>`,
+    '[super-sleeping]': `<div class="super-emoji-container se-sleep" style="font-size:2.2rem;position:relative;">😴<span class="se-sleep-z" style="top:-10px;left:15px;">z</span><span class="se-sleep-z" style="top:-18px;left:25px;">Z</span><span class="se-sleep-z" style="top:-25px;left:35px;">Z</span></div>`,
+    '[super-kitty]': `<div class="super-emoji-container se-kitty" style="font-size:2.2rem;">🐱🎀</div>`,
+    '[super-bunny]': `<div class="super-emoji-container se-bunny" style="font-size:2.2rem;">🐰🧺</div>`
+  };
+
+  let result = text;
+  Object.keys(superEmojisMap).forEach(code => {
+    result = result.split(code).join(superEmojisMap[code]);
+  });
+  return result;
+}
 
 (function initTheme() {
   const saved = localStorage.getItem('cc-theme') || 'nebula';
@@ -237,10 +279,15 @@ function debouncedPresenceTrack() {
 /* ── Textarea auto-resize helper ───────────────────────────────
    Grows the textarea up to its CSS max-height as content fills.
 ──────────────────────────────────────────────────────────────── */
+let _resizeTicking = false;
 function autoResizeTextarea(el) {
-  if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  if (!el || _resizeTicking) return;
+  _resizeTicking = true;
+  window.requestAnimationFrame(() => {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    _resizeTicking = false;
+  });
 }
 
 function sleep(ms) {
@@ -420,6 +467,7 @@ window.addEventListener('pagehide', () => {
 let _renderTimer = null;
 const activeCamViewers = new Set(); // userIds currently viewing a cam
 const typingUsers = new Map();      // userId → { userId, username }
+const recordingUsers = new Map();   // userId → { userId, username }
 const QUICK_KICK_OPTIONS = {
   'immediate': 0,
   '1m': 1,
@@ -741,7 +789,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   currentUser = session.user;
 
-  let { data: prof } = await sbClient.from('profiles').select('*').eq('id', currentUser.id).single();
+  // Optimize: Fetch profile and room list in parallel to reduce sequential database network roundtrips
+  const [profileResult, roomsResult] = await Promise.all([
+    sbClient.from('profiles').select('*').eq('id', currentUser.id).single(),
+    sbClient.from('rooms').select('*').order('name')
+  ]);
+
+  let prof = profileResult.data;
+  const initialRooms = roomsResult.data || [];
 
   if (!prof) {
     const username = 'User_' + currentUser.id.substr(0,5);
@@ -806,7 +861,31 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     if (event.key === 'Escape') closeRoomImageUrlInput();
   });
-  document.getElementById('btn-voice-note')?.addEventListener('click', sendVoiceNote);
+  const voiceNoteBtn = document.getElementById('btn-voice-note');
+  if (voiceNoteBtn) {
+    let isHolding = false;
+
+    const startHold = (e) => {
+      e.preventDefault();
+      if (isHolding) return;
+      isHolding = true;
+      startVoiceNoteRecording();
+    };
+
+    const stopHold = (e) => {
+      e.preventDefault();
+      if (!isHolding) return;
+      isHolding = false;
+      stopVoiceNoteRecording();
+    };
+
+    voiceNoteBtn.addEventListener('mousedown', startHold);
+    voiceNoteBtn.addEventListener('touchstart', startHold, { passive: false });
+    voiceNoteBtn.addEventListener('mouseup', stopHold);
+    voiceNoteBtn.addEventListener('mouseleave', stopHold);
+    voiceNoteBtn.addEventListener('touchend', stopHold, { passive: false });
+    voiceNoteBtn.addEventListener('touchcancel', stopHold, { passive: false });
+  }
 
 
   // Character counter + auto-resize for textarea message input
@@ -831,12 +910,20 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Scroll-to-bottom button visibility
+  let _scrollTicking = false;
   document.getElementById('messages')?.addEventListener('scroll', () => {
-    const el = document.getElementById('messages');
-    const btn = document.getElementById('btn-scroll-bottom');
-    if (!btn) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    btn.classList.toggle('hidden', atBottom);
+    if (!_scrollTicking) {
+      window.requestAnimationFrame(() => {
+        const el = document.getElementById('messages');
+        const btn = document.getElementById('btn-scroll-bottom');
+        if (el && btn) {
+          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          btn.classList.toggle('hidden', atBottom);
+        }
+        _scrollTicking = false;
+      });
+      _scrollTicking = true;
+    }
   });
 
   // Typing indicator broadcast
@@ -880,7 +967,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Feature 2 — VPN check (non-blocking; shows overlay if VPN detected)
   checkVpnOnEntry();
 
-  await loadRooms();
+  // Pass pre-fetched rooms list to avoid duplicate loading queries
+  await loadRooms(initialRooms);
 
   // ── Exponential-Backoff Reconnect Engine ────────────────────────────
   // Prevents the "thundering herd" problem: when hundreds of clients
@@ -990,10 +1078,15 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 let _roomCountInterval = null;
 
-async function loadRooms() {
+async function loadRooms(preloadedRooms = null) {
   try {
-    const { data: rooms, error } = await sbClient.from('rooms').select('*').order('name');
-    if (error || !rooms?.length) return;
+    let rooms = preloadedRooms;
+    if (!rooms || !rooms.length) {
+      const { data, error } = await sbClient.from('rooms').select('*').order('name');
+      if (error) throw error;
+      rooms = data;
+    }
+    if (!rooms?.length) return;
     cachedRooms = rooms;
     const textList = document.getElementById('room-list');
     if (textList) textList.innerHTML = '';
@@ -1017,7 +1110,8 @@ async function loadRooms() {
       textList.appendChild(iptvLi);
     }
     renderRoomsTopbar(rooms);
-    enterRoom(rooms[0]);
+    // Optimization: skip redundant moderation status check on the first load since we just did it
+    enterRoom(rooms[0], false, true);
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
 }
@@ -1046,10 +1140,11 @@ function renderRoomsTopbar(rooms) {
   bar.classList.add('hidden');
 }
 
-async function enterRoom(room, force = false) {
+async function enterRoom(room, force = false, skipModRefresh = false) {
   // Exit IPTV mode if switching to a normal room
   exitIPTVRoom();
-  if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
+  // Optimization: skip redundant db lookup if skipModRefresh is true
+  if (!(await enforceCurrentUserModerationState({ refresh: !skipModRefresh }))) return;
   if (!force && currentRoom?.id === room.id) return;
   if (roomVoiceNoteRecorder?.state === 'recording') {
     discardRoomVoiceNoteOnStop = true;
@@ -1282,12 +1377,23 @@ async function enterRoom(room, force = false) {
       typingUsers.set(payload.userId, payload);
       if (!typingUsers._t) typingUsers._t = {};
       clearTimeout(typingUsers._t[payload.userId]);
-      typingUsers._t[payload.userId] = setTimeout(() => { typingUsers.delete(payload.userId); updateTypingIndicator(); }, 3000);
+      typingUsers._t[payload.userId] = setTimeout(() => { typingUsers.delete(payload.userId); updateTypingIndicator(); scheduleRenderUserList(); }, 3000);
       updateTypingIndicator();
+      scheduleRenderUserList();
     })
     .on('broadcast', { event: 'typing-stop' }, ({ payload }) => {
       typingUsers.delete(payload?.userId);
       updateTypingIndicator();
+      scheduleRenderUserList();
+    })
+    .on('broadcast', { event: 'recording-voice' }, ({ payload }) => {
+      if (payload?.userId === currentUser?.id) return;
+      recordingUsers.set(payload.userId, payload);
+      scheduleRenderUserList();
+    })
+    .on('broadcast', { event: 'recording-voice-stop' }, ({ payload }) => {
+      recordingUsers.delete(payload?.userId);
+      scheduleRenderUserList();
     })
     .subscribe(async (status) => {
       const banner = document.getElementById('connection-error-banner');
@@ -1506,6 +1612,18 @@ function buildMessageNode(msg) {
         ${audioHtml}
         <div class="msg-time">${formatTime(msg.created_at)}</div>
       </div>`;
+
+    const audio = div.querySelector('audio');
+    if (audio) {
+      audio.onplay = () => {
+        // Self destruct locally after 30 seconds
+        setTimeout(() => {
+          div.style.transition = 'opacity 0.8s ease-out';
+          div.style.opacity = '0';
+          setTimeout(() => div.remove(), 800);
+        }, 30000);
+      };
+    }
     return div;
   }
 
@@ -1555,7 +1673,7 @@ function buildMessageNode(msg) {
       ${deleteButton}
       ${reportButton}
       <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-text" style="${msgStyle}">${escHtml(msg.content)}</div>
+      <div class="msg-text" style="${msgStyle}">${parseSuperEmojisHtml(escHtml(msg.content))}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -1581,7 +1699,8 @@ function appendMessage(msg) {
 /* Trim oldest messages from DOM when count exceeds 200 to prevent memory leaks */
 function pruneMessageDom() {
   const container = document.getElementById('messages');
-  if (!container) return;
+  if (!container || container.children.length <= 250) return; // Fast O(1) early exit
+
   const rows = container.querySelectorAll('.msg-row:not([data-temp-id])');
   const MAX = 200;
   const TRIM = 50;
@@ -1633,11 +1752,19 @@ function renderUserList() {
       ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt="${escHtml(u.username || '')} avatar"/>`
       : `<div class="roster-avatar-init" style="background:${escHtml(u.color || '#7c3aed')}">${(u.username || '?')[0].toUpperCase()}</div>`;
     
+    const isTyping = typingUsers.has(u.userId);
+    const isRecording = recordingUsers.has(u.userId);
+    let nameClass = '';
+    if (isRecording) nameClass = ' recording-glowing-red';
+    else if (isTyping) nameClass = ' typing-red';
+    
+    const displayName = escHtml(u.username) + (isRecording ? ' (Recording...)' : '');
+    
     li.innerHTML = `
       <span class="dot${u.registered ? '' : ' guest'}"></span>
       ${avatarHtml}
       ${roleBadge}
-      <button type="button" class="user-name-btn${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${escHtml(u.username)}</button>
+      <button type="button" class="user-name-btn${nameClass}${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${displayName}</button>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${escHtml(u.userId)}" title="View camera">\ud83d\udcf7</button>
     `;
@@ -1672,7 +1799,7 @@ function renderUserList() {
           ${avatarHtml}
           ${activeDot}
         </div>
-        <span class="mobile-user-name">${escHtml(u.username)}</span>
+        <span class="mobile-user-name${isRecording ? ' recording-glowing-red' : isTyping ? ' typing-red' : ''}">${escHtml(u.username)}${isRecording ? ' (Rec...)' : ''}</span>
       `;
       
       mDiv.addEventListener('click', (ev) => {
@@ -1702,8 +1829,10 @@ function renderUserList() {
     sortedUsers.forEach(u => {
       const pill = document.createElement('span');
       pill.className = 'room-user-pill';
-      const dot = u.registered ? '🟢' : '👤';
-      pill.textContent = `${dot} ${u.username}`;
+      const isTyping = typingUsers.has(u.userId);
+      const isRecording = recordingUsers.has(u.userId);
+      const prefix = isRecording ? '🔴 ' : (isTyping ? '✏️ ' : (u.registered ? '🟢 ' : '👤 '));
+      pill.textContent = `${prefix}${u.username}`;
       bfrag.appendChild(pill);
     });
     bar.appendChild(bfrag);
@@ -2072,9 +2201,8 @@ function setMessageRowData(row, msg, content) {
 function normalizeImageUrl(value) {
   if (!value) return '';
   try {
-    const parsed = new URL(value);
+    const parsed = new URL(value.trim());
     if (!['http:', 'https:'].includes(parsed.protocol)) return '';
-    if (!/\.(apng|avif|bmp|gif|ico|jpe?g|jfif|png|svg|webp)$/i.test(parsed.pathname)) return '';
     return parsed.href;
   } catch (_) {
     return '';
@@ -2311,7 +2439,7 @@ function getVoiceNoteStartErrorMessage(error) {
   return 'Could not start voice note recording.';
 }
 
-async function sendVoiceNote() {
+async function startVoiceNoteRecording() {
   if (!isRegisteredUser()) {
     const usedCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10);
     if (usedCount >= GUEST_VOICE_LIMIT) {
@@ -2324,10 +2452,7 @@ async function sendVoiceNote() {
     return;
   }
   if (!currentRoom?.id) return;
-  if (roomVoiceNoteRecorder?.state === 'recording') {
-    roomVoiceNoteRecorder.stop();
-    return;
-  }
+  if (roomVoiceNoteRecorder?.state === 'recording') return;
   if (roomVoiceNoteStarting) return;
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
     appendSystemMessage('Your browser does not support voice notes.');
@@ -2342,6 +2467,15 @@ async function sendVoiceNote() {
     roomVoiceNoteRoomId = currentRoom.id;
     discardRoomVoiceNoteOnStop = false;
 
+    // Send recording presence broadcast
+    if (presenceChannel) {
+      presenceChannel.send({
+        type: 'broadcast',
+        event: 'recording-voice',
+        payload: { userId: currentUser.id, username: currentProfile.username }
+      }).catch(() => {});
+    }
+
     roomVoiceNoteRecorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) roomVoiceNoteChunks.push(event.data);
     };
@@ -2353,6 +2487,15 @@ async function sendVoiceNote() {
     roomVoiceNoteRecorder.onstop = async () => {
       setVoiceNoteButtonState(false);
       stopRoomVoiceNoteStream();
+
+      // Send recording stop presence broadcast
+      if (presenceChannel) {
+        presenceChannel.send({
+          type: 'broadcast',
+          event: 'recording-voice-stop',
+          payload: { userId: currentUser.id }
+        }).catch(() => {});
+      }
 
       const chunks = roomVoiceNoteChunks.slice();
       roomVoiceNoteChunks = [];
@@ -2372,17 +2515,37 @@ async function sendVoiceNote() {
       }
 
       try {
-        const blob = new Blob(chunks, { type: mimeType });
+        let blob = new Blob(chunks, { type: mimeType });
+        if (typeof compressVoiceNote === 'function') {
+          blob = await compressVoiceNote(blob);
+        }
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
 
         const previewPopover = document.getElementById('voice-note-preview-popover');
         const previewAudio = document.getElementById('voice-note-preview-audio');
+        const playBtn = document.getElementById('btn-voice-note-play');
         const sendBtn = document.getElementById('btn-voice-note-send');
         const cancelBtn = document.getElementById('btn-voice-note-cancel');
 
         if (previewPopover && previewAudio) {
           previewAudio.src = dataUrl;
           previewPopover.classList.remove('hidden');
+
+          if (playBtn) {
+            playBtn.textContent = '▶ Play';
+            playBtn.onclick = () => {
+              if (previewAudio.paused) {
+                previewAudio.play();
+                playBtn.textContent = '⏸ Pause';
+              } else {
+                previewAudio.pause();
+                playBtn.textContent = '▶ Play';
+              }
+            };
+            previewAudio.onended = () => {
+              playBtn.textContent = '▶ Play';
+            };
+          }
 
           sendBtn.onclick = async () => {
             if (!checkGlobalRateLimit()) {
@@ -2417,44 +2580,19 @@ async function sendVoiceNote() {
             previewPopover.classList.add('hidden');
             previewAudio.src = '';
           };
-        } else {
-          if (!checkGlobalRateLimit()) {
-            showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
-            return;
-          }
-          const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
-            room_id: roomIdForVoiceNote,
-            user_id: currentUser.id,
-            username: currentProfile.username,
-            content: dataUrl,
-            type: 'voice'
-          }).select('id');
-          if (error) {
-            appendSystemMessage('Could not send voice note. Please try again.');
-          } else if (!isRegisteredUser()) {
-            if (insertedMsgs?.[0]?.id) {
-              void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
-            }
-            const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
-            localStorage.setItem('cc-guest-voice-used', String(newCount));
-            if (newCount >= GUEST_VOICE_LIMIT) {
-              setTimeout(() => showRegisterForVoice(), 800);
-            }
-          }
         }
       } catch (_) {
-        appendSystemMessage('Could not send voice note. Please try again.');
+        appendSystemMessage('Could not save voice note preview.');
       }
     };
 
     roomVoiceNoteRecorder.start();
     setVoiceNoteButtonState(true);
-    appendSystemMessage('🎙️ Recording voice note… click again to send.');
     // Guests: auto-stop after 5 seconds
     if (!isRegisteredUser()) {
       setTimeout(() => {
         if (roomVoiceNoteRecorder?.state === 'recording') {
-          roomVoiceNoteRecorder.stop();
+          stopVoiceNoteRecording();
         }
       }, GUEST_VOICE_MAX_DURATION_MS);
     }
@@ -2465,9 +2603,23 @@ async function sendVoiceNote() {
     roomVoiceNoteChunks = [];
     roomVoiceNoteRecorder = null;
     roomVoiceNoteRoomId = null;
-    discardRoomVoiceNoteOnStop = false;
   } finally {
     roomVoiceNoteStarting = false;
+  }
+}
+
+function stopVoiceNoteRecording() {
+  if (roomVoiceNoteRecorder?.state === 'recording') {
+    roomVoiceNoteRecorder.stop();
+  }
+}
+
+// Kept for backward compatibility but calls start/stop flow
+async function sendVoiceNote() {
+  if (roomVoiceNoteRecorder?.state === 'recording') {
+    stopVoiceNoteRecording();
+  } else {
+    await startVoiceNoteRecording();
   }
 }
 
@@ -2832,6 +2984,7 @@ let _pcSessionId = 0;
 let _pcOutsideClickFn = null;
 let _pcEscHandlerFn = null;
 let _pcScrollHandlerFn = null;
+let _pcPendingPinned = false;
 
 function scheduleProfileCard(u, anchor) {
   clearTimeout(_pcTimer);
@@ -2841,6 +2994,9 @@ function scheduleProfileCard(u, anchor) {
 
 function cancelProfileCard() {
   clearTimeout(_pcTimer);
+  if (_pcPendingPinned) {
+    return;
+  }
   _pcSessionId++; // Invalidate any pending async fetch
   // Do NOT close the profile card if it is in pinned mode
   if (_pcActive && _pcActive.classList.contains('pinned')) {
@@ -2851,6 +3007,7 @@ function cancelProfileCard() {
 }
 
 function hideProfileCard() {
+  _pcPendingPinned = false;
   document.querySelectorAll('#profile-card').forEach(el => el.remove());
   document.querySelectorAll('.profile-card').forEach(el => el.remove());
   if (_pcActive) {
@@ -2873,6 +3030,7 @@ function hideProfileCard() {
 
 async function showProfileCard(u, anchor, pinned = false) {
   hideProfileCard();
+  _pcPendingPinned = pinned;
   const currentSession = ++_pcSessionId;
 
   // Fetch full profile for join date, IP, avatar, VIP status
@@ -2883,6 +3041,7 @@ async function showProfileCard(u, anchor, pinned = false) {
   } catch (_) {}
   
   if (currentSession !== _pcSessionId) return; // Mouse left while fetching
+  _pcPendingPinned = false;
   if (!profile) return;
 
   const viewerLevel  = getViewerRoleLevel();

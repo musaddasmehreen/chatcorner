@@ -2575,3 +2575,268 @@ body.guest-mode .emoji-bar { display: none; }
   }
 }
 
+/* =====================================================================
+   CUSTOM FEATURES: PREVIEW, GLOWING INDICATORS, RECEIPTS, SUPER EMOJIS
+   ===================================================================== */
+
+/* Voice Preview Popover styling */
+.voice-preview-popover {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  z-index: 99;
+}
+
+/* PM Voice Preview styling */
+.pm-voice-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin: 4px 8px;
+}
+
+/* Typing Red style */
+.typing-red {
+  color: #f43f5e !important;
+  font-weight: bold;
+}
+
+/* Recording Glowing Red style */
+.recording-glowing-red {
+  color: #ef4444 !important;
+  font-weight: bold;
+  animation: glowRed 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes glowRed {
+  from {
+    text-shadow: 0 0 2px #ef4444, 0 0 6px #ef4444;
+  }
+  to {
+    text-shadow: 0 0 4px #f43f5e, 0 0 12px #f43f5e, 0 0 16px #f43f5e;
+  }
+}
+
+/* PM Receipts Toggle Label styling */
+.pm-receipts-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: auto;
+  padding-right: 4px;
+}
+.pm-receipts-toggle input {
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+}
+
+/* PM Receipt Status indicator styling */
+.pm-receipt-status {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-left: 6px;
+  vertical-align: middle;
+  font-family: sans-serif;
+}
+.pm-receipt-status.read {
+  color: #38bdf8;
+}
+.pm-receipt-status.listened {
+  color: #818cf8;
+}
+
+/* 12 Smart Emojis / Super Icons styling */
+.super-emoji-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  vertical-align: middle;
+  margin: 2px 4px;
+  position: relative;
+  will-change: transform;
+}
+
+/* E-1: Wreath Spinning */
+.se-wreath {
+  animation: wreathSpin 8s linear infinite;
+}
+@keyframes wreathSpin {
+  100% { transform: rotate(360deg); }
+}
+
+/* E-2: Car Pulsing */
+.se-car {
+  animation: carDrive 1.2s ease-in-out infinite alternate;
+}
+@keyframes carDrive {
+  0% { transform: translateX(-4px) scale(1); filter: drop-shadow(0 0 1px red); }
+  100% { transform: translateX(4px) scale(1.08); filter: drop-shadow(0 0 6px red); }
+}
+
+/* E-3: Silhouette Dancing */
+.se-dance {
+  animation: dancerTwirl 1.6s ease-in-out infinite;
+}
+@keyframes dancerTwirl {
+  0%, 100% { transform: rotateY(0deg) scale(1); }
+  50% { transform: rotateY(180deg) scale(1.15); filter: drop-shadow(0 0 8px purple); }
+}
+
+/* E-4: Screamer vibrating with Please..! text overlay */
+.se-screamer {
+  animation: screamVibrate 0.15s linear infinite;
+}
+.se-screamer-text {
+  position: absolute;
+  bottom: -10px;
+  font-size: 0.65rem;
+  color: #ff0055;
+  font-weight: 900;
+  text-shadow: 0 0 2px white;
+  white-space: nowrap;
+  animation: screamText 0.4s ease-in-out infinite alternate;
+}
+@keyframes screamVibrate {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-1px, 1px) scale(1.02); }
+  50% { transform: translate(1px, -1px) scale(0.98); }
+  75% { transform: translate(-1px, -1px) scale(1.02); }
+}
+@keyframes screamText {
+  from { transform: scale(0.9); }
+  to { transform: scale(1.1) rotate(-3deg); }
+}
+
+/* E-5: Welcome Banner waving */
+.se-welcome {
+  font-size: 1.1rem;
+  background: linear-gradient(90deg, #ff007f, #7f00ff, #00ffff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: bold;
+  animation: welcomeWave 2s ease-in-out infinite;
+  display: inline-block;
+}
+@keyframes welcomeWave {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-4px) rotate(-3deg); }
+  75% { transform: translateY(4px) rotate(3deg); }
+}
+
+/* E-6: Swing */
+.se-swing {
+  transform-origin: top center;
+  animation: swingPendulum 2s ease-in-out infinite alternate;
+}
+@keyframes swingPendulum {
+  from { transform: rotate(-25deg); }
+  to { transform: rotate(25deg); }
+}
+
+/* E-7: Motorcycle with fire */
+.se-motorcycle {
+  animation: motorWheelie 1s ease-in-out infinite alternate;
+}
+@keyframes motorWheelie {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(15deg) translateY(-3px); }
+}
+
+/* E-8: Kissing Umbrella */
+.se-kiss {
+  animation: kissHeartbeat 1.4s ease-in-out infinite;
+}
+@keyframes kissHeartbeat {
+  0%, 100% { transform: scale(1); }
+  30% { transform: scale(1.15); filter: drop-shadow(0 0 5px pink); }
+  45% { transform: scale(1.05); }
+  60% { transform: scale(1.2); filter: drop-shadow(0 0 8px red); }
+}
+
+/* E-9: Laser Gun Shooting */
+.se-shoot {
+  animation: gunRecoil 0.6s ease-in-out infinite;
+}
+.se-laser-beam {
+  position: absolute;
+  top: 40%;
+  left: 80%;
+  width: 0;
+  height: 3px;
+  background: #39ff14;
+  box-shadow: 0 0 8px #39ff14;
+  animation: laserShoot 0.6s linear infinite;
+  transform-origin: left center;
+}
+@keyframes gunRecoil {
+  0%, 100% { transform: rotate(0) scale(1); }
+  20% { transform: rotate(-10deg) scale(0.95); }
+  40% { transform: rotate(5deg) scale(1.05); }
+}
+@keyframes laserShoot {
+  0% { width: 0; opacity: 1; }
+  30% { width: 40px; opacity: 1; }
+  100% { width: 40px; left: 180%; opacity: 0; }
+}
+
+/* E-10: Sleeping Zs */
+.se-sleep {
+  animation: sleepBob 3s ease-in-out infinite alternate;
+}
+.se-sleep-z {
+  position: absolute;
+  font-size: 0.7rem;
+  color: #a5b4fc;
+  font-weight: bold;
+  opacity: 0;
+  animation: zFloat 2s linear infinite;
+}
+.se-sleep-z:nth-child(2) { animation-delay: 0.6s; }
+.se-sleep-z:nth-child(3) { animation-delay: 1.2s; }
+@keyframes sleepBob {
+  from { transform: translateY(0); }
+  to { transform: translateY(3px); }
+}
+@keyframes zFloat {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  20% { opacity: 0.8; }
+  100% { transform: translate(15px, -30px) scale(1.2); opacity: 0; }
+}
+
+/* E-11: Kitty Bow pulsing */
+.se-kitty {
+  animation: kittyBow 1.8s ease-in-out infinite alternate;
+}
+@keyframes kittyBow {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); filter: drop-shadow(0 0 3px #fda4af); }
+}
+
+/* E-12: Bunny Basket bobbing */
+.se-bunny {
+  animation: bunnyBob 1.6s ease-in-out infinite alternate;
+}
+@keyframes bunnyBob {
+  from { transform: translateY(0); }
+  to { transform: translateY(-8px) scaleY(1.05); }
+}
+

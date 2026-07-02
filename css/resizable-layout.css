@@ -762,13 +762,13 @@
 .sidebar-backdrop.active { display: block; }
 
 /* ── Tablet breakpoint: narrower sidebars ── */
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
   .sidebar { width: 170px; min-width: 120px; }
   .input-strip-left, .input-strip-right { width: 170px; min-width: 120px; }
 }
 
 /* ── Mobile breakpoint: sidebar drawers ── */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
 
   /* Show mobile toggle buttons in topbar */
   .topbar-mobile-toggle { display: flex; }
@@ -971,7 +971,7 @@
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .mobile-tabs {
     display: flex !important;
     background: var(--surface);
@@ -1042,7 +1042,7 @@
 }
 
 /* ── Desktop overrides and helpers ── */
-@media (min-width: 769px) {
+@media (min-width: 1025px) {
   .mobile-only {
     display: none !important;
   }
@@ -1478,7 +1478,7 @@
 }
 
 /* On mobile, adjust the split layout */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .page-shell.iptv-active .chat-main {
     flex-direction: column !important;
   }

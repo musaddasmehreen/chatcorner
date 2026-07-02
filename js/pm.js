@@ -194,6 +194,10 @@ async function openPrivateChat(userId, username) {
         </div>
       </div>
       <div class="pm-header-actions">
+        <label class="pm-receipts-toggle" title="Send read and listen receipts">
+          <input type="checkbox" class="pm-receipt-toggle-input" checked>
+          <span>Receipts</span>
+        </label>
         <button type="button" class="pm-call-btn" title="Start voice call">Call</button>
         <button type="button" class="pm-ignore-btn" title="Ignore incoming private messages">${typeof isUserIgnored === 'function' && isUserIgnored(userId) ? 'Unignore' : 'Ignore'}</button>
         <button type="button" class="pm-mute-btn" title="Toggle PM notification sound">${pmMuted[userId] ? 'Muted' : 'Sound'}</button>
@@ -211,6 +215,13 @@ async function openPrivateChat(userId, username) {
       <button type="button" class="pm-call-end">End Call</button>
     </div>
     <div class="pm-messages"></div>
+    <div class="pm-voice-preview-row hidden">
+      <audio controls class="pm-voice-preview-audio"></audio>
+      <div style="display:flex; gap:5px; margin-top:5px;">
+        <button type="button" class="pm-voice-send-btn">Send</button>
+        <button type="button" class="pm-voice-cancel-btn">Cancel</button>
+      </div>
+    </div>
     <div class="pm-image-url-row hidden">
       <input class="pm-image-url-input" type="text" maxlength="1000" placeholder="Paste an image/GIF URL…" autocomplete="off"/>
       <button type="button" class="media-url-clear pm-image-url-clear" title="Cancel image URL">✕</button>
@@ -270,7 +281,12 @@ async function openPrivateChat(userId, username) {
     refreshPmIgnoreState(userId);
   };
 
-  recordBtn.onclick = () => togglePmRecording(userId);
+  recordBtn.addEventListener('pointerdown', (e) => startPmVoiceNoteRecording(e, userId));
+  recordBtn.addEventListener('pointerup', (e) => stopPmVoiceNoteRecording(e, userId));
+  recordBtn.addEventListener('pointerleave', (e) => stopPmVoiceNoteRecording(e, userId));
+  // Cancel context menu on long press on mobile
+  recordBtn.addEventListener('contextmenu', e => e.preventDefault());
+
   imageBtn.onclick = (event) => {
     event.stopPropagation();
     togglePmImageInput(userId);
@@ -547,6 +563,7 @@ async function sendPrivateText(userId) {
   }
 
   const createdAt = new Date().toISOString();
+  const msgId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
 
   // ── Security: validate & sanitise PM text before sending ──
   let safeText = text;
@@ -556,21 +573,20 @@ async function sendPrivateText(userId) {
       if (typeof showChatToast === 'function') showChatToast('⚠️ ' + validation.reason, 'warning');
       return;
     }
-    // Use the pre-sanitised text from the validator (HTML stripped, URI schemes removed)
     safeText = validation.sanitised ?? (window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text);
   }
 
   if (!isSendingImage) input.value = '';
 
   const message = isSendingImage
-    ? { from: currentUser.id, type: 'image', imageUrl, createdAt }
-    : { from: currentUser.id, type: 'text', text: safeText, createdAt };
+    ? { id: msgId, from: currentUser.id, type: 'image', imageUrl, createdAt }
+    : { id: msgId, from: currentUser.id, type: 'text', text: safeText, createdAt };
   appendPmHistoryMessage(userId, message, true);
 
   if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
   pmTextHistory[userId].push(message);
 
-  await sendPmBroadcast(isSendingImage ? { to: userId, type: 'image', imageUrl } : { to: userId, type: 'text', text: safeText });
+  await sendPmBroadcast(isSendingImage ? { to: userId, type: 'image', imageUrl, id: msgId } : { to: userId, type: 'text', text: safeText, id: msgId });
   // Registered users also persist to DB for history
   if (currentProfile?.is_registered) {
     await persistPmToDb(userId, isSendingImage ? imageUrl : safeText, isSendingImage ? 'image' : 'text');
@@ -596,16 +612,37 @@ async function handleIncomingPm(payload) {
   await openPrivateChatIncoming(fromUserId, username);
 
   if (payload.type && payload.type.startsWith('game_')) {
-    if (typeof handleIncomingGameEvent === 'function') {
-      handleIncomingGameEvent(payload);
+    const handler = window.handleIncomingGameEvent || (typeof handleIncomingGameEvent === 'function' ? handleIncomingGameEvent : null);
+    if (handler) {
+      handler(payload);
+    } else {
+      console.error('[GameEngine] handleIncomingGameEvent is not defined on window or in global scope!');
     }
     return;
+  }
+
+  if (payload.type === 'receipt' && payload.id) {
+    const receiptEl = document.querySelector(`.pm-receipt-${payload.id}`);
+    if (receiptEl) {
+      receiptEl.textContent = payload.receiptType === 'listened' ? '🎙️✓✓' : '✓✓';
+      receiptEl.classList.add('read');
+    }
+    return;
+  }
+
+  if (['text', 'image', 'voice'].includes(payload.type) && payload.id) {
+    if (activePmUserId === fromUserId) {
+       const toggle = pmWindows[fromUserId]?.el.querySelector('.pm-receipt-toggle-input');
+       if (!toggle || toggle.checked) {
+         sendPmBroadcast({ to: fromUserId, type: 'receipt', id: payload.id, receiptType: 'read' });
+       }
+    }
   }
 
   if (payload.type === 'voice' && payload.voiceDataUrl) {
     const blob = dataUrlToBlob(payload.voiceDataUrl);
     const url = URL.createObjectURL(blob);
-    appendPmVoiceMessage(fromUserId, { from: fromUserId, audioUrl: url }, false);
+    appendPmVoiceMessage(fromUserId, { id: payload.id, from: fromUserId, audioUrl: url }, false);
     trackPmVoiceUrl(fromUserId, url);
     playPmNotification(fromUserId);
     return;
@@ -613,7 +650,7 @@ async function handleIncomingPm(payload) {
 
   if (payload.type === 'image') {
     const createdAt = payload.createdAt || new Date().toISOString();
-    const message = { from: fromUserId, type: 'image', imageUrl: payload.imageUrl || '', createdAt };
+    const message = { id: payload.id, from: fromUserId, type: 'image', imageUrl: payload.imageUrl || '', createdAt };
     appendPmHistoryMessage(fromUserId, message, false);
     if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
     pmTextHistory[fromUserId].push(message);
@@ -623,7 +660,7 @@ async function handleIncomingPm(payload) {
 
   if (payload.type === 'text') {
     const createdAt = payload.createdAt || new Date().toISOString();
-    const message = { from: fromUserId, type: 'text', text: payload.text || '', createdAt };
+    const message = { id: payload.id, from: fromUserId, type: 'text', text: payload.text || '', createdAt };
     appendPmHistoryMessage(fromUserId, message, false);
 
     if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
@@ -638,9 +675,11 @@ function appendPmTextMessage(userId, msg, isMe) {
 
   const row = document.createElement('div');
   row.className = 'pm-msg' + (isMe ? ' self' : '');
+  if (msg.id) row.dataset.msgId = msg.id;
+  const receiptHtml = isMe && msg.id ? `<span class="pm-receipt-status pm-receipt-${msg.id}">✓</span>` : '';
   row.innerHTML = `
     <div class="pm-msg-bubble">${escHtml(msg.text || '')}</div>
-    <div class="pm-msg-time">${formatTime(msg.createdAt)}</div>
+    <div class="pm-msg-time">${formatTime(msg.createdAt)} ${receiptHtml}</div>
   `;
 
   box.appendChild(row);
@@ -654,6 +693,8 @@ function appendPmImageMessage(userId, msg, isMe) {
   const imageSrc = normalizeImageUrl(msg.imageUrl || '');
   const row = document.createElement('div');
   row.className = 'pm-msg pm-image' + (isMe ? ' self' : '');
+  if (msg.id) row.dataset.msgId = msg.id;
+  const receiptHtml = isMe && msg.id ? `<span class="pm-receipt-status pm-receipt-${msg.id}">✓</span>` : '';
   row.innerHTML = `
     <div class="pm-msg-bubble">
       ${imageSrc
@@ -664,7 +705,7 @@ function appendPmImageMessage(userId, msg, isMe) {
         `
         : '<div class="pm-image-error">⚠️ Invalid image URL.</div>'}
     </div>
-    <div class="pm-msg-time">${formatTime(msg.createdAt)}</div>
+    <div class="pm-msg-time">${formatTime(msg.createdAt)} ${receiptHtml}</div>
   `;
 
   const image = row.querySelector('.pm-inline-image');
@@ -697,13 +738,27 @@ function appendPmVoiceMessage(userId, msg, isMe) {
 
   const row = document.createElement('div');
   row.className = 'pm-msg pm-voice' + (isMe ? ' self' : '');
+  if (msg.id) row.dataset.msgId = msg.id;
+  const receiptHtml = isMe && msg.id ? `<span class="pm-receipt-status pm-receipt-${msg.id}">✓</span>` : '';
   const voiceMarkup = currentProfile?.is_registered
     ? `<audio controls preload="none" src="${escHtml(msg.audioUrl || '')}"></audio>`
     : '🔒 Voice notes are for registered users only.';
   row.innerHTML = `
     <div class="pm-msg-bubble">${voiceMarkup}</div>
-    <div class="pm-msg-time">${formatTime(new Date().toISOString())}</div>
+    <div class="pm-msg-time">${formatTime(msg.createdAt || new Date().toISOString())} ${receiptHtml}</div>
   `;
+  
+  if (!isMe && msg.id && currentProfile?.is_registered) {
+    const audio = row.querySelector('audio');
+    if (audio) {
+      audio.addEventListener('play', () => {
+        const toggle = pmWindows[userId]?.el.querySelector('.pm-receipt-toggle-input');
+        if (!toggle || toggle.checked) {
+          sendPmBroadcast({ to: userId, type: 'receipt', id: msg.id, receiptType: 'listened' });
+        }
+      }, { once: true });
+    }
+  }
 
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
@@ -721,23 +776,19 @@ function renderPmTextHistory(userId) {
   });
 }
 
-async function togglePmRecording(userId) {
+async function startPmVoiceNoteRecording(e, userId) {
+  if (e && e.button !== 0 && e.type !== 'touchstart') return;
+
   if (!currentProfile?.is_registered) {
-    alert('Voice notes are available for registered users only.');
+    if (typeof showChatToast === 'function') showChatToast('Voice notes are available for registered users only.', 'warning');
     return;
   }
 
   const btn = pmWindows[userId]?.el.querySelector('.pm-record-btn');
   if (!btn) return;
 
-  const recorder = pmRecorders[userId];
-  if (recorder?.state === 'recording') {
-    recorder.stop();
-    return;
-  }
-
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-    alert('Voice recording is not supported in this browser.');
+    if (typeof showChatToast === 'function') showChatToast('Voice recording is not supported in this browser.', 'warning');
     return;
   }
 
@@ -747,12 +798,12 @@ async function togglePmRecording(userId) {
     const mediaRecorder = new MediaRecorder(stream);
     pmRecorders[userId] = mediaRecorder;
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) chunks.push(event.data);
     };
 
-    mediaRecorder.onstop = async () => {
-      btn.classList.remove('recording');
+    mediaRecorder.onstop = () => {
+      btn.classList.remove('recording-pulse', 'recording');
       btn.textContent = '🎙️';
       stream.getTracks().forEach(t => t.stop());
 
@@ -760,19 +811,75 @@ async function togglePmRecording(userId) {
 
       const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
       const audioUrl = URL.createObjectURL(blob);
-      trackPmVoiceUrl(userId, audioUrl);
-      appendPmVoiceMessage(userId, { from: currentUser.id, audioUrl }, true);
-
-      const voiceDataUrl = await blobToDataUrl(blob);
-      await sendPmBroadcast({ to: userId, type: 'voice', voiceDataUrl });
+      
+      showPmVoicePreview(userId, audioUrl, blob);
     };
 
     mediaRecorder.start();
-    btn.classList.add('recording');
+    btn.classList.add('recording-pulse', 'recording');
     btn.textContent = '⏹️';
-  } catch (_) {
-    alert('Microphone permission is required to record voice messages.');
+
+    sbClient.channel('presence-global').send({
+      type: 'broadcast',
+      event: 'recording-voice',
+      payload: { userId: currentUser.id, username: currentUser.username, roomId: 'pm' }
+    }).catch(e => console.warn(e));
+
+  } catch (error) {
+    console.error('Mic access denied', error);
+    if (typeof showChatToast === 'function') showChatToast('Microphone permission denied.', 'error');
   }
+}
+
+function stopPmVoiceNoteRecording(e, userId) {
+  const recorder = pmRecorders[userId];
+  if (recorder && recorder.state === 'recording') {
+    recorder.stop();
+    sbClient.channel('presence-global').send({
+      type: 'broadcast',
+      event: 'recording-voice-stop',
+      payload: { userId: currentUser.id, roomId: 'pm' }
+    }).catch(e => console.warn(e));
+  }
+}
+
+function showPmVoicePreview(userId, audioUrl, blob) {
+  const wrap = pmWindows[userId]?.el;
+  if (!wrap) return;
+  const row = wrap.querySelector('.pm-voice-preview-row');
+  const audioEl = wrap.querySelector('.pm-voice-preview-audio');
+  const sendBtn = wrap.querySelector('.pm-voice-send-btn');
+  const cancelBtn = wrap.querySelector('.pm-voice-cancel-btn');
+  
+  if (!row || !audioEl || !sendBtn || !cancelBtn) return;
+  
+  audioEl.src = audioUrl;
+  row.classList.remove('hidden');
+  
+  sendBtn.onclick = async () => {
+    row.classList.add('hidden');
+    audioEl.pause();
+    
+    trackPmVoiceUrl(userId, audioUrl);
+    
+    // Create message object
+    const createdAt = new Date().toISOString();
+    const msgId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+    const msg = { id: msgId, from: currentUser.id, type: 'voice', audioUrl, createdAt };
+    appendPmVoiceMessage(userId, msg, true);
+    
+    if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
+    pmTextHistory[userId].push(msg);
+
+    const voiceDataUrl = await blobToDataUrl(blob);
+    await sendPmBroadcast({ to: userId, type: 'voice', voiceDataUrl, createdAt, id: msgId });
+  };
+  
+  cancelBtn.onclick = () => {
+    row.classList.add('hidden');
+    audioEl.pause();
+    audioEl.src = '';
+  };
 }
 
 function getPmVoiceChannelKey(userId) {

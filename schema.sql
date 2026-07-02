@@ -187,3 +187,15 @@ SELECT cron.schedule(
     '0 * * * *', -- Run every hour
     'DELETE FROM public.profiles WHERE is_registered = false AND created_at < NOW() - INTERVAL ''2 hours'''
 );
+
+-- =====================================================================
+-- PERFORMANCE OPTIMIZATION INDEXES
+-- =====================================================================
+CREATE INDEX IF NOT EXISTS idx_messages_room_created ON public.messages(room_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_private_messages_sender_recipient ON public.private_messages(sender_id, recipient_id);
+CREATE INDEX IF NOT EXISTS idx_private_messages_created ON public.private_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_profiles_is_registered ON public.profiles(is_registered);
+
+-- Add is_read and is_listened columns to public.private_messages
+ALTER TABLE public.private_messages ADD COLUMN IF NOT EXISTS is_read boolean DEFAULT false;
+ALTER TABLE public.private_messages ADD COLUMN IF NOT EXISTS is_listened boolean DEFAULT false;
