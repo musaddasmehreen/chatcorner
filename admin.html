@@ -19,39 +19,55 @@
 <body class="admin-page">
   <!-- Security Validation Guard -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/security.js"></script>
+  <script src="js/admin-security.js"></script>
   <script src="js/config.js"></script>
   <script>
-    // Simple security validation - check Supabase auth + owner status
+    // Comprehensive security validation BEFORE rendering
     (async function securityGate() {
-      // Check if admin_authenticated flag exists
-      if (!sessionStorage.getItem('admin_authenticated')) {
+      // Check session validity first
+      if (!window.adminSecurityManager || !window.adminSecurityManager.validateAdminSession()) {
         document.documentElement.style.display = 'none';
         window.location.replace('adminup.html?denied=1');
         return;
+      }
+
+      // Check for device fingerprint match
+      const anomaly = window.securityManager ? await window.securityManager.detectAnomalousActivity() : { deviceMismatch: false };
+      if (anomaly.deviceMismatch) {
+        window.securityManager.logSecurityEvent('ADMIN_DEVICE_MISMATCH', anomaly);
       }
 
       // Check Supabase auth
       const { data: { session } } = await sbClient.auth.getSession();
       if (!session?.user) {
         document.documentElement.style.display = 'none';
-        sessionStorage.removeItem('admin_authenticated');
+        window.adminSecurityManager.endAdminSession('SUPABASE_SESSION_MISSING');
         window.location.replace('adminup.html');
         return;
       }
 
-      // Verify admin/owner status
+      // Verify admin status
       const { data: profile } = await sbClient
         .from('profiles')
-        .select('is_admin,is_owner,username,email')
+        .select('is_admin,username,email')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (!profile?.is_owner) {
+      if (!profile?.is_admin) {
         await sbClient.auth.signOut();
-        sessionStorage.removeItem('admin_authenticated');
+        window.adminSecurityManager.endAdminSession('ADMIN_FLAG_REVOKED');
         document.documentElement.style.display = 'none';
         window.location.replace('adminup.html?denied=1');
         return;
+      }
+
+      // Log admin access
+      if (window.securityManager) {
+        window.securityManager.logSecurityEvent('ADMIN_PANEL_ACCESSED', {
+          username: profile.username || profile.email,
+          timestamp: new Date().toISOString()
+        });
       }
 
       // Display admin name in banner
