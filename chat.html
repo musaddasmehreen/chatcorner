@@ -165,6 +165,7 @@
   <div id="room-context-menu" class="room-context-menu hidden" style="position: absolute; z-index: 10000;">
     <ul class="context-menu-list">
       <li id="menu-item-lock" onclick="handleMenuLockToggle()">🔒 Lock/Unlock Room</li>
+      <li id="menu-item-restrict" onclick="handleMenuRestrictUser()">🚫 Restrict User Entry</li>
     </ul>
   </div>
 
@@ -434,6 +435,9 @@
         <label id="stealth-mode-label" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
           <input type="checkbox" id="stealth-mode-checkbox" onchange="toggleStealthMode(this.checked)" style="cursor:pointer;" /> 🕵️ Stealth
         </label>
+        <label id="owner-global-mute-label" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(239,68,68,0.1);padding:4px 8px;border-radius:4px;border:1px solid #ef4444;">
+          <input type="checkbox" id="owner-global-mute-checkbox" onchange="toggleGlobalChatMute(this.checked)" style="cursor:pointer;" /> 🚫 Mute Chat
+        </label>
       </div>
 
       <!-- Visual spacer / divider between voice and radio -->
@@ -516,7 +520,7 @@
       <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
       <a href="https://github.com/musaddasmehreen/chatcorner/raw/main/chatcorner-updated.apk" class="download-modal-btn" download>Download for Android</a>
       <div style="font-family: monospace; font-size: 11px; margin-top: 10px; color: rgba(255,255,255,0.6); word-break: break-all; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2);">
-        SHA-256: <span id="apk-sha256">f8f7d36313a7fa05f7ab3f0972ce100d6e1371672354477599f49926193b197e</span>
+        SHA-256: <span id="apk-sha256">026d5a65f3d427c2544c5c1cde3695874172e0fd59b724b5dac79c2a95d77ad6</span>
       </div>
     </div>
   </div>

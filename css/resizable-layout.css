@@ -1880,3 +1880,9 @@
   scrollbar-width: none !important;
 }
 
+/* Disable pointer events for standard co-watch viewers so they cannot click play/pause/links */
+.cowatch-container.cowatch-viewer-only #cowatch-youtube-player,
+.cowatch-container.cowatch-viewer-only #cowatch-video-player {
+  pointer-events: none !important;
+}
+

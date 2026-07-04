@@ -593,6 +593,22 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
       stealthLabel.style.display = 'none';
     }
   }
+
+  // Toggle visibility of owner global mute checkbox
+  const ownerMuteLabel = document.getElementById('owner-global-mute-label');
+  if (ownerMuteLabel) {
+    if (profile?.is_owner) {
+      ownerMuteLabel.classList.remove('hidden');
+      ownerMuteLabel.style.display = 'inline-flex';
+      
+      // Initialize check state
+      const checkbox = document.getElementById('owner-global-mute-checkbox');
+      if (checkbox) checkbox.checked = !!_globalChatMuted;
+    } else {
+      ownerMuteLabel.classList.add('hidden');
+      ownerMuteLabel.style.display = 'none';
+    }
+  }
 }
 
 function updateCurrentUserBadge() {
@@ -1240,8 +1256,19 @@ function renderRoomsTopbar(rooms) {
 }
 
 async function enterRoom(room, force = false, skipModRefresh = false) {
-  // Access Guard check for locked rooms
+  // Access Guard check for restricted users and locked rooms
   const isOwner = room.owner_id === currentUser?.id || currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  
+  if (room.description && room.description.startsWith('[') && room.description.endsWith(']') && !isOwner) {
+    try {
+      const restrictedIds = JSON.parse(room.description);
+      if (restrictedIds.includes(currentUser?.id)) {
+        showChatToast('⚠️ You are restricted from entering this room by the owner.', 'error');
+        return;
+      }
+    } catch (_) {}
+  }
+
   if (room.is_locked && !isOwner && !_bypassPasswordRooms.has(room.id)) {
     showRoomPasswordPrompt(room, () => {
       enterRoom(room, force, skipModRefresh);
@@ -1325,13 +1352,26 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (emojiBtn) emojiBtn.disabled = false;
   updateComposerState();
 
-  const { data: messages } = await sbClient
+  const { data: dbMessages } = await sbClient
     .from('messages')
     .select('*')
     .eq('room_id', room.id)
     .neq('type', 'system')
     .order('created_at', { ascending: true })
     .limit(50);
+
+  let messages = dbMessages || [];
+  if (room.room_type === 'cowatch') {
+    const logoutTimeStr = localStorage.getItem('cc_popcorn_logout_time');
+    const lastActiveStr = localStorage.getItem('cc_popcorn_last_active');
+    const refTimeStr = logoutTimeStr || lastActiveStr;
+    if (refTimeStr) {
+      const refTime = parseInt(refTimeStr, 10);
+      if (Date.now() - refTime > 3600000) {
+        messages = messages.filter(m => new Date(m.created_at).getTime() > refTime);
+      }
+    }
+  }
 
   oldestMessageTimestamp = messages?.length ? messages[0].created_at : null;
   if (messages?.length) {
@@ -1542,6 +1582,11 @@ function checkGlobalRateLimit() {
 }
 
 async function sendMessage() {
+  const isAdminOrOwnerOrMod = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  if (_globalChatMuted && !isAdminOrOwnerOrMod) {
+    showChatToast('Chat is disabled globally by the owner.', 'warning');
+    return;
+  }
   if (!checkGlobalRateLimit()) {
     showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
     return;
@@ -2233,6 +2278,21 @@ function updateComposerState() {
 
   document.body.classList.toggle('guest-mode', isGuest);
   if (guestNoticeBar) guestNoticeBar.classList.toggle('hidden', !isGuest);
+
+  const isAdminOrOwnerOrMod = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  const isChatBlocked = _globalChatMuted && !isAdminOrOwnerOrMod;
+
+  if (isChatBlocked) {
+    if (msgInput) {
+      msgInput.disabled = true;
+      msgInput.placeholder = 'Chat is disabled globally by the owner.';
+    }
+    if (sendBtn) sendBtn.disabled = true;
+    if (emojiBtn) emojiBtn.disabled = true;
+    if (imageBtn) imageBtn.disabled = true;
+    if (voiceBtn) voiceBtn.disabled = false;
+    return;
+  }
 
   if (isGuest) {
     if (msgInput) {
@@ -5621,6 +5681,29 @@ function enterCoWatchRoomLayout() {
   if (video) { video.src = ''; video.style.display = 'none'; }
   if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
 
+  // Restrict playback control to admins/mods/owners/room-owners
+  const canControlMedia = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod || (currentRoom && currentRoom.owner_id === currentUser?.id);
+  if (urlInput) {
+    const urlBar = document.querySelector('.cowatch-url-bar');
+    if (urlBar) {
+      if (canControlMedia) {
+        urlBar.classList.remove('hidden');
+        urlBar.style.display = 'flex';
+      } else {
+        urlBar.classList.add('hidden');
+        urlBar.style.display = 'none';
+      }
+    }
+  }
+
+  if (video) {
+    video.controls = !!canControlMedia;
+  }
+
+  if (cowatchContainer) {
+    cowatchContainer.classList.toggle('cowatch-viewer-only', !canControlMedia);
+  }
+
   // Initial user list rendering in co-watch room
   renderCoWatchParticipants();
 }
@@ -6328,6 +6411,118 @@ function changeCoWatchHlsQuality(levelIdx) {
   }
 }
 
+let _globalChatMuted = false;
+
+async function checkGlobalChatMute() {
+  try {
+    const { data, error } = await sbClient
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'global_chat_disabled')
+      .maybeSingle();
+    if (!error && data) {
+      const isMuted = (data.value === 'true');
+      if (_globalChatMuted !== isMuted) {
+        _globalChatMuted = isMuted;
+        updateComposerState();
+        const checkbox = document.getElementById('owner-global-mute-checkbox');
+        if (checkbox) checkbox.checked = isMuted;
+      }
+    }
+  } catch (_) {}
+}
+
+checkGlobalChatMute();
+setInterval(checkGlobalChatMute, 10000);
+
+setInterval(() => {
+  localStorage.setItem('cc_popcorn_last_active', Date.now().toString());
+}, 15000);
+
+async function toggleGlobalChatMute(active) {
+  if (!currentProfile?.is_owner) {
+    showChatToast('Only the owner can toggle global chat mute.', 'error');
+    return;
+  }
+  
+  _globalChatMuted = active;
+  
+  try {
+    const { error } = await sbClient
+      .from('app_settings')
+      .upsert({ key: 'global_chat_disabled', value: String(active), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      
+    if (error) throw error;
+    showChatToast(active ? 'Chat has been muted globally.' : 'Global chat mute released.', 'info');
+    updateComposerState();
+  } catch (err) {
+    showChatToast('Failed to save setting: ' + err.message, 'error');
+  }
+}
+
+async function handleMenuRestrictUser() {
+  const menu = document.getElementById('room-context-menu');
+  if (menu) menu.classList.add('hidden');
+
+  if (!_contextMenuRoom) return;
+  const room = _contextMenuRoom;
+
+  const username = prompt("Enter username of the user you wish to RESTRICT from entering this room:\n(To clear all restrictions for this room, click OK with an empty input)");
+  if (username === null) return;
+
+  const targetUser = username.trim();
+  if (targetUser === "") {
+    try {
+      const { error } = await sbClient
+        .from('rooms')
+        .update({ description: '' })
+        .eq('id', room.id);
+      if (error) throw error;
+      showChatToast('All restrictions cleared for this room.', 'success');
+      room.description = '';
+    } catch (err) {
+      showChatToast('Error: ' + err.message, 'error');
+    }
+    return;
+  }
+
+  try {
+    const { data: profile, error: profileErr } = await sbClient
+      .from('profiles')
+      .select('id, username')
+      .eq('username', targetUser)
+      .maybeSingle();
+
+    if (profileErr || !profile) {
+      showChatToast('User "' + targetUser + '" not found.', 'error');
+      return;
+    }
+
+    let restrictedIds = [];
+    try {
+      if (room.description && room.description.startsWith('[') && room.description.endsWith(']')) {
+        restrictedIds = JSON.parse(room.description);
+      }
+    } catch (_) {}
+
+    if (!restrictedIds.includes(profile.id)) {
+      restrictedIds.push(profile.id);
+    }
+
+    const { error: updateErr } = await sbClient
+      .from('rooms')
+      .update({ description: JSON.stringify(restrictedIds) })
+      .eq('id', room.id);
+
+    if (updateErr) throw updateErr;
+
+    showChatToast('User "' + profile.username + '" restricted from entering this room!', 'success');
+    room.description = JSON.stringify(restrictedIds);
+  } catch (err) {
+    showChatToast('Failed to restrict user: ' + err.message, 'error');
+  }
+}
+
 window.renderCoWatchParticipants = renderCoWatchParticipants;
 window.shouldShowUserInRoster = shouldShowUserInRoster;
 window.toggleStealthMode = toggleStealthMode;
@@ -6336,3 +6531,5 @@ window.setCoWatchChatOpacity = setCoWatchChatOpacity;
 window.setCoWatchControlsOpacity = setCoWatchControlsOpacity;
 window.setCoWatchLayout = setCoWatchLayout;
 window.changeCoWatchHlsQuality = changeCoWatchHlsQuality;
+window.toggleGlobalChatMute = toggleGlobalChatMute;
+window.handleMenuRestrictUser = handleMenuRestrictUser;
