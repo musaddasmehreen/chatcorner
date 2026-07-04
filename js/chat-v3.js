@@ -560,6 +560,7 @@ async function clearExpiredBan(userId) {
 }
 
 let _stealthModeActive = false;
+let _globalChatMuted = false;
 
 function updatePresenceBaseFromProfile(profile = currentProfile) {
   presenceBaseData = {
@@ -6410,8 +6411,6 @@ function changeCoWatchHlsQuality(levelIdx) {
     _cowatchHls.currentLevel = parseInt(levelIdx, 10);
   }
 }
-
-let _globalChatMuted = false;
 
 async function checkGlobalChatMute() {
   try {
