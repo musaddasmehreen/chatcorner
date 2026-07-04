@@ -5904,7 +5904,15 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
   
   // Parse URL type
   let ytId = getYouTubeId(url);
-  let isDirectVideo = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('.webm') || url.toLowerCase().includes('.ogg') || url.toLowerCase().includes('m3u8') || url.toLowerCase().includes('mp4');
+  let isDirectVideo = url.toLowerCase().includes('.mp4') || 
+                      url.toLowerCase().includes('.m3u8') || 
+                      url.toLowerCase().includes('.webm') || 
+                      url.toLowerCase().includes('.ogg') || 
+                      url.toLowerCase().includes('.ts') ||
+                      url.toLowerCase().includes('.mkv') ||
+                      url.toLowerCase().includes('/live/') ||
+                      url.toLowerCase().includes('m3u8') || 
+                      url.toLowerCase().includes('mp4');
 
   if (ytId) {
     video.style.display = 'none';
@@ -5995,8 +6003,19 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
       webUrl = 'https://' + webUrl;
     }
 
-    // Google Translate mobile version allows iframe embedding and acts as a clean free proxy!
-    const proxyUrl = `https://translate.google.com/m?sl=auto&tl=en&hl=en&mu=${encodeURIComponent(webUrl)}`;
+    // Determine the proxy base URL dynamically based on whether it is running on a server vs. Capacitor
+    const getProxyBaseUrl = () => {
+      const origin = window.location.origin;
+      if (origin.includes('localhost') && !origin.includes('capacitor') && !origin.includes('http://localhost:80') && !origin.includes('capacitor://')) {
+        return origin; // Local dev server (server.js)
+      }
+      if (origin.startsWith('http') && !origin.includes('localhost')) {
+        return origin; // Live web site (e.g. chatcorner.pages.dev)
+      }
+      return 'https://chatcorner.pages.dev'; // Production deployment proxy for Android/Capacitor App
+    };
+
+    const proxyUrl = `${getProxyBaseUrl()}/proxy?url=${encodeURIComponent(webUrl)}`;
     iframe.src = proxyUrl;
 
     if (overlay) overlay.classList.add('hidden');

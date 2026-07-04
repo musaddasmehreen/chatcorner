@@ -33,6 +33,98 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  if (parsedUrl.pathname === '/proxy') {
+    const targetUrl = parsedUrl.searchParams.get('url');
+    if (!targetUrl) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('Missing url parameter');
+      return;
+    }
+    
+    let cleanUrl = targetUrl.trim();
+    if (!/^https?:\/\//i.test(cleanUrl)) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+
+    const clientModule = cleanUrl.startsWith('https') ? require('https') : require('http');
+    const options = {
+      headers: {
+        'User-Agent': req.headers['user-agent'] || '',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+      }
+    };
+
+    clientModule.get(cleanUrl, options, (proxyRes) => {
+      const resHeaders = {};
+      for (const [key, val] of Object.entries(proxyRes.headers)) {
+        if (!['x-frame-options', 'content-security-policy', 'frame-options', 'csp'].includes(key.toLowerCase())) {
+          resHeaders[key] = val;
+        }
+      }
+      resHeaders['Access-Control-Allow-Origin'] = '*';
+
+      const contentType = proxyRes.headers['content-type'] || '';
+      if (contentType.includes('text/html')) {
+        let body = '';
+        proxyRes.on('data', (chunk) => body += chunk);
+        proxyRes.on('end', () => {
+          const baseTag = `<base href="${cleanUrl}">`;
+          const injectScript = `
+<script>
+  (function() {
+    document.addEventListener('click', function(e) {
+      var a = e.target.closest('a');
+      if (a && a.href) {
+        var href = a.href.trim();
+        if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(a.href);
+      }
+    }, true);
+
+    document.addEventListener('submit', function(e) {
+      var form = e.target;
+      var method = (form.method || 'get').toLowerCase();
+      if (method === 'get' && form.action) {
+        e.preventDefault();
+        e.stopPropagation();
+        var url = new URL(form.action);
+        var formData = new FormData(form);
+        for (var pair of formData.entries()) {
+          url.searchParams.set(pair[0], pair[1]);
+        }
+        window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(url.toString());
+      }
+    }, true);
+  })();
+</script>
+`;
+          if (body.includes('<head>')) {
+            body = body.replace('<head>', `<head>${baseTag}${injectScript}`);
+          } else if (body.includes('<HEAD>')) {
+            body = body.replace('<HEAD>', `<HEAD>${baseTag}${injectScript}`);
+          } else {
+            body = baseTag + injectScript + body;
+          }
+          
+          res.writeHead(proxyRes.statusCode || 200, resHeaders);
+          res.end(body);
+        });
+      } else {
+        res.writeHead(proxyRes.statusCode || 200, resHeaders);
+        proxyRes.pipe(res);
+      }
+    }).on('error', (err) => {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Proxy Error: ' + err.message);
+    });
+    return;
+  }
+
   let urlPath = req.url.split('?')[0];
   if (urlPath === '/') urlPath = '/chat.html';
 
