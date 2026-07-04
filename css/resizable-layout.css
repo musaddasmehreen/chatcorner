@@ -1612,7 +1612,7 @@
   flex-direction: column !important;
   flex: 1 !important;
   height: 100% !important;
-  background: #004d3d !important;
+  background: var(--bg, #004d3d) !important;
   border-bottom: none !important;
   overflow: hidden !important;
   padding: 12px;
@@ -1836,5 +1836,47 @@
 .cowatch-participant-avatar:hover {
   transform: translateY(-2px);
   z-index: 10;
+}
+
+/* ── Popcorn layout options ── */
+.page-shell.cowatch-active.cowatch-layout-stretched .cowatch-chat-wrapper {
+  width: 120px !important;
+  min-width: 120px !important;
+  max-width: 120px !important;
+}
+.page-shell.cowatch-active.cowatch-layout-squeezed .cowatch-chat-wrapper {
+  width: 50% !important;
+  min-width: 50% !important;
+  max-width: 50% !important;
+}
+.page-shell.cowatch-active.cowatch-layout-normal .cowatch-chat-wrapper {
+  width: 300px !important;
+  min-width: 300px !important;
+  max-width: 300px !important;
+}
+
+/* ── Lights Off Cinematic Mode ── */
+.page-shell.lights-off {
+  background: #000000 !important;
+}
+.page-shell.lights-off .top-bar, 
+.page-shell.lights-off .audio-bar,
+.page-shell.lights-off .chat-theme-bar,
+.page-shell.lights-off .emoji-picker-container {
+  display: none !important;
+}
+.page-shell.lights-off .chat-main {
+  background: #000000 !important;
+}
+.page-shell.lights-off .cowatch-container {
+  background: #000000 !important;
+}
+
+/* ── Hide scrollbars / clean up during lights off ── */
+.page-shell.lights-off ::-webkit-scrollbar {
+  display: none !important;
+}
+.page-shell.lights-off {
+  scrollbar-width: none !important;
 }
 

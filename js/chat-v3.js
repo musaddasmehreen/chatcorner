@@ -559,6 +559,8 @@ async function clearExpiredBan(userId) {
   }).eq('id', userId);
 }
 
+let _stealthModeActive = false;
+
 function updatePresenceBaseFromProfile(profile = currentProfile) {
   presenceBaseData = {
     userId: currentUser?.id,
@@ -576,8 +578,21 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     msgColor: profile?.msg_color,
     boldText: !!profile?.bold_text,
     avatarUrl: profile?.avatar_url,
-    totalOnlineTime: profile?.total_online_time || 0
+    totalOnlineTime: profile?.total_online_time || 0,
+    isStealth: _stealthModeActive
   };
+
+  // Toggle visibility of stealth mode checkbox based on permissions
+  const stealthLabel = document.getElementById('stealth-mode-label');
+  if (stealthLabel) {
+    if (profile?.is_admin || profile?.is_owner || profile?.is_mod) {
+      stealthLabel.classList.remove('hidden');
+      stealthLabel.style.display = 'inline-flex';
+    } else {
+      stealthLabel.classList.add('hidden');
+      stealthLabel.style.display = 'none';
+    }
+  }
 }
 
 function updateCurrentUserBadge() {
@@ -1840,6 +1855,7 @@ function renderUserList() {
   const sortedUsers = getSortedOnlineUsers();
 
   sortedUsers.forEach(u => {
+    if (typeof shouldShowUserInRoster === 'function' && !shouldShowUserInRoster(u)) return;
     const li = document.createElement('li');
     li.className = 'user-item';
     li.dataset.userId = u.userId;
@@ -5854,10 +5870,29 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
 
     if (url.includes('.m3u8') || url.includes('m3u8')) {
       if (window.Hls && Hls.isSupported()) {
-        _cowatchHls = new Hls();
+        _cowatchHls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 90,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 600,
+          appendErrorMaxRetry: 10
+        });
         _cowatchHls.loadSource(url);
         _cowatchHls.attachMedia(video);
-        _cowatchHls.on(Hls.Events.MANIFEST_PARSED, onReady);
+        _cowatchHls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          onReady();
+          const select = document.getElementById('cowatch-quality-select');
+          if (select) {
+            select.innerHTML = '<option value="auto">Auto Quality</option>';
+            _cowatchHls.levels.forEach((lvl, idx) => {
+              const opt = document.createElement('option');
+              opt.value = idx;
+              opt.textContent = `${lvl.height}p`;
+              select.appendChild(opt);
+            });
+          }
+        });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
       }
@@ -6183,15 +6218,17 @@ function renderCoWatchParticipants() {
   if (!row) return;
   row.innerHTML = '';
   
-  const sortedUsers = getSortedOnlineUsers();
+  const visibleUsers = getSortedOnlineUsers().filter(u => {
+    return (typeof shouldShowUserInRoster !== 'function' || shouldShowUserInRoster(u));
+  });
   
   // Update user count badge
   const badge = document.getElementById('cowatch-user-count');
   if (badge) {
-    badge.textContent = `${sortedUsers.length} user${sortedUsers.length === 1 ? '' : 's'}`;
+    badge.textContent = `${visibleUsers.length} user${visibleUsers.length === 1 ? '' : 's'}`;
   }
   
-  sortedUsers.forEach(u => {
+  visibleUsers.forEach(u => {
     const avatar = document.createElement('div');
     avatar.className = 'cowatch-participant-avatar';
     avatar.style.background = u.color || '#7c3aed';
@@ -6201,4 +6238,101 @@ function renderCoWatchParticipants() {
   });
 }
 
+function shouldShowUserInRoster(u) {
+  if (!u.isStealth) return true; // Everyone can see non-stealth users
+  if (u.userId === currentUser?.id) return true; // Always see yourself
+  
+  const isViewerRoomOwner = currentRoom && currentRoom.owner_id === currentUser?.id;
+  
+  // If the stealth user is the room owner, only the owner can see themselves
+  if (currentRoom && u.userId === currentRoom.owner_id) {
+    return false; // Admins and mods cannot see owner in stealth
+  }
+  
+  // If the stealth user is an admin/mod, the room owner can see them
+  if (isViewerRoomOwner) return true;
+  
+  return false;
+}
+
+function toggleStealthMode(active) {
+  _stealthModeActive = active;
+  presenceBaseData.isStealth = active;
+  
+  // Update checkbox state in case triggered programmatically
+  const checkbox = document.getElementById('stealth-mode-checkbox');
+  if (checkbox) checkbox.checked = active;
+  
+  debouncedPresenceTrack();
+}
+
+function toggleCoWatchLights() {
+  const shell = document.querySelector('.page-shell');
+  if (!shell) return;
+  const isOff = shell.classList.toggle('lights-off');
+  
+  const btn = document.getElementById('btn-cowatch-lights');
+  if (btn) {
+    btn.textContent = isOff ? '💡 Lights On' : '💡 Lights Off';
+    btn.classList.toggle('btn-primary', isOff);
+  }
+  
+  const opacityContainer = document.getElementById('cowatch-chat-opacity-container');
+  if (opacityContainer) {
+    if (isOff) {
+      opacityContainer.classList.remove('hidden');
+      opacityContainer.style.display = 'inline-flex';
+    } else {
+      opacityContainer.classList.add('hidden');
+      opacityContainer.style.display = 'none';
+      
+      // Reset chat opacity to normal
+      const chatWrapper = document.querySelector('.cowatch-chat-wrapper');
+      if (chatWrapper) chatWrapper.style.opacity = '1';
+    }
+  }
+}
+
+function setCoWatchChatOpacity(val) {
+  const chatWrapper = document.querySelector('.cowatch-chat-wrapper');
+  if (chatWrapper) {
+    chatWrapper.style.opacity = (val / 100).toString();
+  }
+}
+
+function setCoWatchControlsOpacity(val) {
+  const topBar = document.querySelector('.cowatch-top-bar');
+  const urlBar = document.querySelector('.cowatch-url-bar');
+  const syncBar = document.querySelector('.cowatch-sync-controls');
+  const opacity = val / 100;
+  
+  if (topBar) topBar.style.opacity = opacity.toString();
+  if (urlBar) urlBar.style.opacity = opacity.toString();
+  if (syncBar) syncBar.style.opacity = opacity.toString();
+}
+
+function setCoWatchLayout(mode) {
+  const shell = document.querySelector('.page-shell');
+  if (!shell) return;
+  
+  shell.classList.remove('cowatch-layout-stretched', 'cowatch-layout-normal', 'cowatch-layout-squeezed');
+  shell.classList.add(`cowatch-layout-${mode}`);
+}
+
+function changeCoWatchHlsQuality(levelIdx) {
+  if (!_cowatchHls) return;
+  if (levelIdx === 'auto') {
+    _cowatchHls.currentLevel = -1;
+  } else {
+    _cowatchHls.currentLevel = parseInt(levelIdx, 10);
+  }
+}
+
 window.renderCoWatchParticipants = renderCoWatchParticipants;
+window.shouldShowUserInRoster = shouldShowUserInRoster;
+window.toggleStealthMode = toggleStealthMode;
+window.toggleCoWatchLights = toggleCoWatchLights;
+window.setCoWatchChatOpacity = setCoWatchChatOpacity;
+window.setCoWatchControlsOpacity = setCoWatchControlsOpacity;
+window.setCoWatchLayout = setCoWatchLayout;
+window.changeCoWatchHlsQuality = changeCoWatchHlsQuality;

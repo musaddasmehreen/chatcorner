@@ -328,8 +328,27 @@
               </div>
             </div>
             <div class="cowatch-sync-controls" id="cowatch-sync-controls">
-              <span id="cowatch-sync-status" class="sync-status-indicator">● Synchronized</span>
-              <button id="btn-cowatch-sync-now" class="btn-sm" onclick="syncCoWatchPlayerWithHost()">🔄 Force Resync</button>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span id="cowatch-sync-status" class="sync-status-indicator">● Synchronized</span>
+                <button id="btn-cowatch-sync-now" class="btn-sm" onclick="syncCoWatchPlayerWithHost()">🔄 Force Resync</button>
+                <div class="cowatch-layout-buttons" style="display:flex;gap:4px;">
+                  <button class="btn-sm" onclick="setCoWatchLayout('stretched')" title="Stretch Screen">↔️ Stretch</button>
+                  <button class="btn-sm" onclick="setCoWatchLayout('normal')" title="Normal Screen">↩️ Normal</button>
+                  <button class="btn-sm" onclick="setCoWatchLayout('squeezed')" title="Squeeze Screen">➡️ Squeeze</button>
+                </div>
+                <select id="cowatch-quality-select" class="btn-sm" onchange="changeCoWatchHlsQuality(this.value)" style="background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:0.72rem;cursor:pointer;height:24px;">
+                  <option value="auto">Auto Quality</option>
+                </select>
+                <div style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--text);">
+                  <span>🕶️ Dim:</span>
+                  <input type="range" id="cowatch-controls-opacity" min="10" max="100" value="100" oninput="setCoWatchControlsOpacity(this.value)" style="width:40px;cursor:pointer;height:12px;" />
+                </div>
+                <button class="btn-sm" id="btn-cowatch-lights" onclick="toggleCoWatchLights()" title="Toggle Lights Off">💡 Lights Off</button>
+                <div id="cowatch-chat-opacity-container" class="hidden" style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--text);">
+                  <span>💬 Chat Opacity:</span>
+                  <input type="range" id="cowatch-chat-opacity" min="5" max="100" value="100" oninput="setCoWatchChatOpacity(this.value)" style="width:50px;cursor:pointer;height:12px;" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -412,6 +431,9 @@
         <button class="btn-mute hidden" id="btn-mute" onclick="toggleMute()">🔇 Mute</button>
         <button class="btn-toggle-camera hidden" id="btn-toggle-camera" onclick="toggleCamera()">📷 Camera Off</button>
         <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
+        <label id="stealth-mode-label" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
+          <input type="checkbox" id="stealth-mode-checkbox" onchange="toggleStealthMode(this.checked)" style="cursor:pointer;" /> 🕵️ Stealth
+        </label>
       </div>
 
       <!-- Visual spacer / divider between voice and radio -->
@@ -494,7 +516,7 @@
       <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
       <a href="https://github.com/musaddasmehreen/chatcorner/raw/main/chatcorner-updated.apk" class="download-modal-btn" download>Download for Android</a>
       <div style="font-family: monospace; font-size: 11px; margin-top: 10px; color: rgba(255,255,255,0.6); word-break: break-all; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2);">
-        SHA-256: <span id="apk-sha256">af21f2a6d059a711c9fbb6d0223ad5100ce17dec0dac53e4e6a58c8ca027a5af</span>
+        SHA-256: <span id="apk-sha256">f8f7d36313a7fa05f7ab3f0972ce100d6e1371672354477599f49926193b197e</span>
       </div>
     </div>
   </div>
