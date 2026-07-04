@@ -1525,12 +1525,12 @@
 .page-shell.cowatch-active .cowatch-chat-wrapper {
   display: flex !important;
   flex-direction: column !important;
-  width: 380px !important;
-  min-width: 380px !important;
-  max-width: 380px !important;
+  width: 300px !important;
+  min-width: 300px !important;
+  max-width: 300px !important;
   height: 100% !important;
   border-right: 1px solid var(--border) !important;
-  background: var(--bg) !important;
+  background: #09251e !important;
   flex-shrink: 0 !important;
   overflow: hidden !important;
 }
@@ -1612,7 +1612,7 @@
   flex-direction: column !important;
   flex: 1 !important;
   height: 100% !important;
-  background: #060814 !important;
+  background: #004d3d !important;
   border-bottom: none !important;
   overflow: hidden !important;
   padding: 12px;
@@ -1769,5 +1769,72 @@
   .page-shell.cowatch-active .sidebar-right {
     display: none !important;
   }
+}
+
+/* Hide left/right sidebars on desktop too when Popcorn room is active */
+.page-shell.cowatch-active .sidebar-left,
+.page-shell.cowatch-active .sidebar-right {
+  display: none !important;
+}
+
+/* ── Co-Watch Top Bar & Participants ── */
+.cowatch-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.cowatch-room-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cowatch-room-label {
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.cowatch-user-count-badge {
+  background: rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.cowatch-participants-row {
+  display: flex;
+  align-items: center;
+  gap: -6px; /* overlap avatars slightly like whereby */
+}
+
+.cowatch-participant-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #004d3d; /* matches background to blend overlap */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #fff;
+  margin-left: -6px; /* overlap effect */
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+
+.cowatch-participant-avatar:hover {
+  transform: translateY(-2px);
+  z-index: 10;
 }
 

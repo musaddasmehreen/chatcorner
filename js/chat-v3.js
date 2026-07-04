@@ -1957,6 +1957,7 @@ function renderUserList() {
       }
     }
   }
+  if (_cowatchActive) renderCoWatchParticipants();
 }
 
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
@@ -5603,6 +5604,9 @@ function enterCoWatchRoomLayout() {
   const iframe = document.getElementById('cowatch-youtube-player');
   if (video) { video.src = ''; video.style.display = 'none'; }
   if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
+
+  // Initial user list rendering in co-watch room
+  renderCoWatchParticipants();
 }
 
 function exitCoWatchRoom() {
@@ -6152,3 +6156,28 @@ function renderVirtualCoWatchChatMessage(payload) {
 
 window.enterFallbackVirtualPopcornRoom = enterFallbackVirtualPopcornRoom;
 window.renderVirtualCoWatchChatMessage = renderVirtualCoWatchChatMessage;
+
+function renderCoWatchParticipants() {
+  const row = document.getElementById('cowatch-participants-row');
+  if (!row) return;
+  row.innerHTML = '';
+  
+  const sortedUsers = getSortedOnlineUsers();
+  
+  // Update user count badge
+  const badge = document.getElementById('cowatch-user-count');
+  if (badge) {
+    badge.textContent = `${sortedUsers.length} user${sortedUsers.length === 1 ? '' : 's'}`;
+  }
+  
+  sortedUsers.forEach(u => {
+    const avatar = document.createElement('div');
+    avatar.className = 'cowatch-participant-avatar';
+    avatar.style.background = u.color || '#7c3aed';
+    avatar.textContent = (u.username || 'U')[0].toUpperCase();
+    avatar.title = u.username || 'User';
+    row.appendChild(avatar);
+  });
+}
+
+window.renderCoWatchParticipants = renderCoWatchParticipants;
