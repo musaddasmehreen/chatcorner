@@ -1148,7 +1148,16 @@ async function loadRooms(preloadedRooms = null) {
       };
       if (textList) textList.appendChild(li);
     } else {
-      // Auto-create Popcorn whereby-style co-watching room in DB
+      // Immediately render a fallback virtual room so the Popcorn room is ALWAYS visible
+      const li = document.createElement('li');
+      li.textContent = '🍿 Popcorn';
+      li.title = 'Popcorn – Co-Watch Videos Sync (Virtual Fallback)';
+      li.dataset.roomId = 'popcorn-fallback-virtual';
+      li.classList.add('cowatch-room-item', 'popcorns-room-item');
+      li.onclick = () => enterFallbackVirtualPopcornRoom();
+      if (textList) textList.appendChild(li);
+
+      // Auto-create Popcorn whereby-style co-watching room in DB in the background
       sbClient.from('rooms').insert({
         name: 'Popcorn',
         description: '🍿 Popcorn whereby-style co-watching room',
@@ -1157,10 +1166,13 @@ async function loadRooms(preloadedRooms = null) {
         is_locked: false
       }).select().then(({ data }) => {
         if (data && data.length > 0) {
+          // Replace fallback virtual room with the real room in cache
           rooms.push(data[0]);
           loadRooms(rooms);
         }
-      }).catch(e => console.error('Failed to auto-create Popcorn room:', e));
+      }).catch(e => {
+        console.warn('Popcorn room auto-creation in DB skipped/failed (Supabase migration might not be completed yet):', e);
+      });
     }
 
     // Render other Co-Watch database rooms
@@ -5511,29 +5523,32 @@ function renderIPTVChatMessage(payload) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Patch sendMessage to support IPTV broadcast when in IPTV room
+// Patch sendMessage to support IPTV and Virtual Co-Watch broadcast when in virtual rooms
 const _origSendMessage = window.sendMessage;
 window.sendMessage = async function() {
-  if (!_iptvActive || !currentRoom?._virtual) {
-    if (typeof _origSendMessage === 'function') return _origSendMessage();
+  if (currentRoom?._virtual) {
+    const input = document.getElementById('msg-input');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    autoResizeTextarea(input);
+    const counter = document.getElementById('msg-char-counter');
+    if (counter) counter.textContent = '0/500';
+    const payload = {
+      username: currentProfile?.username || currentUser?.email?.split('@')[0] || 'Guest',
+      text,
+      ts: Date.now()
+    };
+    
+    if (_iptvActive && _iptvChannelChannel) {
+      await _iptvChannelChannel.send({ type: 'broadcast', event: 'message', payload });
+    } else if (_cowatchActive && _cowatchChannel) {
+      await _cowatchChannel.send({ type: 'broadcast', event: 'virtual_chat_message', payload });
+    }
     return;
   }
-  const input = document.getElementById('msg-input');
-  if (!input) return;
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  autoResizeTextarea(input);
-  const counter = document.getElementById('msg-char-counter');
-  if (counter) counter.textContent = '0/500';
-  const payload = {
-    username: currentProfile?.username || currentUser?.email?.split('@')[0] || 'Guest',
-    text,
-    ts: Date.now()
-  };
-  if (_iptvChannelChannel) {
-    await _iptvChannelChannel.send({ type: 'broadcast', event: 'message', payload });
-  }
+  if (typeof _origSendMessage === 'function') return _origSendMessage();
 };
 
 window.enterIPTVRoom = enterIPTVRoom;
@@ -5638,12 +5653,18 @@ function subscribeToCoWatchChannel(roomId) {
   if (_cowatchChannel) sbClient.removeChannel(_cowatchChannel);
   
   _cowatchChannel = sbClient.channel('cowatch:' + roomId, {
-    config: { broadcast: { self: false } }
+    config: { broadcast: { self: true } }
   });
 
   _cowatchChannel.on('broadcast', { event: 'cowatch_sync' }, ({ payload }) => {
     handleIncomingCoWatchSync(payload);
-  }).subscribe();
+  });
+
+  _cowatchChannel.on('broadcast', { event: 'virtual_chat_message' }, ({ payload }) => {
+    renderVirtualCoWatchChatMessage(payload);
+  });
+
+  _cowatchChannel.subscribe();
 }
 
 function handleIncomingCoWatchSync(payload) {
@@ -6091,3 +6112,43 @@ window.closeRoomLockSetup = closeRoomLockSetup;
 window.saveRoomLockSettings = saveRoomLockSettings;
 window.handleMenuLockToggle = handleMenuLockToggle;
 window.showRoomContextMenu = showRoomContextMenu;
+
+function enterFallbackVirtualPopcornRoom() {
+  exitIPTVRoom();
+  exitCoWatchRoom(); // Reset previous Co-Watch if any
+  
+  currentRoom = { id: 'popcorn-fallback-virtual', name: 'Popcorn', room_type: 'cowatch', _virtual: true };
+  
+  // Update sidebar active status
+  document.querySelectorAll('#room-list li').forEach(li =>
+    li.classList.toggle('active', li.dataset.roomId === 'popcorn-fallback-virtual'));
+    
+  // Update topbar room name
+  const titleEl = document.getElementById('current-room-name');
+  if (titleEl) titleEl.textContent = '🍿 Popcorn';
+  document.title = '🍿 Popcorn – ChatCorner';
+
+  // Enter Co-Watch layout
+  enterCoWatchRoomLayout();
+  
+  // Subscribe to Co-Watch broadcast channel
+  subscribeToCoWatchChannel('popcorn-fallback-virtual');
+  
+  // Update sync controls status
+  updateSyncStatusText(false);
+}
+
+function renderVirtualCoWatchChatMessage(payload) {
+  const container = document.getElementById('messages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'message';
+  const username = payload.username || 'Anonymous';
+  const text = String(payload.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}</span><span class="msg-text">${text}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+window.enterFallbackVirtualPopcornRoom = enterFallbackVirtualPopcornRoom;
+window.renderVirtualCoWatchChatMessage = renderVirtualCoWatchChatMessage;
