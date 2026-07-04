@@ -1322,10 +1322,73 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
 
   // Initialize Co-Watch layout and synchronization if applicable
   if (room.room_type === 'cowatch') {
-    enterCoWatchRoomLayout();
-    subscribeToCoWatchChannel(room.id);
-    initCoWatchRoomState(room);
-    bindCoWatchVideoEvents();
+    const isRoomAuthority = room.owner_id === currentUser?.id ||
+      currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+
+    if (!isRoomAuthority) {
+      // Non-privileged user must knock first
+      enterCoWatchRoomLayout();
+      subscribeToCoWatchChannel(room.id);
+
+      // Show waiting overlay
+      const existingWait = document.getElementById('cowatch-knock-waiting');
+      if (existingWait) existingWait.remove();
+      const waitOverlay = document.createElement('div');
+      waitOverlay.id = 'cowatch-knock-waiting';
+      waitOverlay.style.cssText = `
+        position:absolute; inset:0; z-index:500;
+        background:rgba(10,10,20,0.92); display:flex; flex-direction:column;
+        align-items:center; justify-content:center; gap:16px;
+        backdrop-filter:blur(8px); border-radius:inherit;
+      `;
+      waitOverlay.innerHTML = `
+        <div style="font-size:52px;animation:pulse 1.5s infinite">🍿</div>
+        <div style="color:#e2e8f0;font-size:18px;font-weight:700">Waiting for host approval…</div>
+        <div style="color:#a78bfa;font-size:13px">The host has been notified of your entry request</div>
+        <div style="width:40px;height:40px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+        <style>@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}</style>
+        <button onclick="document.getElementById('cowatch-knock-waiting')?.remove();" style="
+          margin-top:8px;padding:8px 20px;border:1px solid rgba(239,68,68,0.5);
+          background:rgba(239,68,68,0.15);color:#f87171;border-radius:8px;cursor:pointer;font-size:13px
+        ">Cancel</button>
+      `;
+      const cowatchContainer = document.getElementById('cowatch-container');
+      if (cowatchContainer) cowatchContainer.appendChild(waitOverlay);
+
+      // Broadcast knock after channel is subscribed (slight delay for channel to be ready)
+      setTimeout(() => {
+        if (_cowatchChannel) {
+          _cowatchChannel.send({
+            type: 'broadcast',
+            event: 'cowatch_knock',
+            payload: {
+              knockerId: currentUser?.id,
+              knockerName: currentProfile?.display_name || currentProfile?.username || 'Someone',
+              roomId: room.id
+            }
+          });
+        }
+      }, 800);
+
+      // Auto-deny after 30s if no response
+      const knockTimeout = setTimeout(() => {
+        const still = document.getElementById('cowatch-knock-waiting');
+        if (still) {
+          still.remove();
+          showChatToast('⏰ No response from host. Entry timed out.', 'error');
+          const firstRoom = document.querySelector('#room-list li[data-room-id]:not([data-room-id=""])');
+          if (firstRoom) firstRoom.click();
+        }
+      }, 30000);
+      window._knockTimeout = knockTimeout;
+
+    } else {
+      // Owner/admin enters directly
+      enterCoWatchRoomLayout();
+      subscribeToCoWatchChannel(room.id);
+      initCoWatchRoomState(room);
+      bindCoWatchVideoEvents();
+    }
   }
 
   const voiceControls = document.getElementById('voice-controls');
@@ -5768,8 +5831,104 @@ function subscribeToCoWatchChannel(roomId) {
     renderVirtualCoWatchChatMessage(payload);
   });
 
+  // Popcorn Room knock/admission system
+  _cowatchChannel.on('broadcast', { event: 'cowatch_knock' }, ({ payload }) => {
+    const { knockerId, knockerName, roomId: kRoomId } = payload;
+    if (knockerId === currentUser?.id) return; // ignore own knock
+    const isAuthority = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod ||
+      (currentRoom && currentRoom.owner_id === currentUser?.id);
+    if (!isAuthority) return;
+    // Show approval popup
+    showKnockApprovalPopup(knockerId, knockerName, kRoomId);
+  });
+
+  _cowatchChannel.on('broadcast', { event: 'cowatch_knock_response' }, ({ payload }) => {
+    const { targetId, allowed, roomId: kRoomId } = payload;
+    if (targetId !== currentUser?.id) return;
+    clearTimeout(window._knockTimeout);
+    const overlay = document.getElementById('cowatch-knock-waiting');
+    if (overlay) overlay.remove();
+    if (allowed) {
+      showChatToast('✅ You were admitted to the Popcorn room!', 'success');
+      // Now fully initialize the player
+      if (currentRoom && currentRoom.room_type === 'cowatch') {
+        initCoWatchRoomState(currentRoom);
+        bindCoWatchVideoEvents();
+      }
+    } else {
+      showChatToast('❌ Your entry was denied by the host.', 'error');
+      const firstRoom = document.querySelector('#room-list li[data-room-id]:not([data-room-id=""])');
+      if (firstRoom) firstRoom.click();
+    }
+  });
+
   _cowatchChannel.subscribe();
 }
+
+function showKnockApprovalPopup(knockerId, knockerName, roomId) {
+  // Don't stack duplicate popups for same user
+  if (document.getElementById('knock-popup-' + knockerId)) return;
+
+  const popup = document.createElement('div');
+  popup.id = 'knock-popup-' + knockerId;
+  popup.style.cssText = `
+    position:fixed; top:20px; right:20px; z-index:99999;
+    background:rgba(20,20,35,0.97); border:1.5px solid rgba(139,92,246,0.6);
+    border-radius:14px; padding:18px 22px; min-width:280px; max-width:340px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.6); backdrop-filter:blur(12px);
+    font-family:inherit; animation: slideInRight 0.3s ease;
+  `;
+  popup.innerHTML = `
+    <style>
+      @keyframes slideInRight { from{transform:translateX(120%);opacity:0} to{transform:translateX(0);opacity:1} }
+      @keyframes knockCountdown { from{width:100%} to{width:0%} }
+      #knock-popup-${knockerId} .knock-timer-bar {
+        height:3px; border-radius:2px;
+        background:linear-gradient(90deg,#8b5cf6,#6d28d9);
+        animation: knockCountdown 30s linear forwards;
+      }
+    </style>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="font-size:28px">🍿</div>
+      <div>
+        <div style="font-weight:700;color:#e2e8f0;font-size:14px">Knock Knock!</div>
+        <div style="color:#a78bfa;font-size:13px"><b>${knockerName}</b> wants to enter the Popcorn room</div>
+      </div>
+    </div>
+    <div class="knock-timer-bar" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="respondKnock('${knockerId}','${roomId}',true,this)" style="
+        flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;
+        background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-weight:700;font-size:13px
+      ">✅ Allow</button>
+      <button onclick="respondKnock('${knockerId}','${roomId}',false,this)" style="
+        flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;
+        background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-weight:700;font-size:13px
+      ">❌ Deny</button>
+    </div>
+  `;
+  document.body.appendChild(popup);
+
+  // Auto-deny after 30 seconds
+  const timer = setTimeout(() => {
+    respondKnock(knockerId, roomId, false, null);
+  }, 30000);
+  popup._knockTimer = timer;
+}
+
+window.respondKnock = function(knockerId, roomId, allowed, btn) {
+  const popup = document.getElementById('knock-popup-' + knockerId);
+  if (popup) {
+    clearTimeout(popup._knockTimer);
+    popup.remove();
+  }
+  if (!_cowatchChannel) return;
+  _cowatchChannel.send({
+    type: 'broadcast',
+    event: 'cowatch_knock_response',
+    payload: { targetId: knockerId, allowed, roomId, responderId: currentUser?.id }
+  });
+};
 
 function handleIncomingCoWatchSync(payload) {
   const video = document.getElementById('cowatch-video-player');
