@@ -6195,8 +6195,24 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
       for (let i = 0; i < proxies.length; i++) {
         const [proxyUrl, isJson] = proxies[i];
         setStatus(`🌐 Loading... (attempt ${i + 1}/${proxies.length})`);
+        
+        let controller;
+        let timeoutId;
         try {
-          const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
+          // Safe backward-compatible timeout implementation
+          if (typeof AbortController !== 'undefined') {
+            controller = new AbortController();
+            timeoutId = setTimeout(() => controller.abort(), 6000);
+          }
+          
+          const fetchOptions = {};
+          if (controller) {
+            fetchOptions.signal = controller.signal;
+          }
+
+          const res = await fetch(proxyUrl, fetchOptions);
+          if (timeoutId) clearTimeout(timeoutId);
+          
           if (!res.ok) continue;
           let html;
           if (isJson) {
@@ -6208,7 +6224,10 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
           // Only reject if response is tiny AND looks like a pure error object (not real HTML)
           const isProxyError = html.length < 300 && html.trim().startsWith('{') && html.includes('error');
           if (html && html.length > 50 && !isProxyError) return html;
-        } catch(e) { /* try next */ }
+        } catch(e) {
+          if (timeoutId) clearTimeout(timeoutId);
+          /* try next */
+        }
       }
       return null;
     };

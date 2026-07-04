@@ -1,5 +1,19 @@
 export async function onRequest(context) {
   const { request } = context;
+
+  // Handle OPTIONS preflight requests for CORS
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent',
+        'Access-Control-Max-Age': '86400'
+      }
+    });
+  }
+
   const urlObj = new URL(request.url);
   const targetUrl = urlObj.searchParams.get('url');
 
@@ -31,6 +45,11 @@ export async function onRequest(context) {
     // Only inject base tag and script into HTML content
     if (contentType.includes('text/html')) {
       let html = await res.text();
+      
+      // Strip client-side Content-Security-Policy and X-Frame-Options meta tags
+      html = html.replace(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
+      html = html.replace(/<meta\s+http-equiv=["']X-Frame-Options["'][^>]*>/gi, '');
+
       const baseTag = `<base href="${cleanUrl}">`;
       const injectScript = `
 <script>
