@@ -1615,7 +1615,7 @@
   background: var(--bg, #004d3d) !important;
   border-bottom: none !important;
   overflow: hidden !important;
-  padding: 12px;
+  padding: 6px;
 }
 
 .cowatch-player-panel {
@@ -1623,7 +1623,7 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  gap: 12px;
+  gap: 6px;
 }
 
 .cowatch-url-bar {
@@ -1637,12 +1637,21 @@
   flex: 1;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 16px;
+  border-radius: 4px;
+  padding: 6px 10px;
   color: var(--text);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transition: all 0.2s;
+  height: 30px;
+}
+
+.cowatch-url-bar .btn-primary {
+  padding: 6px 12px !important;
+  font-size: 0.8rem !important;
+  border-radius: 4px !important;
+  height: 30px !important;
+  line-height: 1 !important;
 }
 
 .cowatch-url-bar input:focus {
@@ -1690,10 +1699,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 4px 8px;
   background: rgba(255,255,255,0.03);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   flex-shrink: 0;
 }
 
@@ -1782,31 +1791,31 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
+  padding: 4px 8px;
   background: rgba(0, 0, 0, 0.25);
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .cowatch-room-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .cowatch-room-label {
   font-weight: 700;
   color: #fff;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 .cowatch-user-count-badge {
   background: rgba(255, 255, 255, 0.15);
   color: #e2e8f0;
-  font-size: 0.75rem;
-  padding: 2px 8px;
+  font-size: 0.7rem;
+  padding: 1px 6px;
   border-radius: 20px;
 }
 
