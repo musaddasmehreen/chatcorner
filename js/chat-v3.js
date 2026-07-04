@@ -5992,33 +5992,114 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
       video.src = url;
     }
   } else {
-    // Shared Web Browser mode
+    // Shared Web Browser mode — fetch via CORS proxies then inject into srcdoc
     video.style.display = 'none';
     video.pause();
     iframe.classList.remove('hidden');
     iframe.style.display = 'block';
+    iframe.src = 'about:blank';
 
     let webUrl = url.trim();
     if (!/^https?:\/\//i.test(webUrl)) {
       webUrl = 'https://' + webUrl;
     }
 
-    // Determine the proxy base URL dynamically based on whether it is running on a server vs. Capacitor
-    const getProxyBaseUrl = () => {
-      const origin = window.location.origin;
-      if (origin.includes('localhost') && !origin.includes('capacitor') && !origin.includes('http://localhost:80') && !origin.includes('capacitor://')) {
-        return origin; // Local dev server (server.js)
+    // Show loading state
+    if (overlay) {
+      overlay.classList.remove('hidden');
+      const lt = document.getElementById('cowatch-loading-text');
+      if (lt) lt.textContent = 'Loading...';
+    }
+
+    // Multiple CORS proxy fallbacks — tries each in order until one works
+    const CORS_PROXIES = [
+      (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+      (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    ];
+
+    const fetchWithFallback = async (targetUrl) => {
+      // First try our own server-side proxy
+      const selfOrigin = (() => {
+        const o = window.location.origin;
+        if (o.startsWith('capacitor://') || o === 'null' || o.includes('localhost') && !o.includes(':5000')) {
+          return 'https://chatcorner.pages.dev';
+        }
+        return o;
+      })();
+
+      try {
+        const res = await fetch(`${selfOrigin}/proxy?url=${encodeURIComponent(targetUrl)}`);
+        if (res.ok) {
+          const html = await res.text();
+          if (html && html.length > 100) return html;
+        }
+      } catch(e) {}
+
+      // Fallback CORS proxies
+      for (const makeUrl of CORS_PROXIES) {
+        try {
+          const res = await fetch(makeUrl(targetUrl));
+          if (!res.ok) continue;
+          const ct = res.headers.get('content-type') || '';
+          let html;
+          if (ct.includes('application/json') || makeUrl === CORS_PROXIES[0]) {
+            const json = await res.json();
+            html = json.contents || '';
+          } else {
+            html = await res.text();
+          }
+          if (html && html.length > 100) return html;
+        } catch(e) {}
       }
-      if (origin.startsWith('http') && !origin.includes('localhost')) {
-        return origin; // Live web site (e.g. chatcorner.pages.dev)
-      }
-      return 'https://chatcorner.pages.dev'; // Production deployment proxy for Android/Capacitor App
+      return null;
     };
 
-    const proxyUrl = `${getProxyBaseUrl()}/proxy?url=${encodeURIComponent(webUrl)}`;
-    iframe.src = proxyUrl;
+    fetchWithFallback(webUrl).then(html => {
+      if (!html) {
+        if (overlay) {
+          overlay.classList.remove('hidden');
+          const lt = document.getElementById('cowatch-loading-text');
+          if (lt) lt.textContent = '⚠️ Could not load this page. Try a direct video/stream URL instead.';
+        }
+        return;
+      }
 
-    if (overlay) overlay.classList.add('hidden');
+      // Inject base tag + navigation interceptor
+      const baseTag = `<base href="${webUrl}">`;
+      const navScript = `<script>
+(function(){
+  document.addEventListener('click',function(e){
+    var a=e.target.closest('a');
+    if(a&&a.href&&!a.href.startsWith('javascript:')&&!a.href.startsWith('mailto:')&&!a.href.startsWith('#')){
+      e.preventDefault();
+      window.parent.postMessage({type:'cowatch_navigate',url:a.href},'*');
+    }
+  },true);
+})();
+<\/script>`;
+
+      if (html.includes('<head>') || html.includes('<HEAD>')) {
+        html = html.replace(/(<head>|<HEAD>)/i, `$1${baseTag}${navScript}`);
+      } else {
+        html = baseTag + navScript + html;
+      }
+
+      iframe.srcdoc = html;
+      if (overlay) overlay.classList.add('hidden');
+      updateSyncStatusText(false);
+    });
+
+    // Handle cross-iframe navigation messages
+    if (!window._cowatchNavListener) {
+      window._cowatchNavListener = true;
+      window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'cowatch_navigate') {
+          loadCoWatchMedia(e.data.url);
+        }
+      });
+    }
+
     updateSyncStatusText(false);
   }
 
