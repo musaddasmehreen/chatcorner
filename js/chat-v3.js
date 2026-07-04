@@ -5994,8 +5994,8 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
       webUrl = 'https://' + webUrl;
     }
 
-    // Google Translate strips CSP and X-Frame-Options, acting as a clean free proxy!
-    const proxyUrl = `https://translate.google.com/translate?sl=auto&tl=en&u=${encodeURIComponent(webUrl)}`;
+    // Google Translate mobile version allows iframe embedding and acts as a clean free proxy!
+    const proxyUrl = `https://translate.google.com/m?sl=auto&tl=en&hl=en&mu=${encodeURIComponent(webUrl)}`;
     iframe.src = proxyUrl;
 
     if (overlay) overlay.classList.add('hidden');
