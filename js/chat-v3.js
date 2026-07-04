@@ -6196,7 +6196,7 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
         const [proxyUrl, isJson] = proxies[i];
         setStatus(`🌐 Loading... (attempt ${i + 1}/${proxies.length})`);
         try {
-          const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+          const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
           if (!res.ok) continue;
           let html;
           if (isJson) {
@@ -6205,7 +6205,9 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
           } else {
             html = await res.text();
           }
-          if (html && html.length > 200 && !html.includes('"error"')) return html;
+          // Only reject if response is tiny AND looks like a pure error object (not real HTML)
+          const isProxyError = html.length < 300 && html.trim().startsWith('{') && html.includes('error');
+          if (html && html.length > 50 && !isProxyError) return html;
         } catch(e) { /* try next */ }
       }
       return null;
