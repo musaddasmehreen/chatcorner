@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chatcorner-v18';
+const CACHE_NAME = 'chatcorner-v21';
 
 const STATIC_ASSETS = [
   './',
@@ -6,17 +6,11 @@ const STATIC_ASSETS = [
   './css/style.css',
   './css/chat-extras-v3.css',
   './css/resizable-layout.css',
-  './js/config.js',
-  './js/auth.js',
-  './js/chat-v3.js',
-  './js/pm.js',
-  './js/audio-v3.js',
-  './js/security.js',
-  './js/permissions.js',
-  './js/resizable-layout.js',
-  './js/free-tier-optimizer.js',
   './manifest.json'
 ];
+
+// JS files are always fetched from network first, never served stale from cache
+const NETWORK_FIRST_PATTERNS = ['/js/', '.js'];
 
 function getScopedBasePath() {
   return new URL(self.registration.scope).pathname.replace(/\/$/, '');
@@ -28,6 +22,10 @@ function isChatEntryPath(pathname) {
     pathname === `${basePath}/` ||
     pathname === `${basePath}/index.html` ||
     pathname === `${basePath}/chat.html`;
+}
+
+function isNetworkFirst(url) {
+  return NETWORK_FIRST_PATTERNS.some(p => url.pathname.includes(p));
 }
 
 self.addEventListener('install', event => {
@@ -59,6 +57,8 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   if (url.origin !== location.origin) return;
   if (url.pathname.startsWith('/rest/') || url.pathname.includes('supabase')) return;
+  // Never cache proxy requests
+  if (url.pathname.startsWith('/proxy')) return;
 
   if (event.request.mode === 'navigate' && isChatEntryPath(url.pathname)) {
     event.respondWith(
@@ -73,6 +73,21 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // JS files: network first, fall back to cache
+  if (isNetworkFirst(url)) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).then(response => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request, { ignoreSearch: true }))
+    );
+    return;
+  }
+
+  // Static assets: cache first, update in background
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then(cached => {
       const networkFetch = fetch(event.request).then(response => {
