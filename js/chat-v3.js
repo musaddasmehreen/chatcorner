@@ -5793,7 +5793,7 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
 
   if (overlay) {
     overlay.classList.remove('hidden');
-    document.getElementById('cowatch-loading-text').textContent = 'Loading Media...';
+    document.getElementById('cowatch-loading-text').textContent = 'Loading...';
   }
 
   // Stop previous HLS
@@ -5802,8 +5802,10 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
     _cowatchHls = null;
   }
   
-  // Parse URL to check if it's YouTube
+  // Parse URL type
   let ytId = getYouTubeId(url);
+  let isDirectVideo = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('.webm') || url.toLowerCase().includes('.ogg') || url.toLowerCase().includes('m3u8') || url.toLowerCase().includes('mp4');
+
   if (ytId) {
     video.style.display = 'none';
     video.pause();
@@ -5823,7 +5825,7 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
         }
       });
     }
-  } else {
+  } else if (isDirectVideo) {
     iframe.style.display = 'none';
     iframe.src = '';
     video.style.display = 'block';
@@ -5862,10 +5864,29 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
     } else {
       video.src = url;
     }
+  } else {
+    // Shared Web Browser mode
+    video.style.display = 'none';
+    video.pause();
+    iframe.classList.remove('hidden');
+    iframe.style.display = 'block';
+
+    let webUrl = url.trim();
+    if (!/^https?:\/\//i.test(webUrl)) {
+      webUrl = 'https://' + webUrl;
+    }
+
+    // Google Translate strips CSP and X-Frame-Options, acting as a clean free proxy!
+    const proxyUrl = `https://translate.google.com/translate?sl=auto&tl=en&u=${encodeURIComponent(webUrl)}`;
+    iframe.src = proxyUrl;
+
+    if (overlay) overlay.classList.add('hidden');
+    updateSyncStatusText(false);
   }
 
   if (!isIncoming) {
-    saveCoWatchStateToDB(url, ytId ? 'youtube' : 'video', startTime, isPlaying);
+    const mediaType = ytId ? 'youtube' : (isDirectVideo ? 'video' : 'browser');
+    saveCoWatchStateToDB(url, mediaType, startTime, isPlaying);
     broadcastCoWatchEvent('url_change', { url, currentTime: startTime, isPlaying });
   }
 }
