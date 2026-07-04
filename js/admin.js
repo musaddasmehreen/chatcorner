@@ -500,11 +500,18 @@ async function createRoom() {
   const type = document.getElementById('room-type').value;
   if (!name) return toast('Room name is required.', 'error');
   showLoading(true);
+  
+  // Get current user ID to set as owner
+  const { data: { session } } = await sbClient.auth.getSession();
+  const ownerId = session?.user?.id || null;
+
   const { error } = await sbClient.from('rooms').insert({
     name,
     description: description || null,
     is_audio_enabled: type === 'voice',
-    is_locked: false
+    is_locked: false,
+    room_type: type === 'cowatch' ? 'cowatch' : 'chat',
+    owner_id: ownerId
   });
   showLoading(false);
   if (error) return toast(error.message, 'error');

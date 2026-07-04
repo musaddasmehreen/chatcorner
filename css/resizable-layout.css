@@ -1513,3 +1513,261 @@
   }
 }
 
+/* ── Co-Watch split-screen active layout ── */
+.page-shell.cowatch-active .chat-main {
+  display: flex !important;
+  flex-direction: row-reverse !important; /* Chat on the left, player on the right */
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+
+.page-shell.cowatch-active .cowatch-chat-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 380px !important;
+  min-width: 380px !important;
+  max-width: 380px !important;
+  height: 100% !important;
+  border-right: 1px solid var(--border) !important;
+  background: var(--bg) !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+}
+
+.page-shell.cowatch-active .messages {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* Squeeze inputs in Co-Watch chat box */
+.cowatch-chat-wrapper .input-strip {
+  width: 100% !important;
+  border-top: none !important;
+  height: 56px !important;
+  flex-shrink: 0 !important;
+  background: var(--surface) !important;
+}
+.cowatch-chat-wrapper .input-strip-left {
+  width: 50px !important;
+  min-width: 50px !important;
+  padding: 0 4px !important;
+  border-right: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+}
+.cowatch-chat-wrapper .input-buttons-group {
+  display: none !important;
+}
+.cowatch-chat-wrapper .input-buttons-group.open {
+  display: flex !important;
+  flex-direction: column !important;
+  position: absolute !important;
+  bottom: 60px !important;
+  left: 4px !important;
+  background: rgba(14, 18, 31, 0.98) !important;
+  border: 1px solid rgba(139, 109, 237, 0.35) !important;
+  border-radius: 12px !important;
+  padding: 8px !important;
+  gap: 8px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  z-index: 150 !important;
+  width: auto !important;
+}
+.cowatch-chat-wrapper .mobile-only {
+  display: flex !important;
+}
+.cowatch-chat-wrapper .input-strip-center {
+  flex: 1 !important;
+  padding: 0 0.4rem !important;
+  border-right: none !important;
+}
+.cowatch-chat-wrapper .input-strip-right {
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 0 0.4rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+}
+
+/* Hide radio and voice controls from Co-Watch room */
+.page-shell.cowatch-active #radio-controls,
+.page-shell.cowatch-active #btn-radio-toggle,
+.page-shell.cowatch-active .bar-divider,
+.page-shell.cowatch-active #voice-controls {
+  display: none !important;
+}
+
+/* ── Co-Watch ROOM STYLE ── */
+.cowatch-container {
+  display: none;
+}
+
+.page-shell.cowatch-active .cowatch-container {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  height: 100% !important;
+  background: #060814 !important;
+  border-bottom: none !important;
+  overflow: hidden !important;
+  padding: 12px;
+}
+
+.cowatch-player-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  gap: 12px;
+}
+
+.cowatch-url-bar {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.cowatch-url-bar input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.cowatch-url-bar input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(139, 109, 237, 0.25);
+  outline: none;
+}
+
+.cowatch-player-wrapper {
+  flex: 1;
+  background: #000;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cowatch-player-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cowatch-player-wrapper iframe {
+  width: 100%;
+  height: 100%;
+}
+
+.cowatch-player-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.cowatch-sync-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.sync-status-indicator {
+  font-size: 0.8rem;
+  color: #10b981; /* Green */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-status-indicator.lagging {
+  color: #f59e0b; /* Yellow */
+}
+
+/* Sidebar Lock/Type Indicators */
+#room-list li.room-item-locked::after {
+  content: ' 🔒';
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+/* Context Menu UI styling */
+.room-context-menu {
+  background: rgba(14, 18, 31, 0.95);
+  border: 1px solid rgba(139, 109, 237, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  padding: 4px 0;
+  min-width: 160px;
+  backdrop-filter: blur(8px);
+}
+
+.context-menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.context-menu-list li {
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-menu-list li:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* On mobile, adjust the split layout */
+@media (max-width: 1024px) {
+  .page-shell.cowatch-active .chat-main {
+    flex-direction: column !important;
+  }
+  .page-shell.cowatch-active .cowatch-chat-wrapper {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: calc(100% - 40vh) !important;
+    border-right: none !important;
+    border-top: 1px solid var(--border) !important;
+  }
+  .page-shell.cowatch-active .cowatch-container {
+    height: 40vh !important;
+  }
+  .page-shell.cowatch-active .sidebar-left,
+  .page-shell.cowatch-active .sidebar-right {
+    display: none !important;
+  }
+}
+

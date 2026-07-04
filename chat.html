@@ -134,6 +134,40 @@
     </div>
   </div>
 
+  <!-- ── Room Password Prompt Modal ────────────────────────────────────────── -->
+  <div id="room-password-prompt-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Enter Password">
+    <div class="avatar-upload-box">
+      <h3>🔒 Password Protected Room</h3>
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">This room is locked. Enter the password to enter.</p>
+      <input type="password" id="room-access-password" placeholder="Enter room password..." style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
+      <div id="room-password-error" class="avatar-upload-error hidden" role="alert" style="color:#ef4444;margin-bottom:12px;">Incorrect password. Please try again.</div>
+      <div class="avatar-upload-actions">
+        <button class="btn-sm" onclick="closeRoomPasswordPrompt()">Cancel</button>
+        <button class="btn-primary" id="btn-submit-room-password" onclick="submitRoomPassword()">Enter Room</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Room Lock Setting Modal ──────────────────────────────────────────────── -->
+  <div id="room-lock-setup-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Lock Settings">
+    <div class="avatar-upload-box">
+      <h3 id="lock-modal-title">🔒 Room Lock Settings</h3>
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">Set a password to lock this room. Leave blank to unlock.</p>
+      <input type="password" id="room-lock-password" placeholder="Set password (leave blank to unlock)..." style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
+      <div class="avatar-upload-actions">
+        <button class="btn-sm" onclick="closeRoomLockSetup()">Cancel</button>
+        <button class="btn-primary" id="btn-save-room-lock" onclick="saveRoomLockSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Room Context Menu ────────────────────────────────────────────────────── -->
+  <div id="room-context-menu" class="room-context-menu hidden" style="position: absolute; z-index: 10000;">
+    <ul class="context-menu-list">
+      <li id="menu-item-lock" onclick="handleMenuLockToggle()">🔒 Lock/Unlock Room</li>
+    </ul>
+  </div>
+
   <!-- ── Permissions Banner ──────────────────────────────────────────────────── -->
   <div id="permissions-backdrop" class="sidebar-backdrop" style="display:none; z-index:998; background:rgba(0,0,0,0.6)" aria-hidden="true"></div>
   <div id="permissions-banner" class="perms-banner" style="display:none">
@@ -267,6 +301,28 @@
             <div id="iptv-player-overlay" class="iptv-player-overlay hidden">
               <div class="spinner"></div>
               <span id="iptv-loading-text">Loading Channel...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Co-Watch player and synchronizer -->
+        <div id="cowatch-container" class="cowatch-container hidden">
+          <div class="cowatch-player-panel">
+            <div class="cowatch-url-bar">
+              <input type="text" id="cowatch-url-input" placeholder="Paste direct MP4, M3U8, or YouTube URL..." />
+              <button id="btn-cowatch-load" class="btn-primary" onclick="onCoWatchLoadUrl()">Load Media</button>
+            </div>
+            <div class="cowatch-player-wrapper">
+              <video id="cowatch-video-player" controls playsinline></video>
+              <iframe id="cowatch-youtube-player" src="" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen class="hidden"></iframe>
+              <div id="cowatch-player-overlay" class="cowatch-player-overlay hidden">
+                <div class="spinner"></div>
+                <span id="cowatch-loading-text">Loading Media...</span>
+              </div>
+            </div>
+            <div class="cowatch-sync-controls" id="cowatch-sync-controls">
+              <span id="cowatch-sync-status" class="sync-status-indicator">● Synchronized</span>
+              <button id="btn-cowatch-sync-now" class="btn-sm" onclick="syncCoWatchPlayerWithHost()">🔄 Force Resync</button>
             </div>
           </div>
         </div>

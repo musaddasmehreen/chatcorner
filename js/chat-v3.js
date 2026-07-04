@@ -248,6 +248,15 @@ let discardRoomVoiceNoteOnStop = false;
 let oldestMessageTimestamp = null;
 let isLoadingOlderMessages = false;
 let cachedRooms = [];
+let _cowatchActive = false;
+let _cowatchHls = null;
+let _cowatchChannel = null;
+let _ytPlayer = null;
+let _isSettingVideoState = false;
+let _bypassPasswordRooms = new Set();
+let _contextMenuRoom = null;
+let _pendingRoom = null;
+let _pendingRoomEntryCallback = null;
 const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
@@ -1090,15 +1099,26 @@ async function loadRooms(preloadedRooms = null) {
     cachedRooms = rooms;
     const textList = document.getElementById('room-list');
     if (textList) textList.innerHTML = '';
-    rooms.forEach(room => {
+    const normalRooms = rooms.filter(r => r.room_type !== 'cowatch');
+    const cowatchRooms = rooms.filter(r => r.room_type === 'cowatch');
+
+    normalRooms.forEach(room => {
       const icon = room.is_audio_enabled ? '🎤' : '💬';
       const li = document.createElement('li');
       li.textContent = `${icon} ${room.name}`;
       li.title = room.user_count != null ? `${room.name} — ${room.user_count} users` : room.name;
       li.dataset.roomId = String(room.id);
+      if (room.is_locked) {
+        li.classList.add('room-item-locked');
+      }
       li.onclick = () => enterRoom(room);
+      li.oncontextmenu = (e) => {
+        e.preventDefault();
+        showRoomContextMenu(e, room);
+      };
       if (textList) textList.appendChild(li);
     });
+
     // Inject virtual IPTV room at end of sidebar list
     if (textList) {
       const iptvLi = document.createElement('li');
@@ -1109,6 +1129,58 @@ async function loadRooms(preloadedRooms = null) {
       iptvLi.onclick = () => enterIPTVRoom();
       textList.appendChild(iptvLi);
     }
+
+    // Render "Popcorn" whereby-style room beneath IPTV
+    let popcornRoom = cowatchRooms.find(r => r.name.toLowerCase() === 'popcorn');
+    if (popcornRoom) {
+      const li = document.createElement('li');
+      li.textContent = `🍿 ${popcornRoom.name}`;
+      li.title = popcornRoom.user_count != null ? `${popcornRoom.name} — ${popcornRoom.user_count} users` : popcornRoom.name;
+      li.dataset.roomId = String(popcornRoom.id);
+      li.classList.add('cowatch-room-item', 'popcorns-room-item');
+      if (popcornRoom.is_locked) {
+        li.classList.add('room-item-locked');
+      }
+      li.onclick = () => enterRoom(popcornRoom);
+      li.oncontextmenu = (e) => {
+        e.preventDefault();
+        showRoomContextMenu(e, popcornRoom);
+      };
+      if (textList) textList.appendChild(li);
+    } else {
+      // Auto-create Popcorn whereby-style co-watching room in DB
+      sbClient.from('rooms').insert({
+        name: 'Popcorn',
+        description: '🍿 Popcorn whereby-style co-watching room',
+        room_type: 'cowatch',
+        is_audio_enabled: false,
+        is_locked: false
+      }).select().then(({ data }) => {
+        if (data && data.length > 0) {
+          rooms.push(data[0]);
+          loadRooms(rooms);
+        }
+      }).catch(e => console.error('Failed to auto-create Popcorn room:', e));
+    }
+
+    // Render other Co-Watch database rooms
+    const otherCowatchRooms = cowatchRooms.filter(r => r.name.toLowerCase() !== 'popcorn');
+    otherCowatchRooms.forEach(room => {
+      const li = document.createElement('li');
+      li.textContent = `🎬 ${room.name}`;
+      li.title = room.user_count != null ? `${room.name} — ${room.user_count} users` : room.name;
+      li.dataset.roomId = String(room.id);
+      li.classList.add('cowatch-room-item');
+      if (room.is_locked) {
+        li.classList.add('room-item-locked');
+      }
+      li.onclick = () => enterRoom(room);
+      li.oncontextmenu = (e) => {
+        e.preventDefault();
+        showRoomContextMenu(e, room);
+      };
+      if (textList) textList.appendChild(li);
+    });
     renderRoomsTopbar(rooms);
     // Optimization: skip redundant moderation status check on the first load since we just did it
     enterRoom(rooms[0], false, true);
@@ -1141,8 +1213,19 @@ function renderRoomsTopbar(rooms) {
 }
 
 async function enterRoom(room, force = false, skipModRefresh = false) {
-  // Exit IPTV mode if switching to a normal room
+  // Access Guard check for locked rooms
+  const isOwner = room.owner_id === currentUser?.id || currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  if (room.is_locked && !isOwner && !_bypassPasswordRooms.has(room.id)) {
+    showRoomPasswordPrompt(room, () => {
+      enterRoom(room, force, skipModRefresh);
+    });
+    return;
+  }
+
+  // Exit IPTV and Co-Watch modes if switching to a normal room
   exitIPTVRoom();
+  exitCoWatchRoom();
+
   // Optimization: skip redundant db lookup if skipModRefresh is true
   if (!(await enforceCurrentUserModerationState({ refresh: !skipModRefresh }))) return;
   if (!force && currentRoom?.id === room.id) return;
@@ -1182,10 +1265,18 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   const el = document.getElementById('current-room-name');
   if (el) el.textContent = '# ' + currentRoom.name;
 
+  // Initialize Co-Watch layout and synchronization if applicable
+  if (room.room_type === 'cowatch') {
+    enterCoWatchRoomLayout();
+    subscribeToCoWatchChannel(room.id);
+    initCoWatchRoomState(room);
+    bindCoWatchVideoEvents();
+  }
+
   const voiceControls = document.getElementById('voice-controls');
   const barDivider = document.getElementById('bar-divider');
   if (voiceControls) {
-    if (room.is_audio_enabled) {
+    if (room.is_audio_enabled && room.room_type !== 'cowatch') {
       voiceControls.classList.remove('hidden');
       if (barDivider) barDivider.classList.remove('hidden');
     } else {
@@ -1198,19 +1289,13 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   const sendBtn  = document.querySelector('.btn-send');
   const emojiBtn = document.getElementById('btn-emoji');
 
-  if (room.is_locked) {
-    msgInput.disabled = true;
-    msgInput.placeholder = 'This room is locked by admin.';
-    if (sendBtn)  sendBtn.disabled  = true;
-    if (emojiBtn) emojiBtn.disabled = true;
-    closeEmojiPicker();
-    closeRoomImageUrlInput(false);
-  } else {
-    msgInput.disabled = false;
-    msgInput.placeholder = 'Type a message\u2026 (Enter to send, Shift+Enter for newline)';
-    if (sendBtn)  sendBtn.disabled  = false;
-    if (emojiBtn) emojiBtn.disabled = false;
-  }
+  // Chat input is enabled once you successfully pass the password check
+  msgInput.disabled = false;
+  msgInput.placeholder = room.room_type === 'cowatch' 
+    ? '💬 Chat in Co-Watch room...' 
+    : 'Type a message\u2026 (Enter to send, Shift+Enter for newline)';
+  if (sendBtn)  sendBtn.disabled  = false;
+  if (emojiBtn) emojiBtn.disabled = false;
   updateComposerState();
 
   const { data: messages } = await sbClient
@@ -5465,3 +5550,544 @@ window.onIPTVChannelSearchInput = function(query) {
   const filtered = q ? _iptvChannels.filter(ch => ch.name.toLowerCase().includes(q)) : _iptvChannels;
   renderIPTVChannelList(filtered);
 };
+
+/* ═══════════════════════════════════════════════════════════════
+   CO-WATCH AND ROOM LOCKING CODE
+   ═══════════════════════════════════════════════════════════════ */
+
+function enterCoWatchRoomLayout() {
+  if (_cowatchActive) return;
+  _cowatchActive = true;
+
+  // Show Co-Watch container
+  const cowatchContainer = document.getElementById('cowatch-container');
+  if (cowatchContainer) cowatchContainer.classList.remove('hidden');
+
+  // Add class to shell
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.add('cowatch-active');
+
+  // Wrap messages and input-strip into .cowatch-chat-wrapper
+  const chatMain = document.querySelector('.chat-main');
+  const messages = document.getElementById('messages');
+  const inputStrip = document.querySelector('.input-strip');
+  if (chatMain && messages && inputStrip && !document.querySelector('.cowatch-chat-wrapper')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cowatch-chat-wrapper';
+    chatMain.appendChild(wrapper);
+    wrapper.appendChild(messages);
+    wrapper.appendChild(inputStrip);
+  }
+
+  // Clear URL input field for new entry
+  const urlInput = document.getElementById('cowatch-url-input');
+  if (urlInput) urlInput.value = '';
+
+  // Reset player views
+  const video = document.getElementById('cowatch-video-player');
+  const iframe = document.getElementById('cowatch-youtube-player');
+  if (video) { video.src = ''; video.style.display = 'none'; }
+  if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
+}
+
+function exitCoWatchRoom() {
+  if (!_cowatchActive) return;
+  _cowatchActive = false;
+
+  // Hide Co-Watch container
+  const cowatchContainer = document.getElementById('cowatch-container');
+  if (cowatchContainer) cowatchContainer.classList.add('hidden');
+
+  // Remove class from shell
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.remove('cowatch-active');
+
+  // Unwrap messages and input-strip back to chat-main
+  const chatMain = document.querySelector('.chat-main');
+  const wrapper = document.querySelector('.cowatch-chat-wrapper');
+  if (chatMain && wrapper) {
+    while (wrapper.firstChild) chatMain.appendChild(wrapper.firstChild);
+    wrapper.remove();
+  }
+
+  // Stop video/youtube playback
+  if (_cowatchHls) {
+    _cowatchHls.destroy();
+    _cowatchHls = null;
+  }
+  const video = document.getElementById('cowatch-video-player');
+  if (video) {
+    video.pause();
+    video.src = '';
+    video.load();
+  }
+  const iframe = document.getElementById('cowatch-youtube-player');
+  if (iframe) {
+    iframe.src = '';
+    iframe.classList.add('hidden');
+  }
+
+  // Remove realtime channel
+  if (_cowatchChannel) {
+    sbClient.removeChannel(_cowatchChannel);
+    _cowatchChannel = null;
+  }
+}
+
+function subscribeToCoWatchChannel(roomId) {
+  if (_cowatchChannel) sbClient.removeChannel(_cowatchChannel);
+  
+  _cowatchChannel = sbClient.channel('cowatch:' + roomId, {
+    config: { broadcast: { self: false } }
+  });
+
+  _cowatchChannel.on('broadcast', { event: 'cowatch_sync' }, ({ payload }) => {
+    handleIncomingCoWatchSync(payload);
+  }).subscribe();
+}
+
+function handleIncomingCoWatchSync(payload) {
+  const video = document.getElementById('cowatch-video-player');
+  if (!video) return;
+
+  const { event, url, currentTime, isPlaying, senderId } = payload;
+  if (senderId === currentUser?.id) return; // Skip own messages
+
+  _isSettingVideoState = true;
+
+  if (event === 'url_change') {
+    // Fill the url input
+    const input = document.getElementById('cowatch-url-input');
+    if (input) input.value = url;
+    loadCoWatchMedia(url, true, currentTime || 0, isPlaying || false);
+  } else if (event === 'play') {
+    const isYt = !!getYouTubeId(url || document.getElementById('cowatch-url-input').value);
+    if (isYt) {
+      if (_ytPlayer && typeof _ytPlayer.playVideo === 'function') {
+        _ytPlayer.playVideo();
+      }
+    } else {
+      if (currentTime != null) video.currentTime = currentTime;
+      video.play().catch(() => {});
+    }
+    updateSyncStatusText(true);
+  } else if (event === 'pause') {
+    const isYt = !!getYouTubeId(url || document.getElementById('cowatch-url-input').value);
+    if (isYt) {
+      if (_ytPlayer && typeof _ytPlayer.pauseVideo === 'function') {
+        _ytPlayer.pauseVideo();
+      }
+    } else {
+      if (currentTime != null) video.currentTime = currentTime;
+      video.pause();
+    }
+    updateSyncStatusText(false);
+  } else if (event === 'seek') {
+    const isYt = !!getYouTubeId(url || document.getElementById('cowatch-url-input').value);
+    if (isYt) {
+      if (_ytPlayer && typeof _ytPlayer.seekTo === 'function') {
+        _ytPlayer.seekTo(currentTime, true);
+      }
+    } else {
+      if (currentTime != null) video.currentTime = currentTime;
+    }
+  }
+
+  setTimeout(() => {
+    _isSettingVideoState = false;
+  }, 400);
+}
+
+function broadcastCoWatchEvent(event, data) {
+  if (!_cowatchChannel) return;
+  _cowatchChannel.send({
+    type: 'broadcast',
+    event: 'cowatch_sync',
+    payload: {
+      event,
+      senderId: currentUser?.id,
+      timestamp: Date.now(),
+      ...data
+    }
+  });
+}
+
+async function saveCoWatchStateToDB(url, mediaType, currentTime, isPlaying) {
+  if (!currentRoom || currentRoom._virtual) return;
+  try {
+    await sbClient.from('cowatch_state').upsert({
+      room_id: currentRoom.id,
+      media_url: url,
+      media_type: mediaType,
+      current_time: currentTime,
+      is_playing: isPlaying,
+      updated_by: currentUser?.id,
+      updated_at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('Failed to save cowatch state:', e);
+  }
+}
+
+async function initCoWatchRoomState(room) {
+  try {
+    const { data, error } = await sbClient
+      .from('cowatch_state')
+      .select('*')
+      .eq('room_id', room.id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data && data.media_url) {
+      let start = data.current_time;
+      if (data.is_playing) {
+        // Calculate elapsed time since updated_at
+        const elapsed = (Date.now() - new Date(data.updated_at).getTime()) / 1000;
+        start += elapsed;
+      }
+      // Fill url input
+      const input = document.getElementById('cowatch-url-input');
+      if (input) input.value = data.media_url;
+      
+      loadCoWatchMedia(data.media_url, true, start, data.is_playing);
+    } else {
+      // Empty player
+      updateSyncStatusText(false);
+    }
+  } catch (e) {
+    console.error('Error fetching cowatch state', e);
+  }
+}
+
+function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = false) {
+  const video = document.getElementById('cowatch-video-player');
+  const iframe = document.getElementById('cowatch-youtube-player');
+  const overlay = document.getElementById('cowatch-player-overlay');
+  if (!video || !iframe) return;
+
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    document.getElementById('cowatch-loading-text').textContent = 'Loading Media...';
+  }
+
+  // Stop previous HLS
+  if (_cowatchHls) {
+    _cowatchHls.destroy();
+    _cowatchHls = null;
+  }
+  
+  // Parse URL to check if it's YouTube
+  let ytId = getYouTubeId(url);
+  if (ytId) {
+    video.style.display = 'none';
+    video.pause();
+    iframe.classList.remove('hidden');
+    iframe.style.display = 'block';
+
+    const embedUrl = `https://www.youtube.com/embed/${ytId}?enablejsapi=1&autoplay=${isPlaying ? 1 : 0}&start=${Math.floor(startTime)}`;
+    iframe.src = embedUrl;
+
+    if (overlay) overlay.classList.add('hidden');
+    
+    // Initialize YouTube Player API wrapper
+    if (window.YT && window.YT.Player) {
+      _ytPlayer = new window.YT.Player('cowatch-youtube-player', {
+        events: {
+          'onStateChange': onYouTubeStateChange
+        }
+      });
+    }
+  } else {
+    iframe.style.display = 'none';
+    iframe.src = '';
+    video.style.display = 'block';
+    video.classList.remove('hidden');
+
+    const onReady = () => {
+      if (overlay) overlay.classList.add('hidden');
+      if (startTime > 0) {
+        video.currentTime = startTime;
+      }
+      if (isPlaying) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+      updateSyncStatusText(isPlaying);
+    };
+
+    video.onloadedmetadata = onReady;
+    video.onerror = () => {
+      if (overlay) {
+        overlay.classList.remove('hidden');
+        document.getElementById('cowatch-loading-text').textContent = '⚠️ Failed to load media.';
+      }
+    };
+
+    if (url.includes('.m3u8') || url.includes('m3u8')) {
+      if (window.Hls && Hls.isSupported()) {
+        _cowatchHls = new Hls();
+        _cowatchHls.loadSource(url);
+        _cowatchHls.attachMedia(video);
+        _cowatchHls.on(Hls.Events.MANIFEST_PARSED, onReady);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+      }
+    } else {
+      video.src = url;
+    }
+  }
+
+  if (!isIncoming) {
+    saveCoWatchStateToDB(url, ytId ? 'youtube' : 'video', startTime, isPlaying);
+    broadcastCoWatchEvent('url_change', { url, currentTime: startTime, isPlaying });
+  }
+}
+
+function getYouTubeId(url) {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+}
+
+function onYouTubeStateChange(event) {
+  if (_isSettingVideoState) return;
+  if (!_ytPlayer || typeof _ytPlayer.getCurrentTime !== 'function') return;
+  
+  const time = _ytPlayer.getCurrentTime();
+  const url = document.getElementById('cowatch-url-input').value;
+  
+  if (event.data === window.YT.PlayerState.PLAYING) {
+    broadcastCoWatchEvent('play', { url, currentTime: time });
+    saveCoWatchStateToDB(url, 'youtube', time, true);
+    updateSyncStatusText(true);
+  } else if (event.data === window.YT.PlayerState.PAUSED) {
+    broadcastCoWatchEvent('pause', { url, currentTime: time });
+    saveCoWatchStateToDB(url, 'youtube', time, false);
+    updateSyncStatusText(false);
+  }
+}
+
+function onCoWatchLoadUrl() {
+  const input = document.getElementById('cowatch-url-input');
+  if (!input) return;
+  const url = input.value.trim();
+  if (!url) {
+    showChatToast('Please enter a valid media URL.', 'warning');
+    return;
+  }
+  loadCoWatchMedia(url, false, 0, true);
+}
+
+function bindCoWatchVideoEvents() {
+  const video = document.getElementById('cowatch-video-player');
+  if (!video) return;
+
+  video.onplay = () => {
+    if (_isSettingVideoState) return;
+    const url = video.src || document.getElementById('cowatch-url-input').value;
+    broadcastCoWatchEvent('play', { url, currentTime: video.currentTime });
+    saveCoWatchStateToDB(url, 'video', video.currentTime, true);
+    updateSyncStatusText(true);
+  };
+
+  video.onpause = () => {
+    if (_isSettingVideoState) return;
+    const url = video.src || document.getElementById('cowatch-url-input').value;
+    broadcastCoWatchEvent('pause', { url, currentTime: video.currentTime });
+    saveCoWatchStateToDB(url, 'video', video.currentTime, false);
+    updateSyncStatusText(false);
+  };
+
+  video.onseeking = () => {
+    if (_isSettingVideoState) return;
+    const url = video.src || document.getElementById('cowatch-url-input').value;
+    broadcastCoWatchEvent('seek', { url, currentTime: video.currentTime });
+    saveCoWatchStateToDB(url, 'video', video.currentTime, video.paused === false);
+  };
+}
+
+async function syncCoWatchPlayerWithHost() {
+  if (!currentRoom || currentRoom._virtual) return;
+  showChatToast('Synchronizing with host...', 'info');
+  await initCoWatchRoomState(currentRoom);
+}
+
+function updateSyncStatusText(isPlaying) {
+  const indicator = document.getElementById('cowatch-sync-status');
+  if (indicator) {
+    indicator.textContent = isPlaying ? '● Synchronized (Playing)' : '● Synchronized (Paused)';
+    indicator.classList.remove('lagging');
+  }
+}
+
+// ── Room Password Access Prompt Modals ──
+
+function showRoomPasswordPrompt(room, callback) {
+  _pendingRoom = room;
+  _pendingRoomEntryCallback = callback;
+  
+  const modal = document.getElementById('room-password-prompt-modal');
+  const errorDiv = document.getElementById('room-password-error');
+  const input = document.getElementById('room-access-password');
+  
+  if (modal) {
+    if (input) input.value = '';
+    if (errorDiv) errorDiv.classList.add('hidden');
+    modal.classList.remove('hidden');
+    if (input) input.focus();
+  }
+}
+
+function closeRoomPasswordPrompt() {
+  const modal = document.getElementById('room-password-prompt-modal');
+  if (modal) modal.classList.add('hidden');
+  _pendingRoomEntryCallback = null;
+  _pendingRoom = null;
+}
+
+async function submitRoomPassword() {
+  if (!_pendingRoom || !_pendingRoomEntryCallback) return;
+  const room = _pendingRoom;
+  const password = document.getElementById('room-access-password').value;
+  const errorDiv = document.getElementById('room-password-error');
+  
+  try {
+    const { data: verified, error } = await sbClient.rpc('verify_room_password', {
+      p_room_id: room.id,
+      p_password: password
+    });
+    
+    if (error) throw error;
+    
+    if (verified) {
+      _bypassPasswordRooms.add(room.id);
+      closeRoomPasswordPrompt();
+      if (typeof _pendingRoomEntryCallback === 'function') {
+        _pendingRoomEntryCallback();
+      }
+    } else {
+      if (errorDiv) errorDiv.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.error(err);
+    showChatToast('Verification error: ' + err.message, 'warning');
+  }
+}
+
+// ── Room Lock setup modals (Owner/Admin context option) ──
+
+function showRoomContextMenu(e, room) {
+  const isOwner = room.owner_id === currentUser?.id || currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  if (!isOwner) return; // Non-owners don't see context menu
+
+  _contextMenuRoom = room;
+  const menu = document.getElementById('room-context-menu');
+  if (!menu) return;
+
+  const lockItem = document.getElementById('menu-item-lock');
+  if (lockItem) {
+    lockItem.textContent = room.is_locked ? '🔓 Unlock Room' : '🔒 Lock Room';
+  }
+
+  menu.style.left = e.pageX + 'px';
+  menu.style.top = e.pageY + 'px';
+  menu.classList.remove('hidden');
+
+  e.stopPropagation();
+}
+
+function handleMenuLockToggle() {
+  const menu = document.getElementById('room-context-menu');
+  if (menu) menu.classList.add('hidden');
+
+  if (!_contextMenuRoom) return;
+  const room = _contextMenuRoom;
+  
+  if (room.is_locked) {
+    unlockRoomAction(room);
+  } else {
+    const modal = document.getElementById('room-lock-setup-modal');
+    if (modal) {
+      const input = document.getElementById('room-lock-password');
+      if (input) input.value = '';
+      modal.classList.remove('hidden');
+      if (input) input.focus();
+    }
+  }
+}
+
+async function unlockRoomAction(room) {
+  try {
+    const { data, error } = await sbClient.rpc('unlock_room', { p_room_id: room.id });
+    if (error) throw error;
+    
+    showChatToast('Room unlocked successfully!', 'success');
+    
+    // Refresh rooms listing
+    room.is_locked = false;
+    await loadRooms();
+  } catch (err) {
+    console.error(err);
+    showChatToast('Failed to unlock room: ' + err.message, 'warning');
+  }
+}
+
+async function saveRoomLockSettings() {
+  if (!_contextMenuRoom) return;
+  const room = _contextMenuRoom;
+  const password = document.getElementById('room-lock-password').value.trim();
+  
+  if (!password) {
+    showChatToast('Please enter a password.', 'warning');
+    return;
+  }
+  
+  try {
+    const { data, error } = await sbClient.rpc('lock_room', { 
+      p_room_id: room.id,
+      p_password: password
+    });
+    if (error) throw error;
+    
+    showChatToast('Room locked successfully!', 'success');
+    closeRoomLockSetup();
+    
+    // Refresh rooms listing
+    room.is_locked = true;
+    await loadRooms();
+  } catch (err) {
+    console.error(err);
+    showChatToast('Failed to lock room: ' + err.message, 'warning');
+  }
+}
+
+function closeRoomLockSetup() {
+  const modal = document.getElementById('room-lock-setup-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// Close context menus on click anywhere
+document.addEventListener('click', () => {
+  const menu = document.getElementById('room-context-menu');
+  if (menu) menu.classList.add('hidden');
+});
+
+// Load YouTube Iframe Player API if not already loaded
+if (!window.YT) {
+  var tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  var firstScriptTag = document.getElementsByTagName('script')[0];
+  firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+}
+
+// Global functions exports
+window.onCoWatchLoadUrl = onCoWatchLoadUrl;
+window.syncCoWatchPlayerWithHost = syncCoWatchPlayerWithHost;
+window.closeRoomPasswordPrompt = closeRoomPasswordPrompt;
+window.submitRoomPassword = submitRoomPassword;
+window.closeRoomLockSetup = closeRoomLockSetup;
+window.saveRoomLockSettings = saveRoomLockSettings;
+window.handleMenuLockToggle = handleMenuLockToggle;
+window.showRoomContextMenu = showRoomContextMenu;
