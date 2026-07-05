@@ -215,7 +215,6 @@
       <div class="topbar-room">
         <span id="current-room-name">Select a Room</span>
         <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">🔙 Return to Rooms</button>
-        <button id="btn-cowatch-return" class="btn-iptv-return hidden" onclick="exitCoWatchRoomAndShowRooms()">🔙 Return to Rooms</button>
       </div>
       <div class="topbar-search" id="topbar-search">
         <input
@@ -307,60 +306,6 @@
           </div>
         </div>
 
-        <!-- Co-Watch player and synchronizer -->
-        <div id="cowatch-container" class="cowatch-container hidden">
-          <div class="cowatch-player-panel">
-            <div class="cowatch-top-bar">
-              <div class="cowatch-room-info" style="display:flex; align-items:center;">
-                <span class="cowatch-room-label">🍿 Popcorn Room</span>
-                <span id="cowatch-user-count" class="cowatch-user-count-badge">1 user</span>
-              </div>
-              <div class="cowatch-participants-row" id="cowatch-participants-row"></div>
-            </div>
-            <div class="cowatch-url-bar">
-              <input type="text" id="cowatch-url-input" placeholder="Paste direct MP4, M3U8, or YouTube URL..." />
-              <button id="btn-cowatch-load" class="btn-primary" onclick="onCoWatchLoadUrl()">Load Media</button>
-            </div>
-            <div class="cowatch-player-wrapper">
-              <video id="cowatch-video-player" controls playsinline></video>
-              <div id="cowatch-browser-toolbar" class="cowatch-browser-toolbar hidden" style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.6); padding: 8px; border-bottom: 1px solid var(--border); width: 100%;">
-                <button onclick="cowatchBrowserBack()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px;" title="Back">⬅️</button>
-                <button onclick="cowatchBrowserForward()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px;" title="Forward">➡️</button>
-                <button onclick="cowatchBrowserReload()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px;" title="Reload">🔄</button>
-                <button onclick="cowatchBrowserHome()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px; display:flex; align-items:center; gap:4px;" title="Home">🏠 Home</button>
-                <span id="cowatch-browser-url-display" style="color:var(--text-muted); font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-grow:1; background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px; border:1px solid var(--border); text-align:left;">browser://home</span>
-              </div>
-              <iframe id="cowatch-youtube-player" src="" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; camera; microphone; sound;" allowfullscreen class="hidden"></iframe>
-              <div id="cowatch-player-overlay" class="cowatch-player-overlay hidden">
-                <div class="spinner"></div>
-                <span id="cowatch-loading-text">Loading Media...</span>
-              </div>
-            </div>
-            <div class="cowatch-sync-controls" id="cowatch-sync-controls">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span id="cowatch-sync-status" class="sync-status-indicator">● Synchronized</span>
-                <button id="btn-cowatch-sync-now" class="btn-sm" onclick="syncCoWatchPlayerWithHost()">🔄 Force Resync</button>
-                <div class="cowatch-layout-buttons" style="display:flex;gap:4px;">
-                  <button class="btn-sm" onclick="setCoWatchLayout('stretched')" title="Stretch Screen">↔️ Stretch</button>
-                  <button class="btn-sm" onclick="setCoWatchLayout('normal')" title="Normal Screen">↩️ Normal</button>
-                  <button class="btn-sm" onclick="setCoWatchLayout('squeezed')" title="Squeeze Screen">➡️ Squeeze</button>
-                </div>
-                <select id="cowatch-quality-select" class="btn-sm" onchange="changeCoWatchHlsQuality(this.value)" style="background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:0.72rem;cursor:pointer;height:24px;">
-                  <option value="auto">Auto Quality</option>
-                </select>
-                <div style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--text);">
-                  <span>🕶️ Dim:</span>
-                  <input type="range" id="cowatch-controls-opacity" min="10" max="100" value="100" oninput="setCoWatchControlsOpacity(this.value)" style="width:40px;cursor:pointer;height:12px;" />
-                </div>
-                <button class="btn-sm" id="btn-cowatch-lights" onclick="toggleCoWatchLights()" title="Toggle Lights Off">💡 Lights Off</button>
-                <div id="cowatch-chat-opacity-container" class="hidden" style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--text);">
-                  <span>💬 Chat Opacity:</span>
-                  <input type="range" id="cowatch-chat-opacity" min="5" max="100" value="100" oninput="setCoWatchChatOpacity(this.value)" style="width:50px;cursor:pointer;height:12px;" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- Video elements for voice room -->
         <div id="video-grid" class="video-grid hidden"></div>
