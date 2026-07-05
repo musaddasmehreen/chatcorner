@@ -323,7 +323,14 @@
             </div>
             <div class="cowatch-player-wrapper">
               <video id="cowatch-video-player" controls playsinline></video>
-              <iframe id="cowatch-youtube-player" src="" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen class="hidden"></iframe>
+              <div id="cowatch-browser-toolbar" class="cowatch-browser-toolbar hidden" style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.6); padding: 8px; border-bottom: 1px solid var(--border); width: 100%;">
+                <button onclick="cowatchBrowserBack()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px;" title="Back">⬅️</button>
+                <button onclick="cowatchBrowserForward()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px;" title="Forward">➡️</button>
+                <button onclick="cowatchBrowserReload()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px;" title="Reload">🔄</button>
+                <button onclick="cowatchBrowserHome()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border); color:#fff; cursor:pointer; padding:4px 8px; border-radius:4px; display:flex; align-items:center; gap:4px;" title="Home">🏠 Home</button>
+                <span id="cowatch-browser-url-display" style="color:var(--text-muted); font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-grow:1; background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px; border:1px solid var(--border); text-align:left;">browser://home</span>
+              </div>
+              <iframe id="cowatch-youtube-player" src="" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; camera; microphone; sound;" allowfullscreen class="hidden"></iframe>
               <div id="cowatch-player-overlay" class="cowatch-player-overlay hidden">
                 <div class="spinner"></div>
                 <span id="cowatch-loading-text">Loading Media...</span>

@@ -6088,6 +6088,9 @@ async function initCoWatchRoomState(room) {
 }
 
 function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = false) {
+  if (!url || url.trim() === '' || url.trim() === 'browser://home') {
+    url = window.location.origin + '/browser_home.html';
+  }
   const video = document.getElementById('cowatch-video-player');
   const iframe = document.getElementById('cowatch-youtube-player');
   const overlay = document.getElementById('cowatch-player-overlay');
@@ -6096,6 +6099,12 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
   if (overlay) {
     overlay.classList.remove('hidden');
     document.getElementById('cowatch-loading-text').textContent = 'Loading...';
+  }
+
+  const browserToolbar = document.getElementById('cowatch-browser-toolbar');
+  if (browserToolbar) {
+    browserToolbar.classList.add('hidden');
+    browserToolbar.style.display = 'none';
   }
 
   // Stop previous HLS
@@ -6200,6 +6209,11 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
     iframe.classList.remove('hidden');
     iframe.style.display = 'block';
     iframe.src = 'about:blank';
+    
+    if (browserToolbar) {
+      browserToolbar.classList.remove('hidden');
+      browserToolbar.style.display = 'flex';
+    }
 
     let webUrl = url.trim();
     if (!/^https?:\/\//i.test(webUrl)) {
@@ -6234,11 +6248,31 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
 
     // Directly set the iframe source so it runs under the proxy's origin!
     // This allows the Cloudflare proxy to natively intercept XHRs and preserve cookies.
-    const proxyUrl = `${selfOrigin}/proxy?url=${encodeURIComponent(webUrl)}`;
+    const isLocalUrl = webUrl.startsWith(window.location.origin) || webUrl.includes('/browser_home.html');
+    const proxyUrl = isLocalUrl ? webUrl : `${selfOrigin}/proxy?url=${encodeURIComponent(webUrl)}`;
     
-    // Hide overlay immediately, or rely on iframe onload (simplified to just hide for now)
     if (overlay) overlay.classList.add('hidden');
     iframe.src = proxyUrl;
+
+    iframe.onload = () => {
+      try {
+        const currentHref = iframe.contentWindow.location.href;
+        const urlDisplay = document.getElementById('cowatch-browser-url-display');
+        if (urlDisplay) {
+          if (currentHref.includes('/browser_home.html')) {
+            urlDisplay.textContent = 'browser://home';
+          } else {
+            const urlObj = new URL(currentHref);
+            const urlParam = urlObj.searchParams.get('url');
+            urlDisplay.textContent = urlParam || currentHref;
+          }
+        }
+      } catch(e) {
+        const urlDisplay = document.getElementById('cowatch-browser-url-display');
+        if (urlDisplay) urlDisplay.textContent = iframe.src;
+      }
+    };
+
     updateSyncStatusText(false);
 
     // Handle cross-iframe navigation messages
@@ -6313,6 +6347,31 @@ window.checkYouTubeSharingLimit = function(text) {
 
   window._lastYouTubeLinkSentTime = now;
   return { ok: true };
+};
+
+window.cowatchBrowserBack = function() {
+  const iframe = document.getElementById('cowatch-youtube-player');
+  if (iframe && iframe.contentWindow) {
+    try { iframe.contentWindow.history.back(); } catch(e) {}
+  }
+};
+
+window.cowatchBrowserForward = function() {
+  const iframe = document.getElementById('cowatch-youtube-player');
+  if (iframe && iframe.contentWindow) {
+    try { iframe.contentWindow.history.forward(); } catch(e) {}
+  }
+};
+
+window.cowatchBrowserReload = function() {
+  const iframe = document.getElementById('cowatch-youtube-player');
+  if (iframe && iframe.contentWindow) {
+    try { iframe.contentWindow.location.reload(); } catch(e) { iframe.src = iframe.src; }
+  }
+};
+
+window.cowatchBrowserHome = function() {
+  loadCoWatchMedia('browser://home');
 };
 
 function onYouTubeStateChange(event) {
