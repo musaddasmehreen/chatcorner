@@ -537,6 +537,12 @@ function togglePmImageInput(userId) {
 }
 
 async function sendPrivateText(userId) {
+  // Stealth Mode send warning
+  if (window._stealthModeActive) {
+    const confirmSend = confirm("⚠️ Caution: You are currently in Stealth Mode. Other users cannot see you in the room. Are you sure you want to send this message?");
+    if (!confirmSend) return;
+  }
+
   if (typeof enforceCurrentUserModerationState === 'function') {
     const allowed = await enforceCurrentUserModerationState({ refresh: true });
     if (!allowed) return;
@@ -552,6 +558,14 @@ async function sendPrivateText(userId) {
   const input = getPmInput(userId);
   if (!input) return;
   const text = input.value.trim();
+
+  // YouTube sharing limits (registered only, 1 per minute)
+  const ytCheck = window.checkYouTubeSharingLimit ? window.checkYouTubeSharingLimit(text) : { ok: true };
+  if (!ytCheck.ok) {
+    if (typeof showChatToast === 'function') showChatToast('⚠️ ' + ytCheck.reason, 'warning');
+    return;
+  }
+
   const rawImageUrl = getPmImageInput(userId)?.value.trim() || '';
   const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : '';
   const isSendingImage = !getPmImageRow(userId)?.classList.contains('hidden') && !!rawImageUrl;
@@ -677,8 +691,9 @@ function appendPmTextMessage(userId, msg, isMe) {
   row.className = 'pm-msg' + (isMe ? ' self' : '');
   if (msg.id) row.dataset.msgId = msg.id;
   const receiptHtml = isMe && msg.id ? `<span class="pm-receipt-status pm-receipt-${msg.id}">✓</span>` : '';
+  const formattedText = window.parseYouTubeEmbedHtml ? window.parseYouTubeEmbedHtml(escHtml(msg.text || '')) : escHtml(msg.text || '');
   row.innerHTML = `
-    <div class="pm-msg-bubble">${escHtml(msg.text || '')}</div>
+    <div class="pm-msg-bubble">${formattedText}</div>
     <div class="pm-msg-time">${formatTime(msg.createdAt)} ${receiptHtml}</div>
   `;
 

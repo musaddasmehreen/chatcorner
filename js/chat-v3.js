@@ -560,6 +560,8 @@ async function clearExpiredBan(userId) {
 }
 
 let _stealthModeActive = false;
+window._stealthModeActive = false;
+window._lastYouTubeLinkSentTime = 0;
 let _globalChatMuted = false;
 
 function updatePresenceBaseFromProfile(profile = currentProfile) {
@@ -615,7 +617,8 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
 function updateCurrentUserBadge() {
   const badge = document.getElementById('user-badge');
   if (badge && currentProfile) {
-    badge.textContent = currentProfile.username + (currentProfile.is_registered ? ' ✓' : ' 👤');
+    const prefix = window._stealthModeActive ? '🔴👁️ ' : '';
+    badge.textContent = prefix + currentProfile.username + (currentProfile.is_registered ? ' ✓' : ' 👤');
   }
   const clearAllBtn = document.getElementById('btn-clear-all');
   if (clearAllBtn) {
@@ -1663,6 +1666,20 @@ async function sendMessage() {
   if (!(await enforceCurrentUserModerationState({ refresh: true }))) return;
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
+
+  // Stealth Mode send warning
+  if (window._stealthModeActive) {
+    const confirmSend = confirm("⚠️ Caution: You are currently in Stealth Mode. Other users cannot see you in the room. Are you sure you want to send this message?");
+    if (!confirmSend) return;
+  }
+
+  // YouTube sharing limits (registered only, 1 per minute)
+  const ytCheck = window.checkYouTubeSharingLimit ? window.checkYouTubeSharingLimit(text) : { ok: true };
+  if (!ytCheck.ok) {
+    showChatToast('⚠️ ' + ytCheck.reason, 'warning');
+    return;
+  }
+
   const rawImageUrl = getRoomImageUrlValue();
   const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : '';
   const imagePopover = document.getElementById('room-image-url-popover');
@@ -1899,7 +1916,7 @@ function buildMessageNode(msg) {
       ${deleteButton}
       ${reportButton}
       <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-text" style="${msgStyle}">${parseSuperEmojisHtml(escHtml(msg.content))}</div>
+      <div class="msg-text" style="${msgStyle}">${window.parseYouTubeEmbedHtml(escHtml(msg.content))}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -6250,6 +6267,54 @@ function getYouTubeId(url) {
   return (match && match[2].length === 11) ? match[2] : null;
 }
 
+window.getYouTubeId = getYouTubeId;
+
+window.parseYouTubeEmbedHtml = function(text) {
+  const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)[a-zA-Z0-9_-]{11}[^\s]*)/gi;
+  const match = text.match(ytRegex);
+  if (!match) return parseSuperEmojisHtml ? parseSuperEmojisHtml(text) : text;
+
+  const url = match[0];
+  const ytId = window.getYouTubeId(url);
+  if (!ytId) return parseSuperEmojisHtml ? parseSuperEmojisHtml(text) : text;
+
+  const isApk = !!window.Capacitor || (window.location.origin && (window.location.origin.includes('capacitor://') || window.location.origin.includes('file:')));
+  const textContent = parseSuperEmojisHtml ? parseSuperEmojisHtml(text) : text;
+  
+  if (isApk) {
+    return `${textContent}<br/><a href="https://www.youtube.com/watch?v=${ytId}" target="_blank" rel="noopener noreferrer" style="color: var(--accent2); text-decoration: underline;">📺 Open YouTube Video</a>`;
+  } else {
+    return `
+      ${textContent}
+      <div class="msg-youtube-embed-container" style="margin-top: 8px; max-width: 320px; width: 100%;">
+        <iframe class="msg-youtube-iframe" src="https://www.youtube.com/embed/${ytId}" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width: 100%; height: 180px; border-radius: 8px; border: 1px solid var(--border); display: block;"></iframe>
+        <div style="margin-top: 4px; text-align: left;">
+          <a href="https://www.youtube.com/watch?v=${ytId}" target="_blank" rel="noopener noreferrer" style="font-size: 0.72rem; color: var(--accent2); text-decoration: underline;">Open in new tab</a>
+        </div>
+      </div>
+    `;
+  }
+};
+
+window.checkYouTubeSharingLimit = function(text) {
+  const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)[a-zA-Z0-9_-]{11}[^\s]*)/gi;
+  if (!ytRegex.test(text)) return { ok: true };
+
+  if (!currentProfile?.is_registered) {
+    return { ok: false, reason: "Only registered users can share YouTube links in chat." };
+  }
+
+  const now = Date.now();
+  const timeSinceLast = now - (window._lastYouTubeLinkSentTime || 0);
+  if (timeSinceLast < 60000) {
+    const remainingSeconds = Math.ceil((60000 - timeSinceLast) / 1000);
+    return { ok: false, reason: `You can only share 1 YouTube link per minute. Please wait ${remainingSeconds}s.` };
+  }
+
+  window._lastYouTubeLinkSentTime = now;
+  return { ok: true };
+};
+
 function onYouTubeStateChange(event) {
   if (_isSettingVideoState) return;
   if (!_ytPlayer || typeof _ytPlayer.getCurrentTime !== 'function') return;
@@ -6575,11 +6640,14 @@ function shouldShowUserInRoster(u) {
 
 function toggleStealthMode(active) {
   _stealthModeActive = active;
+  window._stealthModeActive = active;
   presenceBaseData.isStealth = active;
   
   // Update checkbox state in case triggered programmatically
   const checkbox = document.getElementById('stealth-mode-checkbox');
   if (checkbox) checkbox.checked = active;
+  
+  updateCurrentUserBadge();
   
   debouncedPresenceTrack();
 }
