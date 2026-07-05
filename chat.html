@@ -215,6 +215,7 @@
       <div class="topbar-room">
         <span id="current-room-name">Select a Room</span>
         <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">🔙 Return to Rooms</button>
+        <button id="btn-cowatch-return" class="btn-iptv-return hidden" onclick="exitCoWatchRoomAndShowRooms()">🔙 Return to Rooms</button>
       </div>
       <div class="topbar-search" id="topbar-search">
         <input
@@ -311,7 +312,6 @@
           <div class="cowatch-player-panel">
             <div class="cowatch-top-bar">
               <div class="cowatch-room-info" style="display:flex; align-items:center;">
-                <button onclick="exitCoWatchRoomAndShowRooms()" style="background:var(--red);border:none;color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer;margin-right:12px;font-size:0.85rem;display:flex;align-items:center;gap:4px;">⬅️ Leave</button>
                 <span class="cowatch-room-label">🍿 Popcorn Room</span>
                 <span id="cowatch-user-count" class="cowatch-user-count-badge">1 user</span>
               </div>

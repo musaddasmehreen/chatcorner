@@ -5745,6 +5745,10 @@ function enterCoWatchRoomLayout() {
   const shell = document.querySelector('.page-shell');
   if (shell) shell.classList.add('cowatch-active');
 
+  // Show return button
+  const btnReturn = document.getElementById('btn-cowatch-return');
+  if (btnReturn) btnReturn.classList.remove('hidden');
+
   // Wrap messages and input-strip into .cowatch-chat-wrapper
   const chatMain = document.querySelector('.chat-main');
   const messages = document.getElementById('messages');
@@ -5805,6 +5809,10 @@ function exitCoWatchRoom() {
   // Remove class from shell
   const shell = document.querySelector('.page-shell');
   if (shell) shell.classList.remove('cowatch-active');
+
+  // Hide return button
+  const btnReturn = document.getElementById('btn-cowatch-return');
+  if (btnReturn) btnReturn.classList.add('hidden');
 
   // Unwrap messages and input-strip back to chat-main
   const chatMain = document.querySelector('.chat-main');
