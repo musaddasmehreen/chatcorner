@@ -1513,3 +1513,76 @@
   }
 }
 
+/* ── Ludo Room Full-Screen Layout ────────────────────────────────────────── */
+
+/* Ludo sidebar item styling */
+.ludo-room-item {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.1)) !important;
+  border-left: 3px solid #f59e0b !important;
+  color: #fbbf24 !important;
+  font-weight: 600 !important;
+}
+.ludo-room-item:hover,
+.ludo-room-item.active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(217, 119, 6, 0.25)) !important;
+  color: #fcd34d !important;
+}
+
+/* Ludo container — fills the entire chat-main area */
+.ludo-container {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #0f172a;
+  z-index: 100;
+}
+
+.ludo-container.hidden {
+  display: none !important;
+}
+
+.ludo-container:not(.hidden) {
+  display: flex;
+}
+
+.ludo-container iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  flex: 1;
+}
+
+/* When ludo is active, make chat-main relative so iframe can fill it */
+.page-shell.ludo-active .chat-main {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+/* Hide sidebars when Ludo is active */
+.page-shell.ludo-active .sidebar-left,
+.page-shell.ludo-active .sidebar-right {
+  display: none !important;
+}
+
+/* Hide messages/input strip to give full space to the game */
+.page-shell.ludo-active .messages,
+.page-shell.ludo-active .input-strip,
+.page-shell.ludo-active #btn-load-older,
+.page-shell.ludo-active .rooms-topbar,
+.page-shell.ludo-active .video-grid,
+.page-shell.ludo-active .local-video,
+.page-shell.ludo-active .iptv-container {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .page-shell.ludo-active .sidebar-left,
+  .page-shell.ludo-active .sidebar-right {
+    display: none !important;
+  }
+}
+

@@ -1170,70 +1170,18 @@ async function loadRooms(preloadedRooms = null) {
       textList.appendChild(iptvLi);
     }
 
-    // Render "Popcorn" whereby-style room beneath IPTV
-    let popcornRoom = cowatchRooms.find(r => r.name.toLowerCase() === 'popcorn');
-    if (popcornRoom) {
-      const li = document.createElement('li');
-      li.textContent = `🍿 ${popcornRoom.name}`;
-      li.title = popcornRoom.user_count != null ? `${popcornRoom.name} — ${popcornRoom.user_count} users` : popcornRoom.name;
-      li.dataset.roomId = String(popcornRoom.id);
-      li.classList.add('cowatch-room-item', 'popcorns-room-item');
-      if (popcornRoom.is_locked) {
-        li.classList.add('room-item-locked');
-      }
-      li.onclick = () => enterRoom(popcornRoom);
-      li.oncontextmenu = (e) => {
-        e.preventDefault();
-        showRoomContextMenu(e, popcornRoom);
-      };
-      if (textList) textList.appendChild(li);
-    } else {
-      // Immediately render a fallback virtual room so the Popcorn room is ALWAYS visible
-      const li = document.createElement('li');
-      li.textContent = '🍿 Popcorn';
-      li.title = 'Popcorn – Co-Watch Videos Sync (Virtual Fallback)';
-      li.dataset.roomId = 'popcorn-fallback-virtual';
-      li.classList.add('cowatch-room-item', 'popcorns-room-item');
-      li.onclick = () => enterFallbackVirtualPopcornRoom();
-      if (textList) textList.appendChild(li);
-
-      // Auto-create Popcorn whereby-style co-watching room in DB in the background
-      sbClient.from('rooms').insert({
-        name: 'Popcorn',
-        description: '🍿 Popcorn whereby-style co-watching room',
-        room_type: 'cowatch',
-        is_audio_enabled: false,
-        is_locked: false
-      }).select().then(({ data }) => {
-        if (data && data.length > 0) {
-          // Replace fallback virtual room with the real room in cache
-          rooms.push(data[0]);
-          loadRooms(rooms);
-        }
-      }).catch(e => {
-        console.warn('Popcorn room auto-creation in DB skipped/failed (Supabase migration might not be completed yet):', e);
-      });
+    // Inject virtual Ludo room at end of sidebar list
+    if (textList) {
+      const ludoLi = document.createElement('li');
+      ludoLi.textContent = '🎲 Ludo Room';
+      ludoLi.title = 'Ludo – Play Ludo Game';
+      ludoLi.dataset.roomId = 'ludo-virtual';
+      ludoLi.classList.add('ludo-room-item');
+      ludoLi.onclick = () => enterLudoRoom();
+      textList.appendChild(ludoLi);
     }
 
-    // Render other Co-Watch database rooms
-    const otherCowatchRooms = cowatchRooms.filter(r => r.name.toLowerCase() !== 'popcorn');
-    otherCowatchRooms.forEach(room => {
-      const li = document.createElement('li');
-      li.textContent = `🎬 ${room.name}`;
-      li.title = room.user_count != null ? `${room.name} — ${room.user_count} users` : room.name;
-      li.dataset.roomId = String(room.id);
-      li.classList.add('cowatch-room-item');
-      if (room.is_locked) {
-        li.classList.add('room-item-locked');
-      }
-      li.onclick = () => enterRoom(room);
-      li.oncontextmenu = (e) => {
-        e.preventDefault();
-        showRoomContextMenu(e, room);
-      };
-      if (textList) textList.appendChild(li);
-    });
-    renderRoomsTopbar(rooms);
+        renderRoomsTopbar(rooms);
     // Optimization: skip redundant moderation status check on the first load since we just did it
     enterRoom(rooms[0], false, true);
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
@@ -5888,42 +5836,6 @@ window.saveRoomLockSettings = saveRoomLockSettings;
 window.handleMenuLockToggle = handleMenuLockToggle;
 window.showRoomContextMenu = showRoomContextMenu;
 
-  
-  currentRoom = { id: 'popcorn-fallback-virtual', name: 'Popcorn', room_type: 'cowatch', _virtual: true };
-  
-  // Update sidebar active status
-  document.querySelectorAll('#room-list li').forEach(li =>
-    li.classList.toggle('active', li.dataset.roomId === 'popcorn-fallback-virtual'));
-    
-  // Update topbar room name
-  const titleEl = document.getElementById('current-room-name');
-  if (titleEl) titleEl.textContent = '🍿 Popcorn';
-  document.title = '🍿 Popcorn – ChatCorner';
-
-  // Enter Co-Watch layout
-  enterCoWatchRoomLayout();
-  
-  // Subscribe to Co-Watch broadcast channel
-  subscribeToCoWatchChannel('popcorn-fallback-virtual');
-  
-  // Update sync controls status
-  updateSyncStatusText(false);
-}
-
-function renderVirtualCoWatchChatMessage(payload) {
-  const container = document.getElementById('messages');
-  if (!container) return;
-  const div = document.createElement('div');
-  div.className = 'message';
-  const username = payload.username || 'Anonymous';
-  const text = String(payload.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}</span><span class="msg-text">${text}</span>`;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-window.enterFallbackVirtualPopcornRoom = enterFallbackVirtualPopcornRoom;
-window.renderVirtualCoWatchChatMessage = renderVirtualCoWatchChatMessage;
 
 function renderCoWatchParticipants() {
   const row = document.getElementById('cowatch-participants-row');
@@ -6153,6 +6065,53 @@ async function handleMenuRestrictUser() {
   }
 }
 
+
+/* ── Ludo Room Functions ── */
+function enterLudoRoom() {
+  // Mark sidebar item active
+  document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
+  const ludoLi = document.querySelector('#room-list li[data-room-id="ludo-virtual"]');
+  if (ludoLi) ludoLi.classList.add('active');
+
+  // Set virtual room state
+  currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true };
+
+  // Update topbar title
+  const titleEl = document.getElementById('current-room-name');
+  if (titleEl) titleEl.textContent = '🎲 Ludo Room';
+  document.title = '🎲 Ludo – ChatCorner';
+
+  // Load the game iframe (lazy-load)
+  const iframe = document.getElementById('ludo-iframe');
+  if (iframe && !iframe.src) {
+    iframe.src = 'https://www.mixchatroom.com/ludo/index.html';
+  }
+
+  // Show ludo container, hide chat elements
+  document.getElementById('ludo-container').classList.remove('hidden');
+  document.querySelector('.page-shell').classList.add('ludo-active');
+  document.querySelector('.page-shell').classList.remove('iptv-active');
+
+  // Show/hide return buttons
+  const ludoReturnBtn = document.getElementById('btn-ludo-return');
+  const iptvReturnBtn = document.getElementById('btn-iptv-return');
+  if (ludoReturnBtn) ludoReturnBtn.classList.remove('hidden');
+  if (iptvReturnBtn) iptvReturnBtn.classList.add('hidden');
+}
+
+function exitLudoRoom() {
+  document.querySelector('.page-shell').classList.remove('ludo-active');
+  document.getElementById('ludo-container').classList.add('hidden');
+  const ludoReturnBtn = document.getElementById('btn-ludo-return');
+  if (ludoReturnBtn) ludoReturnBtn.classList.add('hidden');
+  // Navigate back to first room
+  if (cachedRooms && cachedRooms.length > 0) {
+    enterRoom(cachedRooms[0]);
+  }
+}
+
+window.enterLudoRoom = enterLudoRoom;
+window.exitLudoRoom = exitLudoRoom;
 
 window.toggleGlobalChatMute = toggleGlobalChatMute;
 window.handleMenuRestrictUser = handleMenuRestrictUser;

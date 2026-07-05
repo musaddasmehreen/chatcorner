@@ -215,6 +215,7 @@
       <div class="topbar-room">
         <span id="current-room-name">Select a Room</span>
         <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">🔙 Return to Rooms</button>
+        <button id="btn-ludo-return" class="btn-iptv-return hidden" onclick="exitLudoRoom()">🔙 Return to Rooms</button>
       </div>
       <div class="topbar-search" id="topbar-search">
         <input
@@ -306,6 +307,10 @@
           </div>
         </div>
 
+        <!-- Ludo game container -->
+        <div id="ludo-container" class="ludo-container hidden">
+          <iframe id="ludo-iframe" src="" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture;" allowfullscreen></iframe>
+        </div>
 
         <!-- Video elements for voice room -->
         <div id="video-grid" class="video-grid hidden"></div>
