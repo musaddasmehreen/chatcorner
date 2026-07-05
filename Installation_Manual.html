@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; padding: 40px; margin: 0 auto; max-width: 800px; }
+  h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+  h2 { color: #2980b9; margin-top: 30px; display: flex; align-items: center; }
+  .step-number { background: #3498db; color: white; border-radius: 50%; width: 30px; height: 30px; display: inline-flex; justify-content: center; align-items: center; margin-right: 15px; font-size: 18px; }
+  .box { background: #f8f9fa; border-left: 4px solid #3498db; padding: 15px 20px; margin: 20px 0; border-radius: 0 4px 4px 0; }
+  .warning-box { border-left-color: #e74c3c; background: #fdf2f1; }
+  .success-box { border-left-color: #2ecc71; background: #f0fbf4; }
+  code { background: #eee; padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', Courier, monospace; color: #d35400; font-weight: bold; }
+  pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 6px; overflow-x: auto; margin-top: 10px; }
+  .footer { margin-top: 50px; text-align: center; color: #7f8c8d; font-size: 0.9em; border-top: 1px solid #eee; padding-top: 20px; }
+  ol { padding-left: 20px; }
+  li { margin-bottom: 12px; }
+  a { color: #3498db; text-decoration: none; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>🚀 ChatCorner System - Installation Manual</h1>
+
+<div class="box">
+  <strong>Welcome!</strong> This manual will guide you through setting up the complete infrastructure for your new ChatCorner system, including the database, frontend website, backend proxy, and the Android APK.
+</div>
+
+<div class="box warning-box">
+  <strong>📋 Prerequisites:</strong>
+  <ul>
+    <li>A free account on <a href="https://supabase.com/">Supabase</a> (Database & Authentication)</li>
+    <li>A free account on <a href="https://cloudflare.com/">Cloudflare</a> (Website & Proxy Hosting)</li>
+    <li>A code editor like <a href="https://code.visualstudio.com/">VS Code</a></li>
+  </ul>
+</div>
+
+<h2><span class="step-number">1</span> Database Setup (Supabase)</h2>
+<p>ChatCorner relies on Supabase for real-time messages, user accounts, and data storage.</p>
+<ol>
+  <li><strong>Create a Project:</strong> Go to Supabase and create a new project. Save your <code>Project URL</code> and <code>anon public API key</code> (found in Project Settings -> API).</li>
+  <li><strong>Initialize the Database:</strong> Go to the <strong>SQL Editor</strong> in your Supabase dashboard. Open the SQL files included in this package and run them in this specific order:
+    <ul>
+      <li><code>schema.sql</code></li>
+      <li><code>schema-updates.sql</code></li>
+      <li><code>cowatch-migration.sql</code></li>
+    </ul>
+  </li>
+  <li><strong>Configure Authentication:</strong> Go to <strong>Authentication -> Providers</strong> and enable <strong>Email</strong> (you can disable "Confirm email" for easier onboarding).</li>
+  <li><strong>Add Initial Admin Settings:</strong> Go to the <strong>Table Editor</strong>, open the <code>app_settings</code> table, and add a new row:
+    <br><code>key</code>: <code>proxy_base_url</code>
+    <br><code>value</code>: <code>https://YOUR_CLOUDFLARE_PAGES_DOMAIN.pages.dev</code> <em>(You will get this in Phase 3)</em>
+  </li>
+</ol>
+
+<h2><span class="step-number">2</span> Connecting the Code</h2>
+<p>You need to connect the frontend and backend files to your new Supabase project.</p>
+<ol>
+  <li><strong>Frontend Connection:</strong> Open <code>js/chat-v3.js</code> in your code editor. Search for the Supabase configuration near the top of the file. Replace the <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> with the credentials you saved in Phase 1. Do the same in <code>js/auth.js</code> and <code>admin.html</code>.</li>
+  <li><strong>Backend/Proxy Connection:</strong> Open <code>.env.example</code>, rename it to <code>.env</code>, and paste your Supabase URL and Key inside. This allows the local server and Cloudflare Edge functions to read the database securely.</li>
+</ol>
+
+<h2><span class="step-number">3</span> Web & Proxy Deployment (Cloudflare Pages)</h2>
+<p>ChatCorner uses Cloudflare Pages to host the website and run the built-in Proxy that bypasses iframe restrictions.</p>
+<ol>
+  <li><strong>Install Wrangler:</strong> Install <a href="https://nodejs.org/">Node.js</a>, then open your terminal and run:
+    <pre>npm install -g wrangler</pre>
+  </li>
+  <li><strong>Login to Cloudflare:</strong> Run <code>wrangler login</code> in your terminal and authorize via the browser.</li>
+  <li><strong>Deploy the Project:</strong> Open your terminal in the ChatCorner project folder and run:
+    <pre>npx wrangler pages deploy .</pre>
+    Select "Create a new project" and name it. Wrangler will upload your files and give you a live URL.
+  </li>
+  <li><strong>Update the Proxy Setting:</strong> Take the URL Cloudflare just gave you and put it into your Supabase <code>app_settings</code> table (under <code>proxy_base_url</code>) from Phase 1.</li>
+</ol>
+
+<h2><span class="step-number">4</span> Android App Integration</h2>
+<p>Included in your package is the <code>chatcorner-updated.apk</code> which serves as the Android wrapper for the web system.</p>
+<ol>
+  <li><strong>Setup Capacitor:</strong> The project uses <a href="https://capacitorjs.com/">Capacitor</a>. You will need Android Studio installed.</li>
+  <li><strong>Update Domain:</strong> Modify <code>capacitor.config.json</code> to point to your new Cloudflare domain or update the assets in the <code>www</code> folder.</li>
+  <li><strong>Build APK:</strong> Run <code>npx cap sync android</code>, then open the <code>android</code> folder in Android Studio and click <strong>Build -> Build Bundle(s) / APK(s) -> Build APK(s)</strong>.</li>
+</ol>
+
+<h2><span class="step-number">5</span> Admin Dashboard Access</h2>
+<ol>
+  <li>Once your site is live, register a normal account via <code>login.html</code>.</li>
+  <li>Go to your Supabase <strong>Table Editor</strong>, open the <code>profiles</code> table.</li>
+  <li>Find your user row and change your <code>role</code> to <code>admin</code> or <code>owner</code>.</li>
+  <li>You can now log into <code>admin.html</code> or <code>mypanel.html</code> on your live site to manage users and oversee the system!</li>
+</ol>
+
+<div class="box success-box">
+  <strong>🎉 Success! You're all set!</strong><br>
+  Your full-stack chat application with proxy bypassing, native Android support, and real-time database is now fully operational!
+</div>
+
+<div class="footer">
+  ChatCorner Installation Guide &copy; 2026
+</div>
+
+</body>
+</html>

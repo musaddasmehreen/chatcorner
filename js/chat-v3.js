@@ -830,11 +830,16 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   currentUser = session.user;
 
-  // Optimize: Fetch profile and room list in parallel to reduce sequential database network roundtrips
-  const [profileResult, roomsResult] = await Promise.all([
+  // Optimize: Fetch profile, room list, and proxy URL in parallel to reduce sequential database network roundtrips
+  const [profileResult, roomsResult, proxyBaseUrl] = await Promise.all([
     sbClient.from('profiles').select('*').eq('id', currentUser.id).single(),
-    sbClient.from('rooms').select('*').order('name')
+    sbClient.from('rooms').select('*').order('name'),
+    window.ccSecurity ? window.ccSecurity.getAppSettingValue('proxy_base_url').catch(() => null) : Promise.resolve(null)
   ]);
+
+  if (proxyBaseUrl) {
+    window._cachedProxyBaseUrl = proxyBaseUrl.trim();
+  }
 
   let prof = profileResult.data;
   const initialRooms = roomsResult.data || [];
@@ -5816,6 +5821,27 @@ function exitCoWatchRoom() {
   }
 }
 
+window.exitCoWatchRoomAndShowRooms = function() {
+  exitCoWatchRoom();
+  
+  // Open sidebar on mobile automatically
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.add('open');
+  
+  // Try to load the 'general' or 'main' room, otherwise just clear UI
+  if (typeof cowatchRooms !== 'undefined' && cowatchRooms.length > 0) {
+    const defaultRoom = cowatchRooms.find(r => r.name.toLowerCase() === 'general' || r.name.toLowerCase() === 'main') || cowatchRooms[0];
+    if (defaultRoom) {
+      if (typeof enterRoom === 'function') enterRoom(defaultRoom);
+    }
+  } else {
+    currentRoom = null;
+    document.getElementById('chat-messages').innerHTML = '';
+    const titleEl = document.getElementById('chat-room-title');
+    if (titleEl) titleEl.textContent = 'Select a Room';
+  }
+};
+
 function subscribeToCoWatchChannel(roomId) {
   if (_cowatchChannel) sbClient.removeChannel(_cowatchChannel);
   
@@ -6173,102 +6199,30 @@ function loadCoWatchMedia(url, isIncoming = false, startTime = 0, isPlaying = fa
     };
     setStatus('🌐 Connecting...');
 
-    const fetchWithFallback = async (targetUrl) => {
-      // Determine base origin for self-hosted proxy
-      const selfOrigin = (() => {
-        const o = window.location.origin;
-        if (!o || o === 'null' || o.startsWith('capacitor://') || o.startsWith('file:')) {
-          return 'https://chatcorner.pages.dev';
-        }
-        return o;
-      })();
-
-      // Proxy list: [url, isJson]
-      const proxies = [
-        [`${selfOrigin}/proxy?url=${encodeURIComponent(targetUrl)}`, false],
-        [`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`, true],
-        [`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`, false],
-        [`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`, false],
-        [`https://htmlpreview.github.io/?${encodeURIComponent(targetUrl)}`, false],
-      ];
-
-      for (let i = 0; i < proxies.length; i++) {
-        const [proxyUrl, isJson] = proxies[i];
-        setStatus(`🌐 Loading... (attempt ${i + 1}/${proxies.length})`);
-        
-        let controller;
-        let timeoutId;
-        try {
-          // Safe backward-compatible timeout implementation
-          if (typeof AbortController !== 'undefined') {
-            controller = new AbortController();
-            timeoutId = setTimeout(() => controller.abort(), 6000);
-          }
-          
-          const fetchOptions = {};
-          if (controller) {
-            fetchOptions.signal = controller.signal;
-          }
-
-          const res = await fetch(proxyUrl, fetchOptions);
-          if (timeoutId) clearTimeout(timeoutId);
-          
-          if (!res.ok) continue;
-          let html;
-          if (isJson) {
-            const json = await res.json();
-            html = json.contents || json.body || '';
-          } else {
-            html = await res.text();
-          }
-          // Only reject if response is tiny AND looks like a pure error object (not real HTML)
-          const isProxyError = html.length < 300 && html.trim().startsWith('{') && html.includes('error');
-          if (html && html.length > 50 && !isProxyError) return html;
-        } catch(e) {
-          if (timeoutId) clearTimeout(timeoutId);
-          /* try next */
-        }
+    // Determine base origin for self-hosted proxy
+    const selfOrigin = (() => {
+      const o = window.location.origin;
+      if (!o || o === 'null' || o.startsWith('capacitor://') || o.startsWith('file:')) {
+        if (window._cachedProxyBaseUrl) return window._cachedProxyBaseUrl;
+        return 'https://chatcorner.pages.dev';
       }
-      return null;
-    };
+      return o;
+    })();
 
-    fetchWithFallback(webUrl).then(html => {
-      if (!html) {
-        setStatus('⚠️ Could not load page. Please try a video/stream URL (.mp4, .m3u8) or paste the direct media link.');
-        return;
-      }
-
-      // Inject base tag + nav interceptor so clicks route back through proxy
-      const baseTag = `<base href="${webUrl}">`;
-      const navScript = `<script>
-(function(){
-  document.addEventListener('click',function(e){
-    var a=e.target.closest('a');
-    if(a&&a.href&&!a.href.startsWith('javascript:')&&!a.href.startsWith('mailto:')&&!a.href.startsWith('#')){
-      e.preventDefault();
-      window.parent.postMessage({type:'cowatch_navigate',url:a.href},'*');
+    // Check if the user tried to load raw youtube.com instead of a video URL
+    if (webUrl.toLowerCase().includes('youtube.com') && !getYouTubeId(webUrl)) {
+      setStatus('⚠️ To watch YouTube, please paste the direct link to a specific video (e.g., youtube.com/watch?v=...)');
+      return;
     }
-  },true);
-  // intercept form submits too
-  document.addEventListener('submit',function(e){
-    var f=e.target;
-    if(f.action){
-      e.preventDefault();
-      var u=new URL(f.action);
-      try{new FormData(f).forEach(function(v,k){u.searchParams.set(k,v);});}catch(x){}
-      window.parent.postMessage({type:'cowatch_navigate',url:u.toString()},'*');
-    }
-  },true);
-})();
-<\/script>`;
 
-      html = html.replace(/(<head[^>]*>)/i, `$1${baseTag}${navScript}`);
-      if (!html.includes(baseTag)) html = baseTag + navScript + html;
-
-      iframe.srcdoc = html;
-      if (overlay) overlay.classList.add('hidden');
-      updateSyncStatusText(false);
-    });
+    // Directly set the iframe source so it runs under the proxy's origin!
+    // This allows the Cloudflare proxy to natively intercept XHRs and preserve cookies.
+    const proxyUrl = `${selfOrigin}/proxy?url=${encodeURIComponent(webUrl)}`;
+    
+    // Hide overlay immediately, or rely on iframe onload (simplified to just hide for now)
+    if (overlay) overlay.classList.add('hidden');
+    iframe.src = proxyUrl;
+    updateSyncStatusText(false);
 
     // Handle cross-iframe navigation messages
     if (!window._cowatchNavListener) {

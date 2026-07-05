@@ -1,0 +1,15 @@
+END-USER LICENSE AGREEMENT (EULA) FOR CHATCORNER
+
+This software is protected by copyright laws and international copyright treaties, as well as other intellectual property laws and treaties. The software is licensed, not sold.
+
+GRANT OF LICENSE:
+This License File grants you the following rights:
+- Single personal or commercial use of the software for one project or domain.
+- You may modify the software for your own use.
+
+RESTRICTIONS:
+- Redistribution, sub-licensing, or reselling of the source code (modified or unmodified) is strictly prohibited.
+- You may not claim this software as your own original creation.
+- You may not use this software in a product that is offered for sale where the software itself is the primary value of the product (e.g., selling a chat-app builder).
+
+By installing, copying, or otherwise using this software, you agree to be bound by the terms of this EULA. If you do not agree to the terms of this EULA, do not install or use the software.

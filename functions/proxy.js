@@ -50,11 +50,37 @@ export async function onRequest(context) {
       html = html.replace(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
       html = html.replace(/<meta\s+http-equiv=["']X-Frame-Options["'][^>]*>/gi, '');
 
+      // Helper to resolve relative URLs
+      const resolveUrl = (rel, base) => {
+        try {
+          return new URL(rel, base).toString();
+        } catch(e) {
+          return rel;
+        }
+      };
+
+      // Rewrite links and forms to run absolutely through this proxy origin
+      const proxyOrigin = urlObj.origin + '/proxy';
+      html = html.replace(/(<a[^>]+href=["'])([^"']*)(["'])/gi, (match, p1, p2, p3) => {
+        const trimmed = p2.trim();
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('javascript:') || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:')) {
+          return match;
+        }
+        return p1 + proxyOrigin + '?url=' + encodeURIComponent(resolveUrl(trimmed, cleanUrl)) + p3;
+      });
+      html = html.replace(/(<form[^>]+action=["'])([^"']*)(["'])/gi, (match, p1, p2, p3) => {
+        const trimmed = p2.trim();
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('javascript:')) {
+          return match;
+        }
+        return p1 + proxyOrigin + '?url=' + encodeURIComponent(resolveUrl(trimmed, cleanUrl)) + p3;
+      });
+
       const baseTag = `<base href="${cleanUrl}">`;
       const injectScript = `
 <script>
   (function() {
-    // Intercept link clicks in iframe
+    // Double-layer backup: Intercept link clicks in iframe
     document.addEventListener('click', function(e) {
       var a = e.target.closest('a');
       if (a && a.href) {
@@ -64,7 +90,7 @@ export async function onRequest(context) {
         }
         e.preventDefault();
         e.stopPropagation();
-        window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(a.href);
+        window.location.href = "${urlObj.origin}/proxy?url=" + encodeURIComponent(a.href);
       }
     }, true);
 
@@ -80,7 +106,7 @@ export async function onRequest(context) {
         for (var pair of formData.entries()) {
           url.searchParams.set(pair[0], pair[1]);
         }
-        window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(url.toString());
+        window.location.href = "${urlObj.origin}/proxy?url=" + encodeURIComponent(url.toString());
       }
     }, true);
   })();

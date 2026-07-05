@@ -69,10 +69,43 @@ const server = http.createServer((req, res) => {
         let body = '';
         proxyRes.on('data', (chunk) => body += chunk);
         proxyRes.on('end', () => {
+          // Strip client-side CSP and X-Frame-Options meta tags
+          body = body.replace(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
+          body = body.replace(/<meta\s+http-equiv=["']X-Frame-Options["'][^>]*>/gi, '');
+
+          const hostUrl = `http://${req.headers.host || 'localhost:5000'}`;
+          const proxyOrigin = hostUrl + '/proxy';
+
+          // Helper to resolve relative URLs
+          const resolveUrl = (rel, base) => {
+            try {
+              return new URL(rel, base).toString();
+            } catch(e) {
+              return rel;
+            }
+          };
+
+          // Rewrite links and forms to run absolutely through this proxy origin
+          body = body.replace(/(<a[^>]+href=["'])([^"']*)(["'])/gi, (match, p1, p2, p3) => {
+            const trimmed = p2.trim();
+            if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('javascript:') || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:')) {
+              return match;
+            }
+            return p1 + proxyOrigin + '?url=' + encodeURIComponent(resolveUrl(trimmed, cleanUrl)) + p3;
+          });
+          body = body.replace(/(<form[^>]+action=["'])([^"']*)(["'])/gi, (match, p1, p2, p3) => {
+            const trimmed = p2.trim();
+            if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('javascript:')) {
+              return match;
+            }
+            return p1 + proxyOrigin + '?url=' + encodeURIComponent(resolveUrl(trimmed, cleanUrl)) + p3;
+          });
+
           const baseTag = `<base href="${cleanUrl}">`;
           const injectScript = `
 <script>
   (function() {
+    // Double-layer backup: Intercept link clicks in iframe
     document.addEventListener('click', function(e) {
       var a = e.target.closest('a');
       if (a && a.href) {
@@ -82,10 +115,11 @@ const server = http.createServer((req, res) => {
         }
         e.preventDefault();
         e.stopPropagation();
-        window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(a.href);
+        window.location.href = "${hostUrl}/proxy?url=" + encodeURIComponent(a.href);
       }
     }, true);
 
+    // Intercept form submissions in iframe
     document.addEventListener('submit', function(e) {
       var form = e.target;
       var method = (form.method || 'get').toLowerCase();
@@ -97,7 +131,7 @@ const server = http.createServer((req, res) => {
         for (var pair of formData.entries()) {
           url.searchParams.set(pair[0], pair[1]);
         }
-        window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(url.toString());
+        window.location.href = "${hostUrl}/proxy?url=" + encodeURIComponent(url.toString());
       }
     }, true);
   })();
