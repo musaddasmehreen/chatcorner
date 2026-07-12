@@ -6028,16 +6028,54 @@ let _popcornActiveStream = null; // Stores screen share stream
 let _isPopcornVoiceJoinInProgress = false;
 let _popcornPresenterId = null;
 
+// Dedicated players and synchronization states
+let _ytPlayer = null;
+let _videoPlayer = null;
+let _popcornHls = null;
+let _isPopcornSyncIncoming = false;
+
+// Load YouTube Iframe API dynamically
+if (!window.YT) {
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  const firstScriptTag = document.getElementsByTagName('script')[0];
+  firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+}
+
+function detectUrlType(url) {
+  if (!url) return 'home';
+  const clean = url.trim();
+  if (clean.includes('youtube.com/watch') || clean.includes('youtu.be/') || clean.includes('youtube.com/embed/')) {
+    return 'youtube';
+  }
+  if (/\.(mp4|m3u8|webm|ogg|mp3)(\?|$)/i.test(clean)) {
+    return 'direct-video';
+  }
+  if (clean === 'browser_home.html' || clean === 'about:blank' || clean === '') {
+    return 'home';
+  }
+  return 'proxy-web';
+}
+
 function handlePopcornPresenterChange(presenterId, isSharing) {
   const mainVideo = document.getElementById('popcorn-main-stage-video');
   const iframe = document.getElementById('popcorn-iframe');
+  const ytPlayerDiv = document.getElementById('popcorn-youtube-player');
+  const videoPlayerEl = document.getElementById('popcorn-video-player');
+  const warningBanner = document.getElementById('popcorn-warning-banner');
   
   if (isSharing) {
     _popcornPresenterId = presenterId;
-    if (mainVideo && iframe) {
-      iframe.classList.add('hidden');
+    
+    // Hide standard web elements
+    if (iframe) iframe.classList.add('hidden');
+    if (ytPlayerDiv) ytPlayerDiv.classList.add('hidden');
+    if (videoPlayerEl) videoPlayerEl.classList.add('hidden');
+    if (warningBanner) warningBanner.classList.add('hidden');
+    
+    // Show main stage receiver
+    if (mainVideo) {
       mainVideo.classList.remove('hidden');
-      
       if (presenterId === currentUser?.id) {
         mainVideo.srcObject = _popcornActiveStream;
         mainVideo.muted = true;
@@ -6052,11 +6090,15 @@ function handlePopcornPresenterChange(presenterId, isSharing) {
     }
   } else {
     _popcornPresenterId = null;
-    if (mainVideo && iframe) {
+    if (mainVideo) {
       mainVideo.srcObject = null;
       mainVideo.classList.add('hidden');
-      iframe.classList.remove('hidden');
     }
+    
+    // Restore appropriate active player based on input URL
+    const urlInput = document.getElementById('popcorn-url-input');
+    const url = urlInput ? urlInput.value : 'browser_home.html';
+    loadPopcornBrowserUrl(url);
   }
 }
 
@@ -6136,6 +6178,10 @@ async function enterPopcornRoom(dbRoom = null) {
     .on('broadcast', { event: 'popcorn_url_change' }, ({ payload }) => {
       const { url } = payload;
       loadPopcornBrowserUrl(url);
+      
+      // Update address bar text for guests
+      const input = document.getElementById('popcorn-url-input');
+      if (input) input.value = url;
     })
     .on('broadcast', { event: 'popcorn_presenter_change' }, ({ payload }) => {
       const { presenterId, isSharing } = payload;
@@ -6144,9 +6190,43 @@ async function enterPopcornRoom(dbRoom = null) {
     .on('broadcast', { event: 'popcorn_sync_state' }, ({ payload }) => {
       const { url, presenterId } = payload;
       loadPopcornBrowserUrl(url);
+      
+      const input = document.getElementById('popcorn-url-input');
+      if (input) input.value = url;
+      
       if (presenterId) {
         handlePopcornPresenterChange(presenterId, true);
       }
+    })
+    .on('broadcast', { event: 'popcorn_media_control' }, ({ payload }) => {
+      const { action, time, source } = payload;
+      
+      _isPopcornSyncIncoming = true;
+      
+      if (source === 'youtube' && _ytPlayer && typeof _ytPlayer.getPlayerState === 'function') {
+        const currentTime = _ytPlayer.getCurrentTime();
+        if (Math.abs(currentTime - time) > 2) {
+          _ytPlayer.seekTo(time, true);
+        }
+        if (action === 'play') {
+          _ytPlayer.playVideo();
+        } else if (action === 'pause') {
+          _ytPlayer.pauseVideo();
+        }
+      } else if (source === 'direct' && _videoPlayer) {
+        if (Math.abs(_videoPlayer.currentTime - time) > 2) {
+          _videoPlayer.currentTime = time;
+        }
+        if (action === 'play') {
+          _videoPlayer.play().catch(()=>{});
+        } else if (action === 'pause') {
+          _videoPlayer.pause();
+        }
+      }
+      
+      setTimeout(() => {
+        _isPopcornSyncIncoming = false;
+      }, 500);
     });
 
   _popcornChannel.subscribe(async (status) => {
@@ -6225,6 +6305,7 @@ window.respondPopcornKnock = function(knockerId, allowed) {
 
 function initPopcornRoomState() {
   loadPopcornBrowserUrl('browser_home.html');
+  initDirectVideoPlayer();
 
   if (typeof joinVoice === 'function') {
     _isPopcornVoiceJoinInProgress = true;
@@ -6260,13 +6341,164 @@ function initPopcornRoomState() {
   }
 }
 
+function loadPopcornYoutube(videoId) {
+  const container = document.getElementById('popcorn-youtube-player');
+  if (!container) return;
+
+  container.innerHTML = '<div id="yt-player-placeholder"></div>';
+
+  if (window.YT && window.YT.Player) {
+    _ytPlayer = new YT.Player('yt-player-placeholder', {
+      height: '100%',
+      width: '100%',
+      videoId: videoId,
+      playerVars: {
+        autoplay: 1,
+        controls: 1,
+        rel: 0,
+        modestbranding: 1
+      },
+      events: {
+        onStateChange: onPlayerStateChange
+      }
+    });
+  } else {
+    setTimeout(() => loadPopcornYoutube(videoId), 500);
+  }
+}
+
+function onPlayerStateChange(event) {
+  if (!currentRoom || !currentRoom.id) return;
+  const isHost = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  if (!isHost) return;
+  if (_isPopcornSyncIncoming) return;
+
+  const state = event.data;
+  let action = '';
+  if (state === YT.PlayerState.PLAYING) {
+    action = 'play';
+  } else if (state === YT.PlayerState.PAUSED) {
+    action = 'pause';
+  }
+
+  if (action && _popcornChannel) {
+    _popcornChannel.send({
+      type: 'broadcast',
+      event: 'popcorn_media_control',
+      payload: {
+        action,
+        time: _ytPlayer.getCurrentTime(),
+        source: 'youtube'
+      }
+    });
+  }
+}
+
+function loadPopcornDirectVideo(url) {
+  const video = document.getElementById('popcorn-video-player');
+  if (!video) return;
+
+  if (_popcornHls) {
+    _popcornHls.destroy();
+    _popcornHls = null;
+  }
+
+  if (url.includes('.m3u8') && typeof Hls !== 'undefined' && Hls.isSupported()) {
+    _popcornHls = new Hls();
+    _popcornHls.loadSource(url);
+    _popcornHls.attachMedia(video);
+  } else {
+    video.src = url;
+  }
+  video.load();
+  video.play().catch(()=>{});
+}
+
+function initDirectVideoPlayer() {
+  _videoPlayer = document.getElementById('popcorn-video-player');
+  if (!_videoPlayer) return;
+
+  _videoPlayer.onplay = () => {
+    if (_isPopcornSyncIncoming) return;
+    const isHost = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+    if (!isHost) return;
+
+    if (_popcornChannel) {
+      _popcornChannel.send({
+        type: 'broadcast',
+        event: 'popcorn_media_control',
+        payload: { action: 'play', time: _videoPlayer.currentTime, source: 'direct' }
+      });
+    }
+  };
+
+  _videoPlayer.onpause = () => {
+    if (_isPopcornSyncIncoming) return;
+    const isHost = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+    if (!isHost) return;
+
+    if (_popcornChannel) {
+      _popcornChannel.send({
+        type: 'broadcast',
+        event: 'popcorn_media_control',
+        payload: { action: 'pause', time: _videoPlayer.currentTime, source: 'direct' }
+      });
+    }
+  };
+
+  _videoPlayer.onseeked = () => {
+    if (_isPopcornSyncIncoming) return;
+    const isHost = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+    if (!isHost) return;
+
+    if (_popcornChannel) {
+      _popcornChannel.send({
+        type: 'broadcast',
+        event: 'popcorn_media_control',
+        payload: { action: 'seek', time: _videoPlayer.currentTime, source: 'direct' }
+      });
+    }
+  };
+}
+
 function loadPopcornBrowserUrl(url) {
   const iframe = document.getElementById('popcorn-iframe');
+  const ytPlayerDiv = document.getElementById('popcorn-youtube-player');
+  const videoPlayerEl = document.getElementById('popcorn-video-player');
+  const warningBanner = document.getElementById('popcorn-warning-banner');
   if (!iframe) return;
 
-  if (url === 'browser_home.html' || url === '' || !url) {
+  // If currently screen sharing, do not swap layouts
+  if (_popcornPresenterId) return;
+
+  const type = detectUrlType(url);
+
+  // Hide all containers initially
+  iframe.classList.add('hidden');
+  if (ytPlayerDiv) ytPlayerDiv.classList.add('hidden');
+  if (videoPlayerEl) videoPlayerEl.classList.add('hidden');
+  if (warningBanner) warningBanner.classList.add('hidden');
+
+  if (type === 'youtube') {
+    if (ytPlayerDiv) ytPlayerDiv.classList.remove('hidden');
+    let videoId = '';
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length === 11) {
+      videoId = match[2];
+    }
+    if (videoId) {
+      loadPopcornYoutube(videoId);
+    }
+  } else if (type === 'direct-video') {
+    if (videoPlayerEl) videoPlayerEl.classList.remove('hidden');
+    loadPopcornDirectVideo(url);
+  } else if (type === 'home') {
+    iframe.classList.remove('hidden');
     iframe.src = 'browser_home.html';
   } else {
+    iframe.classList.remove('hidden');
+    if (warningBanner) warningBanner.classList.remove('hidden');
     let cleanUrl = url.trim();
     if (!/^https?:\/\//i.test(cleanUrl)) {
       cleanUrl = 'https://' + cleanUrl;
