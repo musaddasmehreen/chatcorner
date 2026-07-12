@@ -6081,16 +6081,32 @@ function enterLudoRoom() {
   if (titleEl) titleEl.textContent = '🎲 Ludo Room';
   document.title = '🎲 Ludo – ChatCorner';
 
-  // Load the game iframe (lazy-load)
+  // Load the game iframe (lazy-load only on first entry)
   const iframe = document.getElementById('ludo-iframe');
-  if (iframe && !iframe.src) {
-    iframe.src = 'https://www.mixchatroom.com/ludo/index.html';
+  if (iframe) {
+    const currentSrc = iframe.getAttribute('src');
+    if (!currentSrc || currentSrc === '') {
+      iframe.src = 'https://www.mixchatroom.com/ludo/index.html';
+    }
   }
 
   // Show ludo container, hide chat elements
-  document.getElementById('ludo-container').classList.remove('hidden');
-  document.querySelector('.page-shell').classList.add('ludo-active');
-  document.querySelector('.page-shell').classList.remove('iptv-active');
+  const ludoContainer = document.getElementById('ludo-container');
+  if (ludoContainer) ludoContainer.classList.remove('hidden');
+
+  const shell = document.querySelector('.page-shell');
+  if (shell) {
+    shell.classList.add('ludo-active');
+    shell.classList.remove('iptv-active');
+  }
+
+  // Hide IPTV container if visible
+  const iptvContainer = document.getElementById('iptv-container');
+  if (iptvContainer) iptvContainer.classList.add('hidden');
+
+  // Hide mobile tabs for clean full-screen
+  const mobileTabs = document.getElementById('mobile-tabs');
+  if (mobileTabs) mobileTabs.style.display = 'none';
 
   // Show/hide return buttons
   const ludoReturnBtn = document.getElementById('btn-ludo-return');
@@ -6100,10 +6116,19 @@ function enterLudoRoom() {
 }
 
 function exitLudoRoom() {
-  document.querySelector('.page-shell').classList.remove('ludo-active');
-  document.getElementById('ludo-container').classList.add('hidden');
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.remove('ludo-active');
+
+  const ludoContainer = document.getElementById('ludo-container');
+  if (ludoContainer) ludoContainer.classList.add('hidden');
+
   const ludoReturnBtn = document.getElementById('btn-ludo-return');
   if (ludoReturnBtn) ludoReturnBtn.classList.add('hidden');
+
+  // Restore mobile tabs
+  const mobileTabs = document.getElementById('mobile-tabs');
+  if (mobileTabs) mobileTabs.style.display = '';
+
   // Navigate back to first room
   if (cachedRooms && cachedRooms.length > 0) {
     enterRoom(cachedRooms[0]);
