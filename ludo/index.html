@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mix Ludo Arcade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <link rel="stylesheet" href="/ludo/style.css?v=5.3.0" />
+</head>
+
+<body>
+  <div class="mix-ludo-app">
+    <header class="game-header">
+      <div class="brand-block">
+        <h1>🎲 Mix Ludo Arcade</h1>
+        <p>MixChatRoom Family Game Zone</p>
+      </div>
+
+      <div class="header-buttons">
+        <button id="leaderboardBtn" class="small-btn secondary-btn" type="button">Leaderboard</button>
+        <button id="lobbyToggleBtn" class="small-btn secondary-btn" type="button">Lobby</button>
+        <button id="showSetupBtn" class="small-btn secondary-btn" type="button">Setup</button>
+        <button id="newGameBtn" class="small-btn" type="button">New</button>
+      </div>
+    </header>
+
+    <section id="lobbyPanel" class="lobby-panel">
+      <div class="lobby-card">
+        <div class="lobby-headline">
+          <div>
+            <h2>Live Ludo Lobby</h2>
+            <p>Create a table, join by code, or click an open table.</p>
+          </div>
+          <button id="refreshTablesBtn" class="tiny-btn" type="button">Refresh</button>
+        </div>
+
+        <div class="lobby-grid">
+          <section class="lobby-box">
+            <h3>Create Table</h3>
+            <div class="lobby-create-row">
+              <button id="createTableBtn" class="lobby-action-btn" type="button">Create Table from Setup</button>
+            </div>
+            <div class="lobby-note">Use the setup panel for mode, player count, and team-up before creating.</div>
+          </section>
+
+          <section class="lobby-box">
+            <h3>Join by Code</h3>
+            <div class="join-row">
+              <input id="joinCodeInput" type="text" placeholder="LUDOXCZ4" maxlength="32" autocomplete="off" />
+              <button id="joinCodeBtn" class="lobby-action-btn" type="button">Join</button>
+            </div>
+            <div class="lobby-note">Players can enter the table code shared by the host.</div>
+          </section>
+        </div>
+
+        <section id="currentTableBox" class="current-table-box hidden">
+          <div class="current-table-title">
+            <span id="currentTableTitle">Table: -</span>
+            <button id="copyTableCodeBtn" class="tiny-btn" type="button">Copy Code</button>
+          </div>
+
+          <div id="currentTableMeta" class="current-table-meta">Status: -</div>
+          <div id="tableSeats" class="table-seats"></div>
+
+          <div class="table-actions">
+            <button id="startTableBtn" class="lobby-action-btn start-live-btn" type="button">Start Table</button>
+            <button id="watchTableBtn" class="lobby-action-btn watch-btn" type="button">Watch / Sync</button>
+            <button id="leaveTableBtn" class="lobby-action-btn" type="button">Leave Table</button>
+          </div>
+        </section>
+
+        <section class="open-tables-box">
+          <h3>Open Tables</h3>
+          <div id="openTablesList" class="open-tables-list">
+            <div class="open-table-empty">Loading open tables...</div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="setupPanel" class="setup-panel">
+      <div class="setup-card">
+        <h2>Game Setup</h2>
+
+        <div class="setup-grid">
+          <div class="setup-group">
+            <div class="setup-label">Mode</div>
+            <div class="pill-group" id="modeButtons">
+              <button class="pill-btn active" data-mode="classic" type="button">Classic</button>
+              <button class="pill-btn" data-mode="arrow" type="button">Arrow</button>
+              <button class="pill-btn" data-mode="blitz" type="button">Blitz</button>
+            </div>
+          </div>
+
+          <div class="setup-group">
+            <div class="setup-label">Players</div>
+            <div class="pill-group" id="playerModeButtons">
+              <button class="pill-btn active" data-players="2" type="button">2P</button>
+              <button class="pill-btn" data-players="4" type="button">4P</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="teamUpWrap" class="setup-group hidden">
+          <label class="check-row">
+            <input type="checkbox" id="teamUpToggle" />
+            <span>Team-Up: Team A Yellow+Red, Team B Blue+Green</span>
+          </label>
+        </div>
+
+        <div id="seatConfigWrap" class="setup-group hidden">
+          <div class="setup-label">Local Practice Seats</div>
+
+          <div class="seat-grid">
+            <div class="seat-row fixed-red">
+              <span class="seat-color red-chip">Red</span>
+              <span class="seat-fixed">Human</span>
+            </div>
+
+            <label class="seat-row">
+              <span class="seat-color yellow-chip">Yellow</span>
+              <select id="seatYellow">
+                <option value="human" selected>Human</option>
+                <option value="bot">Bot</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+
+            <label class="seat-row">
+              <span class="seat-color blue-chip">Blue</span>
+              <select id="seatBlue">
+                <option value="human" selected>Human</option>
+                <option value="bot">Bot</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+
+            <label class="seat-row">
+              <span class="seat-color green-chip">Green</span>
+              <select id="seatGreen">
+                <option value="human" selected>Human</option>
+                <option value="bot">Bot</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="setup-note">
+            Local practice can use Bot or Off seats. Live tables seat real players from the lobby.
+          </div>
+        </div>
+
+        <div class="setup-actions">
+          <button id="startGameBtn" class="start-btn" type="button">Start Local Practice</button>
+        </div>
+      </div>
+    </section>
+
+    <main class="game-layout">
+      <section class="board-wrap">
+        <div id="ludoBoard" class="ludo-board"></div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="compact-control-card">
+          <div class="turn-dice-row">
+            <div class="turn-mini">
+              <div class="mini-label">Turn</div>
+              <div id="currentTurn" class="current-turn yellow-text">Yellow Turn</div>
+            </div>
+
+            <div id="diceBox" class="dice-box">🎲</div>
+
+            <button id="rollBtn" class="roll-btn" type="button">Roll</button>
+          </div>
+
+          <div class="pending-wrap">
+            <div class="pending-title">Pending</div>
+            <div id="pendingDicePanel" class="pending-dice-panel">No pending dice</div>
+          </div>
+        </section>
+
+        <section id="gameStatus" class="status-box">
+          Select setup and start a local match, or create/join a live table.
+        </section>
+
+        <section class="summary-card">
+          <div class="summary-title">Match</div>
+          <div id="gameSummary" class="summary-text">Not started yet.</div>
+        </section>
+
+        <section class="players-compact">
+          <div id="player-yellow" class="player-card yellow active">
+            <div class="player-main">
+              <span class="player-name">🟡 Yellow</span>
+              <span class="player-meta" id="meta-yellow">Human • 0 Home</span>
+            </div>
+            <label class="player-auto-toggle disabled-auto">
+              <input id="auto-yellow" class="auto-check" data-auto-color="yellow" type="checkbox" disabled />
+              <span>Auto</span>
+            </label>
+          </div>
+
+          <div id="player-blue" class="player-card blue">
+            <div class="player-main">
+              <span class="player-name">🔵 Blue</span>
+              <span class="player-meta" id="meta-blue">Human • 0 Home</span>
+            </div>
+            <label class="player-auto-toggle disabled-auto">
+              <input id="auto-blue" class="auto-check" data-auto-color="blue" type="checkbox" disabled />
+              <span>Auto</span>
+            </label>
+          </div>
+
+          <div id="player-green" class="player-card green">
+            <div class="player-main">
+              <span class="player-name">🟢 Green</span>
+              <span class="player-meta" id="meta-green">Human • 0 Home</span>
+            </div>
+            <label class="player-auto-toggle disabled-auto">
+              <input id="auto-green" class="auto-check" data-auto-color="green" type="checkbox" disabled />
+              <span>Auto</span>
+            </label>
+          </div>
+
+          <div id="player-red" class="player-card red">
+            <div class="player-main">
+              <span class="player-name">🔴 Red</span>
+              <span class="player-meta" id="meta-red">Human • 0 Home</span>
+            </div>
+            <label class="player-auto-toggle disabled-auto">
+              <input id="auto-red" class="auto-check" data-auto-color="red" type="checkbox" disabled />
+              <span>Auto</span>
+            </label>
+          </div>
+        </section>
+
+        <details class="rules-box">
+          <summary>Rules</summary>
+          <div class="rules-content">
+            <strong>Classic:</strong> 6 required to open every token.<br>
+            <strong>Arrow:</strong> one token starts open; arrows move token and grant extra roll.<br>
+            <strong>Blitz:</strong> first token home wins. Team-up is also supported in 4P Blitz.<br>
+            <strong>Queue:</strong> choose which pending number to play first.
+          </div>
+        </details>
+      </aside>
+    </main>
+  </div>
+
+  <div id="leaderboardPopup" class="leaderboard-popup" aria-label="Ludo Leaderboard popup">
+    <div class="leaderboard-popup-card">
+      <div class="leaderboard-popup-header">
+        <span>🏆 Mix Ludo Leaderboard</span>
+        <button id="leaderboardCloseBtn" type="button" title="Close">×</button>
+      </div>
+
+      <iframe
+        id="leaderboardFrame"
+        src="/ludo/leaderboard.html"
+        title="Mix Ludo Leaderboard">
+      </iframe>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var leaderboardBtn = document.getElementById('leaderboardBtn');
+    var leaderboardPopup = document.getElementById('leaderboardPopup');
+    var leaderboardCloseBtn = document.getElementById('leaderboardCloseBtn');
+    var leaderboardFrame = document.getElementById('leaderboardFrame');
+
+    if (!leaderboardBtn || !leaderboardPopup || !leaderboardCloseBtn) {
+      return;
+    }
+
+    leaderboardBtn.addEventListener('click', function () {
+      leaderboardPopup.classList.add('open');
+
+      if (leaderboardFrame) {
+        leaderboardFrame.src = '/ludo/leaderboard.html?v=' + Date.now();
+      }
+    });
+
+    leaderboardCloseBtn.addEventListener('click', function () {
+      leaderboardPopup.classList.remove('open');
+    });
+
+    leaderboardPopup.addEventListener('click', function (e) {
+      if (e.target === leaderboardPopup) {
+        leaderboardPopup.classList.remove('open');
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        leaderboardPopup.classList.remove('open');
+      }
+    });
+  })();
+  </script>
+
+  <script src="/mix-js/persistent-device-id.js?v=1"></script>
+  <script src="/ludo/ludo.js?v=5.3.8-stable-live"></script>
+</body>
+</html>

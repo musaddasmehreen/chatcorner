@@ -6111,7 +6111,7 @@ function enterLudoRoom() {
     const currentSrc = iframe.getAttribute('src');
     if (!currentSrc || currentSrc === '') {
       const userNick = currentUser?.username || 'Guest';
-      iframe.src = 'https://www.mixchatroom.com/ludo/index.html?nick=' + encodeURIComponent(userNick);
+      iframe.src = 'ludo/index.html?nick=' + encodeURIComponent(userNick);
     }
   }
 
