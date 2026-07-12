@@ -6027,6 +6027,7 @@ let _popcornChannel = null;
 let _popcornActiveStream = null; // Stores screen share stream
 let _isPopcornVoiceJoinInProgress = false;
 let _popcornPresenterId = null;
+let _popcornKnockInterval = null;
 
 // Dedicated players and synchronization states
 let _videoPlayer = null;
@@ -6107,7 +6108,8 @@ async function enterPopcornRoom(dbRoom = null) {
   if (typeof leaveVoice === 'function') leaveVoice();
 
   document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
-  const popcornLi = document.querySelector('#room-list li[data-room-id="popcorn-virtual"]');
+  const activeRoomId = dbRoom ? dbRoom.id : 'popcorn-virtual';
+  const popcornLi = document.querySelector(`#room-list li[data-room-id="${activeRoomId}"]`);
   if (popcornLi) popcornLi.classList.add('active');
 
   if (dbRoom) {
@@ -6145,8 +6147,9 @@ async function enterPopcornRoom(dbRoom = null) {
     }
   }
 
+  const roomChannelId = dbRoom ? dbRoom.id : 'popcorn-virtual';
   if (_popcornChannel) sbClient.removeChannel(_popcornChannel);
-  _popcornChannel = sbClient.channel('popcorn-room', {
+  _popcornChannel = sbClient.channel('popcorn-room:' + roomChannelId, {
     config: { broadcast: { self: true } }
   });
 
@@ -6165,6 +6168,11 @@ async function enterPopcornRoom(dbRoom = null) {
       
       const waitingOverlay = document.getElementById('popcorn-knock-waiting');
       if (waitingOverlay) waitingOverlay.classList.add('hidden');
+
+      if (_popcornKnockInterval) {
+        clearInterval(_popcornKnockInterval);
+        _popcornKnockInterval = null;
+      }
 
       if (allowed) {
         showChatToast('🎟️ You were admitted to the Popcorn Room!', 'success');
@@ -6235,14 +6243,22 @@ async function enterPopcornRoom(dbRoom = null) {
         initPopcornRoomState();
       } else {
         if (knockWaiting) knockWaiting.classList.remove('hidden');
-        _popcornChannel.send({
-          type: 'broadcast',
-          event: 'popcorn_knock',
-          payload: {
-            knockerId: currentUser?.id,
-            knockerName: currentProfile?.display_name || currentProfile?.username || 'Guest'
-          }
-        });
+        
+        const sendKnock = () => {
+          if (!_popcornChannel) return;
+          _popcornChannel.send({
+            type: 'broadcast',
+            event: 'popcorn_knock',
+            payload: {
+              knockerId: currentUser?.id,
+              knockerName: currentProfile?.display_name || currentProfile?.username || 'Guest'
+            }
+          });
+        };
+
+        sendKnock();
+        if (_popcornKnockInterval) clearInterval(_popcornKnockInterval);
+        _popcornKnockInterval = setInterval(sendKnock, 10000);
       }
     }
   });
@@ -6524,6 +6540,11 @@ window.syncPopcornUrl = function() {
 
 window.exitPopcornRoom = function() {
   if (typeof leaveVoice === 'function') leaveVoice();
+
+  if (_popcornKnockInterval) {
+    clearInterval(_popcornKnockInterval);
+    _popcornKnockInterval = null;
+  }
 
   if (_popcornActiveStream) {
     _popcornActiveStream.getTracks().forEach(track => track.stop());

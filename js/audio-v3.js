@@ -209,7 +209,11 @@ async function leaveVoice() {
     participantLevels = {};
   }
 
-  const isPopcorn = currentRoom && currentRoom.id === 'popcorn-virtual';
+  const isPopcorn = currentRoom && (
+    currentRoom.id === 'popcorn-virtual' ||
+    currentRoom.room_type === 'cowatch' ||
+    (currentRoom.name && currentRoom.name.toLowerCase().includes('popcorn'))
+  );
   const videoGrid = document.getElementById(isPopcorn ? 'popcorn-video-panel' : 'video-grid');
   if (videoGrid) {
     videoGrid.innerHTML = '';
@@ -422,7 +426,11 @@ function createPeerConnection(peerId, username) {
 
 function ensurePeerTile(peerId, username) {
   let tile = document.getElementById('video-tile-' + peerId);
-  const isPopcorn = currentRoom && currentRoom.id === 'popcorn-virtual';
+  const isPopcorn = currentRoom && (
+    currentRoom.id === 'popcorn-virtual' ||
+    currentRoom.room_type === 'cowatch' ||
+    (currentRoom.name && currentRoom.name.toLowerCase().includes('popcorn'))
+  );
   const grid = document.getElementById(isPopcorn ? 'popcorn-video-panel' : 'video-grid');
   if (!tile && grid) {
     tile = document.createElement('div');
