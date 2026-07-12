@@ -6511,11 +6511,14 @@ window.syncPopcornUrl = function() {
   const input = document.getElementById('popcorn-url-input');
   if (!input || !input.value) return;
 
+  const url = input.value;
+  loadPopcornBrowserUrl(url);
+
   if (_popcornChannel) {
     _popcornChannel.send({
       type: 'broadcast',
       event: 'popcorn_url_change',
-      payload: { url: input.value }
+      payload: { url }
     });
   }
 };

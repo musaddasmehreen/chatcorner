@@ -240,5 +240,49 @@
     </div>
   </div>
 
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Intercept clicks on speed dial cards or any links
+      document.addEventListener('click', function(e) {
+        const a = e.target.closest('a');
+        if (a && a.href) {
+          const href = a.href.trim();
+          if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          
+          if (window.parent && typeof window.parent.loadPopcornBrowserUrl === 'function') {
+            window.parent.loadPopcornBrowserUrl(a.href);
+          } else {
+            window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(a.href);
+          }
+        }
+      }, true);
+
+      // Intercept form submissions
+      document.addEventListener('submit', function(e) {
+        const form = e.target;
+        const method = (form.method || 'get').toLowerCase();
+        if (method === 'get' && form.action) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const url = new URL(form.action);
+          const formData = new FormData(form);
+          for (const pair of formData.entries()) {
+            url.searchParams.set(pair[0], pair[1]);
+          }
+          
+          if (window.parent && typeof window.parent.loadPopcornBrowserUrl === 'function') {
+            window.parent.loadPopcornBrowserUrl(url.toString());
+          } else {
+            window.location.href = window.location.origin + '/proxy?url=' + encodeURIComponent(url.toString());
+          }
+        }
+      }, true);
+    });
+  </script>
 </body>
 </html>
