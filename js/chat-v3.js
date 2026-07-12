@@ -1300,74 +1300,9 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (el) el.textContent = '# ' + currentRoom.name;
 
   // Initialize Co-Watch layout and synchronization if applicable
-  if (room.room_type === 'cowatch') {
-    const isRoomAuthority = room.owner_id === currentUser?.id ||
-      currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
-
-    if (!isRoomAuthority) {
-      // Non-privileged user must knock first
-      enterCoWatchRoomLayout();
-      subscribeToCoWatchChannel(room.id);
-
-      // Show waiting overlay
-      const existingWait = document.getElementById('cowatch-knock-waiting');
-      if (existingWait) existingWait.remove();
-      const waitOverlay = document.createElement('div');
-      waitOverlay.id = 'cowatch-knock-waiting';
-      waitOverlay.style.cssText = `
-        position:absolute; inset:0; z-index:500;
-        background:rgba(10,10,20,0.92); display:flex; flex-direction:column;
-        align-items:center; justify-content:center; gap:16px;
-        backdrop-filter:blur(8px); border-radius:inherit;
-      `;
-      waitOverlay.innerHTML = `
-        <div style="font-size:52px;animation:pulse 1.5s infinite">🍿</div>
-        <div style="color:#e2e8f0;font-size:18px;font-weight:700">Waiting for host approval…</div>
-        <div style="color:#a78bfa;font-size:13px">The host has been notified of your entry request</div>
-        <div style="width:40px;height:40px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
-        <style>@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}</style>
-        <button onclick="document.getElementById('cowatch-knock-waiting')?.remove();" style="
-          margin-top:8px;padding:8px 20px;border:1px solid rgba(239,68,68,0.5);
-          background:rgba(239,68,68,0.15);color:#f87171;border-radius:8px;cursor:pointer;font-size:13px
-        ">Cancel</button>
-      `;
-      const cowatchContainer = document.getElementById('cowatch-container');
-      if (cowatchContainer) cowatchContainer.appendChild(waitOverlay);
-
-      // Broadcast knock after channel is subscribed (slight delay for channel to be ready)
-      setTimeout(() => {
-        if (_cowatchChannel) {
-          _cowatchChannel.send({
-            type: 'broadcast',
-            event: 'cowatch_knock',
-            payload: {
-              knockerId: currentUser?.id,
-              knockerName: currentProfile?.display_name || currentProfile?.username || 'Someone',
-              roomId: room.id
-            }
-          });
-        }
-      }, 800);
-
-      // Auto-deny after 30s if no response
-      const knockTimeout = setTimeout(() => {
-        const still = document.getElementById('cowatch-knock-waiting');
-        if (still) {
-          still.remove();
-          showChatToast('⏰ No response from host. Entry timed out.', 'error');
-          const firstRoom = document.querySelector('#room-list li[data-room-id]:not([data-room-id=""])');
-          if (firstRoom) firstRoom.click();
-        }
-      }, 30000);
-      window._knockTimeout = knockTimeout;
-
-    } else {
-      // Owner/admin enters directly
-      enterCoWatchRoomLayout();
-      subscribeToCoWatchChannel(room.id);
-      initCoWatchRoomState(room);
-      bindCoWatchVideoEvents();
-    }
+  if (room.room_type === 'cowatch' || (room.name && room.name.toLowerCase().includes('popcorn'))) {
+    enterPopcornRoom(room);
+    return;
   }
 
   const voiceControls = document.getElementById('voice-controls');
@@ -6084,7 +6019,7 @@ let _popcornChannel = null;
 let _popcornActiveStream = null; // Stores screen share stream
 let _isPopcornVoiceJoinInProgress = false;
 
-async function enterPopcornRoom() {
+async function enterPopcornRoom(dbRoom = null) {
   // Exit voice and cleanup message/presence realtime channels from old room
   if (messageChannel) sbClient.removeChannel(messageChannel);
   if (presenceChannel) sbClient.removeChannel(presenceChannel);
@@ -6095,8 +6030,12 @@ async function enterPopcornRoom() {
   const popcornLi = document.querySelector('#room-list li[data-room-id="popcorn-virtual"]');
   if (popcornLi) popcornLi.classList.add('active');
 
-  // Set virtual room state
-  currentRoom = { id: 'popcorn-virtual', name: 'Popcorn', is_audio_enabled: true, _virtual: true };
+  // Set virtual/db room state
+  if (dbRoom) {
+    currentRoom = { ...dbRoom, is_audio_enabled: true };
+  } else {
+    currentRoom = { id: 'popcorn-virtual', name: 'Popcorn', is_audio_enabled: true, _virtual: true };
+  }
 
   // Update topbar title
   const titleEl = document.getElementById('current-room-name');
