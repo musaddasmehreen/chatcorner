@@ -209,10 +209,11 @@ async function leaveVoice() {
     participantLevels = {};
   }
 
-  const videoGrid = document.getElementById('video-grid');
+  const isPopcorn = currentRoom && currentRoom.id === 'popcorn-virtual';
+  const videoGrid = document.getElementById(isPopcorn ? 'popcorn-video-panel' : 'video-grid');
   if (videoGrid) {
     videoGrid.innerHTML = '';
-    videoGrid.classList.add('hidden');
+    if (!isPopcorn) videoGrid.classList.add('hidden');
   }
   const localVideo = document.getElementById('local-video');
   if (localVideo) {
@@ -411,10 +412,11 @@ function createPeerConnection(peerId, username) {
 
 function ensurePeerTile(peerId, username) {
   let tile = document.getElementById('video-tile-' + peerId);
-  const grid = document.getElementById('video-grid');
+  const isPopcorn = currentRoom && currentRoom.id === 'popcorn-virtual';
+  const grid = document.getElementById(isPopcorn ? 'popcorn-video-panel' : 'video-grid');
   if (!tile && grid) {
     tile = document.createElement('div');
-    tile.className = 'video-tile';
+    tile.className = isPopcorn ? 'popcorn-video-tile' : 'video-tile';
     tile.id = 'video-tile-' + peerId;
 
     const videoEl = document.createElement('video');
@@ -423,7 +425,7 @@ function ensurePeerTile(peerId, username) {
     videoEl.playsInline = true;
 
     const label = document.createElement('span');
-    label.className = 'video-label';
+    label.className = isPopcorn ? 'popcorn-video-label' : 'video-label';
     label.textContent = username || 'User';
 
     tile.appendChild(videoEl);
@@ -433,7 +435,7 @@ function ensurePeerTile(peerId, username) {
 
   const cameraOn = typeof cameraStates !== 'undefined' ? !!cameraStates[peerId] : true;
   tile?.classList.toggle('hidden', !cameraOn);
-  grid?.classList.remove('hidden');
+  if (!isPopcorn) grid?.classList.remove('hidden');
   return tile?.querySelector('video');
 }
 

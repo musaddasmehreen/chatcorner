@@ -1185,6 +1185,14 @@ async function loadRooms(preloadedRooms = null) {
       ludoLi.classList.add('ludo-room-item');
       ludoLi.onclick = () => enterLudoRoom();
       textList.appendChild(ludoLi);
+
+      const popcornLi = document.createElement('li');
+      popcornLi.textContent = '🍿 Popcorn Room';
+      popcornLi.title = 'Popcorn – Shared Browser & Group Watch';
+      popcornLi.dataset.roomId = 'popcorn-virtual';
+      popcornLi.classList.add('popcorn-room-item');
+      popcornLi.onclick = () => enterPopcornRoom();
+      textList.appendChild(popcornLi);
     }
 
         renderRoomsTopbar(rooms);
@@ -1224,6 +1232,8 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       enterIPTVRoom();
     } else if (room.id === 'ludo-virtual') {
       enterLudoRoom();
+    } else if (room.id === 'popcorn-virtual') {
+      enterPopcornRoom();
     }
     return;
   }
@@ -1247,9 +1257,8 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     return;
   }
 
-  // Exit IPTV and Co-Watch modes if switching to a normal room
-  exitIPTVRoom();
-  exitCoWatchRoom();
+  // Clean up virtual rooms layout and states
+  cleanupVirtualRooms();
 
   // Optimization: skip redundant db lookup if skipModRefresh is true
   if (!(await enforceCurrentUserModerationState({ refresh: !skipModRefresh }))) return;
@@ -5518,13 +5527,8 @@ function playIPTVChannel(ch, liEl) {
 }
 
 function enterIPTVRoom() {
-  if (_iptvActive) return;
+  cleanupVirtualRooms();
   _iptvActive = true;
-
-  // Exit voice and cleanup message/presence realtime channels from old room
-  if (messageChannel) sbClient.removeChannel(messageChannel);
-  if (presenceChannel) sbClient.removeChannel(presenceChannel);
-  if (typeof leaveVoice === 'function') leaveVoice();
 
   // Mark sidebar item
   document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
@@ -5740,7 +5744,7 @@ async function submitRoomPassword() {
         _pendingRoomEntryCallback();
       }
     } else {
-      if (errorDiv) errorDiv.classList.remove('hidden');
+      if (errorDiv) errorDiv.classList.add('hidden');
     }
   } catch (err) {
     console.error(err);
@@ -5856,124 +5860,6 @@ window.handleMenuLockToggle = handleMenuLockToggle;
 window.showRoomContextMenu = showRoomContextMenu;
 
 
-function renderCoWatchParticipants() {
-  const row = document.getElementById('cowatch-participants-row');
-  if (!row) return;
-  row.innerHTML = '';
-  
-  const visibleUsers = getSortedOnlineUsers().filter(u => {
-    return (typeof shouldShowUserInRoster !== 'function' || shouldShowUserInRoster(u));
-  });
-  
-  // Update user count badge
-  const badge = document.getElementById('cowatch-user-count');
-  if (badge) {
-    badge.textContent = `${visibleUsers.length} user${visibleUsers.length === 1 ? '' : 's'}`;
-  }
-  
-  visibleUsers.forEach(u => {
-    const avatar = document.createElement('div');
-    avatar.className = 'cowatch-participant-avatar';
-    avatar.style.background = u.color || '#7c3aed';
-    avatar.textContent = (u.username || 'U')[0].toUpperCase();
-    avatar.title = u.username || 'User';
-    row.appendChild(avatar);
-  });
-}
-
-function shouldShowUserInRoster(u) {
-  if (!u.isStealth) return true; // Everyone can see non-stealth users
-  if (u.userId === currentUser?.id) return true; // Always see yourself
-  
-  const isViewerRoomOwner = currentRoom && currentRoom.owner_id === currentUser?.id;
-  
-  // If the stealth user is the room owner, only the owner can see themselves
-  if (currentRoom && u.userId === currentRoom.owner_id) {
-    return false; // Admins and mods cannot see owner in stealth
-  }
-  
-  // If the stealth user is an admin/mod, the room owner can see them
-  if (isViewerRoomOwner) return true;
-  
-  return false;
-}
-
-function toggleStealthMode(active) {
-  _stealthModeActive = active;
-  window._stealthModeActive = active;
-  presenceBaseData.isStealth = active;
-  
-  // Update checkbox state in case triggered programmatically
-  const checkbox = document.getElementById('stealth-mode-checkbox');
-  if (checkbox) checkbox.checked = active;
-  
-  updateCurrentUserBadge();
-  
-  debouncedPresenceTrack();
-}
-
-function toggleCoWatchLights() {
-  const shell = document.querySelector('.page-shell');
-  if (!shell) return;
-  const isOff = shell.classList.toggle('lights-off');
-  
-  const btn = document.getElementById('btn-cowatch-lights');
-  if (btn) {
-    btn.textContent = isOff ? '💡 Lights On' : '💡 Lights Off';
-    btn.classList.toggle('btn-primary', isOff);
-  }
-  
-  const opacityContainer = document.getElementById('cowatch-chat-opacity-container');
-  if (opacityContainer) {
-    if (isOff) {
-      opacityContainer.classList.remove('hidden');
-      opacityContainer.style.display = 'inline-flex';
-    } else {
-      opacityContainer.classList.add('hidden');
-      opacityContainer.style.display = 'none';
-      
-      // Reset chat opacity to normal
-      const chatWrapper = document.querySelector('.cowatch-chat-wrapper');
-      if (chatWrapper) chatWrapper.style.opacity = '1';
-    }
-  }
-}
-
-function setCoWatchChatOpacity(val) {
-  const chatWrapper = document.querySelector('.cowatch-chat-wrapper');
-  if (chatWrapper) {
-    chatWrapper.style.opacity = (val / 100).toString();
-  }
-}
-
-function setCoWatchControlsOpacity(val) {
-  const topBar = document.querySelector('.cowatch-top-bar');
-  const urlBar = document.querySelector('.cowatch-url-bar');
-  const syncBar = document.querySelector('.cowatch-sync-controls');
-  const opacity = val / 100;
-  
-  if (topBar) topBar.style.opacity = opacity.toString();
-  if (urlBar) urlBar.style.opacity = opacity.toString();
-  if (syncBar) syncBar.style.opacity = opacity.toString();
-}
-
-function setCoWatchLayout(mode) {
-  const shell = document.querySelector('.page-shell');
-  if (!shell) return;
-  
-  shell.classList.remove('cowatch-layout-stretched', 'cowatch-layout-normal', 'cowatch-layout-squeezed');
-  shell.classList.add(`cowatch-layout-${mode}`);
-}
-
-function changeCoWatchHlsQuality(levelIdx) {
-  if (!_cowatchHls) return;
-  if (levelIdx === 'auto') {
-    _cowatchHls.currentLevel = -1;
-  } else {
-    _cowatchHls.currentLevel = parseInt(levelIdx, 10);
-  }
-}
-
 async function checkGlobalChatMute() {
   try {
     const { data, error } = await sbClient
@@ -6085,12 +5971,60 @@ async function handleMenuRestrictUser() {
 }
 
 
-/* ── Ludo Room Functions ── */
-function enterLudoRoom() {
+/* ── Virtual Rooms Unified Cleanup ── */
+function cleanupVirtualRooms() {
   // Exit voice and cleanup message/presence realtime channels from old room
   if (messageChannel) sbClient.removeChannel(messageChannel);
   if (presenceChannel) sbClient.removeChannel(presenceChannel);
   if (typeof leaveVoice === 'function') leaveVoice();
+
+  // Reset virtual flags
+  if (typeof exitIPTVRoom === 'function') exitIPTVRoom();
+
+  // Cleanup layout classes on shell
+  const shell = document.querySelector('.page-shell');
+  if (shell) {
+    shell.classList.remove('ludo-active');
+    shell.classList.remove('iptv-active');
+    shell.classList.remove('popcorn-active');
+  }
+
+  // Hide virtual containers
+  const ludoContainer = document.getElementById('ludo-container');
+  if (ludoContainer) ludoContainer.classList.add('hidden');
+
+  const iptvContainer = document.getElementById('iptv-container');
+  if (iptvContainer) iptvContainer.classList.add('hidden');
+
+  const popcornContainer = document.getElementById('popcorn-container');
+  if (popcornContainer) popcornContainer.classList.add('hidden');
+
+  const ludoReturnBtn = document.getElementById('btn-ludo-return');
+  if (ludoReturnBtn) ludoReturnBtn.classList.add('hidden');
+
+  const iptvReturnBtn = document.getElementById('btn-iptv-return');
+  if (iptvReturnBtn) iptvReturnBtn.classList.add('hidden');
+
+  // Disconnect screen sharing if active
+  if (_popcornActiveStream) {
+    _popcornActiveStream.getTracks().forEach(track => track.stop());
+    _popcornActiveStream = null;
+  }
+
+  // Clean up popcorn supabase channel
+  if (_popcornChannel) {
+    sbClient.removeChannel(_popcornChannel);
+    _popcornChannel = null;
+  }
+
+  // Restore mobile tabs
+  const mobileTabs = document.getElementById('mobile-tabs');
+  if (mobileTabs) mobileTabs.style.display = '';
+}
+
+/* ── Ludo Room Functions ── */
+function enterLudoRoom() {
+  cleanupVirtualRooms();
 
   // Mark sidebar item active
   document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
@@ -6122,12 +6056,7 @@ function enterLudoRoom() {
   const shell = document.querySelector('.page-shell');
   if (shell) {
     shell.classList.add('ludo-active');
-    shell.classList.remove('iptv-active');
   }
-
-  // Hide IPTV container if visible
-  const iptvContainer = document.getElementById('iptv-container');
-  if (iptvContainer) iptvContainer.classList.add('hidden');
 
   // Hide mobile tabs for clean full-screen
   const mobileTabs = document.getElementById('mobile-tabs');
@@ -6135,26 +6064,11 @@ function enterLudoRoom() {
 
   // Show/hide return buttons
   const ludoReturnBtn = document.getElementById('btn-ludo-return');
-  const iptvReturnBtn = document.getElementById('btn-iptv-return');
   if (ludoReturnBtn) ludoReturnBtn.classList.remove('hidden');
-  if (iptvReturnBtn) iptvReturnBtn.classList.add('hidden');
 }
 
 function exitLudoRoom() {
-  const shell = document.querySelector('.page-shell');
-  if (shell) shell.classList.remove('ludo-active');
-
-  const ludoContainer = document.getElementById('ludo-container');
-  if (ludoContainer) ludoContainer.classList.add('hidden');
-
-  const ludoReturnBtn = document.getElementById('btn-ludo-return');
-  if (ludoReturnBtn) ludoReturnBtn.classList.add('hidden');
-
-  // Restore mobile tabs
-  const mobileTabs = document.getElementById('mobile-tabs');
-  if (mobileTabs) mobileTabs.style.display = '';
-
-  // Navigate back to first room
+  cleanupVirtualRooms();
   if (cachedRooms && cachedRooms.length > 0) {
     enterRoom(cachedRooms[0]);
   }
@@ -6164,4 +6078,350 @@ window.enterLudoRoom = enterLudoRoom;
 window.exitLudoRoom = exitLudoRoom;
 
 window.toggleGlobalChatMute = toggleGlobalChatMute;
+
+/* ── Popcorn Room Functions (Whereby-style Browser + Video Grid) ── */
+let _popcornChannel = null;
+let _popcornActiveStream = null; // Stores screen share stream
+let _isPopcornVoiceJoinInProgress = false;
+
+async function enterPopcornRoom() {
+  // Exit voice and cleanup message/presence realtime channels from old room
+  if (messageChannel) sbClient.removeChannel(messageChannel);
+  if (presenceChannel) sbClient.removeChannel(presenceChannel);
+  if (typeof leaveVoice === 'function') leaveVoice();
+
+  // Mark sidebar item active
+  document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
+  const popcornLi = document.querySelector('#room-list li[data-room-id="popcorn-virtual"]');
+  if (popcornLi) popcornLi.classList.add('active');
+
+  // Set virtual room state
+  currentRoom = { id: 'popcorn-virtual', name: 'Popcorn', is_audio_enabled: true, _virtual: true };
+
+  // Update topbar title
+  const titleEl = document.getElementById('current-room-name');
+  if (titleEl) titleEl.textContent = '🍿 Popcorn Room';
+  document.title = '🍿 Popcorn – ChatCorner';
+
+  // Show popcorn container, hide chat/IPTV/Ludo elements
+  const popcornContainer = document.getElementById('popcorn-container');
+  if (popcornContainer) popcornContainer.classList.remove('hidden');
+
+  const shell = document.querySelector('.page-shell');
+  if (shell) {
+    shell.classList.add('popcorn-active');
+    shell.classList.remove('iptv-active');
+    shell.classList.remove('ludo-active');
+  }
+
+  // Hide mobile tabs for clean full-screen
+  const mobileTabs = document.getElementById('mobile-tabs');
+  if (mobileTabs) mobileTabs.style.display = 'none';
+
+  // Check roles (Host vs Guest)
+  const isHost = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  const urlBar = document.getElementById('popcorn-url-bar');
+  const knockWaiting = document.getElementById('popcorn-knock-waiting');
+
+  // Configure UI visibility based on authority
+  if (urlBar) {
+    if (isHost) {
+      urlBar.classList.remove('hidden');
+    } else {
+      urlBar.classList.add('hidden');
+    }
+  }
+
+  // Setup broadcast channel for room control and knocking
+  if (_popcornChannel) sbClient.removeChannel(_popcornChannel);
+  _popcornChannel = sbClient.channel('popcorn-room', {
+    config: { broadcast: { self: true } }
+  });
+
+  _popcornChannel
+    .on('broadcast', { event: 'popcorn_knock' }, ({ payload }) => {
+      const { knockerId, knockerName } = payload;
+      if (knockerId === currentUser?.id) return;
+      // Only admins, mods, or owners see the knock approval popup
+      const isAuthority = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+      if (isAuthority) {
+        showPopcornKnockPopup(knockerId, knockerName);
+      }
+    })
+    .on('broadcast', { event: 'popcorn_knock_response' }, ({ payload }) => {
+      const { targetId, allowed } = payload;
+      if (targetId !== currentUser?.id) return;
+      
+      const waitingOverlay = document.getElementById('popcorn-knock-waiting');
+      if (waitingOverlay) waitingOverlay.classList.add('hidden');
+
+      if (allowed) {
+        showChatToast('🎟️ You were admitted to the Popcorn Room!', 'success');
+        initPopcornRoomState();
+      } else {
+        showChatToast('❌ Your request to enter the Popcorn Room was denied.', 'error');
+        exitPopcornRoom();
+      }
+    })
+    .on('broadcast', { event: 'popcorn_url_change' }, ({ payload }) => {
+      const { url } = payload;
+      loadPopcornBrowserUrl(url);
+    });
+
+  _popcornChannel.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      if (isHost) {
+        if (knockWaiting) knockWaiting.classList.add('hidden');
+        initPopcornRoomState();
+      } else {
+        // Non-host sends a knock request
+        if (knockWaiting) knockWaiting.classList.remove('hidden');
+        _popcornChannel.send({
+          type: 'broadcast',
+          event: 'popcorn_knock',
+          payload: {
+            knockerId: currentUser?.id,
+            knockerName: currentProfile?.display_name || currentProfile?.username || 'Guest'
+          }
+        });
+      }
+    }
+  });
+}
+
+function showPopcornKnockPopup(knockerId, knockerName) {
+  if (document.getElementById('popcorn-knock-' + knockerId)) return;
+
+  const popup = document.createElement('div');
+  popup.id = 'popcorn-knock-' + knockerId;
+  popup.className = 'knock-approval-toast';
+  popup.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <div style="font-size:32px">🍿</div>
+      <div>
+        <div style="font-weight:700;color:#f3f4f6;font-size:14px">Knock Knock!</div>
+        <div style="color:#a78bfa;font-size:12px"><b>${knockerName}</b> requests entry to Popcorn</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="respondPopcornKnock('${knockerId}', true)" style="
+        flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;
+        background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-weight:700;font-size:12px
+      ">Allow</button>
+      <button onclick="respondPopcornKnock('${knockerId}', false)" style="
+        flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;
+        background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-weight:700;font-size:12px
+      ">Deny</button>
+    </div>
+  `;
+  document.body.appendChild(popup);
+}
+
+window.respondPopcornKnock = function(knockerId, allowed) {
+  const popup = document.getElementById('popcorn-knock-' + knockerId);
+  if (popup) popup.remove();
+
+  if (_popcornChannel) {
+    _popcornChannel.send({
+      type: 'broadcast',
+      event: 'popcorn_knock_response',
+      payload: { targetId: knockerId, allowed }
+    });
+  }
+};
+
+function initPopcornRoomState() {
+  // Load default home page
+  loadPopcornBrowserUrl('browser_home.html');
+
+  // Trigger voice/video join automatically
+  if (typeof joinVoice === 'function') {
+    _isPopcornVoiceJoinInProgress = true;
+    joinVoice().finally(() => {
+      _isPopcornVoiceJoinInProgress = false;
+      // Configure local camera/mic initial states
+      const micBtn = document.getElementById('btn-popcorn-mic');
+      const camBtn = document.getElementById('btn-popcorn-cam');
+      if (micBtn) micBtn.classList.toggle('active', !isMuted);
+      if (camBtn) camBtn.classList.toggle('active', isCameraOn);
+    });
+  }
+
+  // Bind iframe load listener
+  const iframe = document.getElementById('popcorn-iframe');
+  if (iframe) {
+    iframe.onload = () => {
+      try {
+        const currentUrl = iframe.contentWindow.location.href;
+        const display = document.getElementById('popcorn-url-display');
+        if (display) {
+          if (currentUrl.includes('browser_home.html')) {
+            display.textContent = 'browser://home';
+          } else {
+            const urlObj = new URL(currentUrl);
+            const target = urlObj.searchParams.get('url');
+            display.textContent = target || currentUrl;
+          }
+        }
+      } catch (_) {
+        const display = document.getElementById('popcorn-url-display');
+        if (display) display.textContent = iframe.src;
+      }
+    };
+  }
+}
+
+function loadPopcornBrowserUrl(url) {
+  const iframe = document.getElementById('popcorn-iframe');
+  if (!iframe) return;
+
+  if (url === 'browser_home.html' || url === '' || !url) {
+    iframe.src = 'browser_home.html';
+  } else {
+    // Resolve relative URL if needed and run through local server proxy
+    let cleanUrl = url.trim();
+    if (!/^https?:\/\//i.test(cleanUrl)) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+    iframe.src = window.location.origin + '/proxy?url=' + encodeURIComponent(cleanUrl);
+  }
+}
+
+window.syncPopcornUrl = function() {
+  const input = document.getElementById('popcorn-url-input');
+  if (!input || !input.value) return;
+
+  if (_popcornChannel) {
+    _popcornChannel.send({
+      type: 'broadcast',
+      event: 'popcorn_url_change',
+      payload: { url: input.value }
+    });
+  }
+};
+
+window.exitPopcornRoom = function() {
+  // Disconnect from voice/video signaling channels
+  if (typeof leaveVoice === 'function') leaveVoice();
+
+  // Disconnect screen sharing if active
+  if (_popcornActiveStream) {
+    _popcornActiveStream.getTracks().forEach(track => track.stop());
+    _popcornActiveStream = null;
+  }
+
+  // Clean up supabase broadcast channel
+  if (_popcornChannel) {
+    sbClient.removeChannel(_popcornChannel);
+    _popcornChannel = null;
+  }
+
+  // Restore layout classes and container visibility
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.remove('popcorn-active');
+
+  const popcornContainer = document.getElementById('popcorn-container');
+  if (popcornContainer) popcornContainer.classList.add('hidden');
+
+  // Restore mobile tabs
+  const mobileTabs = document.getElementById('mobile-tabs');
+  if (mobileTabs) mobileTabs.style.display = '';
+
+  // Return to General/Lobby room
+  if (cachedRooms && cachedRooms.length > 0) {
+    enterRoom(cachedRooms[0]);
+  }
+};
+
+// Toolbar browser actions
+window.popcornBrowserBack = function() {
+  try { document.getElementById('popcorn-iframe').contentWindow.history.back(); } catch(_) {}
+};
+window.popcornBrowserForward = function() {
+  try { document.getElementById('popcorn-iframe').contentWindow.history.forward(); } catch(_) {}
+};
+window.popcornBrowserReload = function() {
+  try { document.getElementById('popcorn-iframe').contentWindow.location.reload(); } catch(_) {}
+};
+window.popcornBrowserHome = function() {
+  loadPopcornBrowserUrl('browser_home.html');
+};
+
+// Control Bar toggles
+window.togglePopcornMic = function() {
+  if (typeof toggleMute === 'function') {
+    toggleMute();
+    const btn = document.getElementById('btn-popcorn-mic');
+    if (btn) {
+      btn.classList.toggle('active', !isMuted);
+      btn.textContent = isMuted ? '🔇 Mic Off' : '🎤 Mic On';
+    }
+  }
+};
+
+window.togglePopcornCam = function() {
+  if (typeof toggleCamera === 'function') {
+    toggleCamera().then(() => {
+      const btn = document.getElementById('btn-popcorn-cam');
+      if (btn) {
+        btn.classList.toggle('active', isCameraOn);
+        btn.textContent = isCameraOn ? '📹 Camera On' : '📷 Camera Off';
+      }
+    });
+  }
+};
+
+window.togglePopcornScreenShare = async function() {
+  const btn = document.getElementById('btn-popcorn-screen');
+  if (_popcornActiveStream) {
+    // Stop screen share, restore camera video track
+    _popcornActiveStream.getTracks().forEach(track => track.stop());
+    _popcornActiveStream = null;
+    if (btn) {
+      btn.classList.remove('active');
+      btn.textContent = '🖥️ Share Screen';
+    }
+    // Re-verify local preview
+    if (typeof updateLocalPreview === 'function') updateLocalPreview();
+    return;
+  }
+
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    _popcornActiveStream = screenStream;
+    if (btn) {
+      btn.classList.add('active');
+      btn.textContent = '❌ Stop Sharing';
+    }
+
+    const track = screenStream.getVideoTracks()[0];
+    // Replace track on all WebRTC peer connections
+    if (typeof peers !== 'undefined') {
+      Object.values(peers).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) sender.replaceTrack(track);
+      });
+    }
+
+    // Handle screen share stop from browser popup bar
+    track.onended = () => {
+      togglePopcornScreenShare();
+    };
+  } catch (err) {
+    console.error('Screen sharing error', err);
+    showChatToast('⚠️ Could not start screen sharing.', 'error');
+  }
+};
+
+window.togglePopcornVideoGrid = function() {
+  const panel = document.getElementById('popcorn-video-panel');
+  const btn = document.getElementById('btn-popcorn-grid');
+  if (panel && btn) {
+    panel.classList.toggle('hidden');
+    btn.classList.toggle('active');
+  }
+};
+
+window.enterPopcornRoom = enterPopcornRoom;
+window.exitPopcornRoom = exitPopcornRoom;
 window.handleMenuRestrictUser = handleMenuRestrictUser;
