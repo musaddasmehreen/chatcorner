@@ -6029,7 +6029,6 @@ let _isPopcornVoiceJoinInProgress = false;
 let _popcornPresenterId = null;
 
 // Dedicated players and synchronization states
-let _ytPlayer = null;
 let _videoPlayer = null;
 let _popcornHls = null;
 let _isPopcornSyncIncoming = false;
