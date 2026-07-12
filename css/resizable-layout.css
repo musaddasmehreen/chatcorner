@@ -1579,9 +1579,19 @@
   display: none !important;
 }
 
+/* Hide search bar and clear buttons in Ludo mode for clean topbar */
+.page-shell.ludo-active .topbar-search,
+.page-shell.ludo-active .topbar-clears-stack,
+.page-shell.ludo-active .mobile-tabs {
+  display: none !important;
+}
+
 @media (max-width: 768px) {
   .page-shell.ludo-active .sidebar-left,
   .page-shell.ludo-active .sidebar-right {
+    display: none !important;
+  }
+  .page-shell.ludo-active .topbar-mobile-toggle {
     display: none !important;
   }
 }
