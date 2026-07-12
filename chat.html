@@ -348,6 +348,12 @@
               <div class="popcorn-iframe-wrapper">
                 <iframe id="popcorn-iframe" class="popcorn-browser-iframe" src="" allow="autoplay; encrypted-media; picture-in-picture; camera; microphone; display-capture;" allowfullscreen></iframe>
                 <video id="popcorn-main-stage-video" autoplay playsinline style="width:100%; height:100%; object-fit:contain; background:#000;" class="hidden"></video>
+                <div id="popcorn-youtube-player" style="width:100%; height:100%; border:none; background:#000;" class="hidden"></div>
+                <video id="popcorn-video-player" controls playsinline style="width:100%; height:100%; border:none; background:#000;" class="hidden"></video>
+                <div id="popcorn-warning-banner" class="popcorn-warning-banner hidden">
+                  <span style="font-size:16px;">⚠️</span>
+                  <span>Some websites block loading inside frames (SAMEORIGIN/CSP). If the site is blank, use <b>Screen Share</b> to present it!</span>
+                </div>
                 
                 <!-- Browser toolbar controls -->
                 <div class="popcorn-browser-toolbar">
@@ -567,10 +573,10 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=3.7" defer></script>
+  <script src="js/chat-v3.js?v=3.8" defer></script>
   <script src="js/pm.js?v=1.6" defer></script>
   <script src="js/games.js" defer></script>
-  <script src="js/audio-v3.js?v=1.4" defer></script>
+  <script src="js/audio-v3.js?v=1.5" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
   <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script>
