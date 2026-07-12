@@ -1041,6 +1041,12 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     async function _doReconnect() {
       if (!currentRoom) { reset(); return; }
+      if (currentRoom._virtual) {
+        reset();
+        const banner = document.getElementById('connection-error-banner');
+        if (banner) banner.classList.add('hidden');
+        return;
+      }
       const banner = document.getElementById('connection-error-banner');
       try {
         await enterRoom(currentRoom, true);
@@ -1213,6 +1219,14 @@ function renderRoomsTopbar(rooms) {
 }
 
 async function enterRoom(room, force = false, skipModRefresh = false) {
+  if (room._virtual) {
+    if (room.id === 'iptv-virtual') {
+      enterIPTVRoom();
+    } else if (room.id === 'ludo-virtual') {
+      enterLudoRoom();
+    }
+    return;
+  }
   // Access Guard check for restricted users and locked rooms
   const isOwner = room.owner_id === currentUser?.id || currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
   
@@ -5507,6 +5521,11 @@ function enterIPTVRoom() {
   if (_iptvActive) return;
   _iptvActive = true;
 
+  // Exit voice and cleanup message/presence realtime channels from old room
+  if (messageChannel) sbClient.removeChannel(messageChannel);
+  if (presenceChannel) sbClient.removeChannel(presenceChannel);
+  if (typeof leaveVoice === 'function') leaveVoice();
+
   // Mark sidebar item
   document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
   const iptvLi = document.querySelector('#room-list li[data-room-id="iptv-virtual"]');
@@ -6068,6 +6087,11 @@ async function handleMenuRestrictUser() {
 
 /* ── Ludo Room Functions ── */
 function enterLudoRoom() {
+  // Exit voice and cleanup message/presence realtime channels from old room
+  if (messageChannel) sbClient.removeChannel(messageChannel);
+  if (presenceChannel) sbClient.removeChannel(presenceChannel);
+  if (typeof leaveVoice === 'function') leaveVoice();
+
   // Mark sidebar item active
   document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
   const ludoLi = document.querySelector('#room-list li[data-room-id="ludo-virtual"]');
