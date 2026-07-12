@@ -5952,6 +5952,14 @@ function cleanupVirtualRooms() {
     _popcornChannel = null;
   }
 
+  // Reset presenter state
+  _popcornPresenterId = null;
+  const mainVideo = document.getElementById('popcorn-main-stage-video');
+  if (mainVideo) {
+    mainVideo.srcObject = null;
+    mainVideo.classList.add('hidden');
+  }
+
   // Restore mobile tabs
   const mobileTabs = document.getElementById('mobile-tabs');
   if (mobileTabs) mobileTabs.style.display = '';
@@ -6018,31 +6026,59 @@ window.toggleGlobalChatMute = toggleGlobalChatMute;
 let _popcornChannel = null;
 let _popcornActiveStream = null; // Stores screen share stream
 let _isPopcornVoiceJoinInProgress = false;
+let _popcornPresenterId = null;
+
+function handlePopcornPresenterChange(presenterId, isSharing) {
+  const mainVideo = document.getElementById('popcorn-main-stage-video');
+  const iframe = document.getElementById('popcorn-iframe');
+  
+  if (isSharing) {
+    _popcornPresenterId = presenterId;
+    if (mainVideo && iframe) {
+      iframe.classList.add('hidden');
+      mainVideo.classList.remove('hidden');
+      
+      if (presenterId === currentUser?.id) {
+        mainVideo.srcObject = _popcornActiveStream;
+        mainVideo.muted = true;
+      } else {
+        if (typeof peerStreams !== 'undefined' && peerStreams[presenterId]) {
+          mainVideo.srcObject = peerStreams[presenterId];
+          mainVideo.muted = false;
+        } else {
+          mainVideo.srcObject = null;
+        }
+      }
+    }
+  } else {
+    _popcornPresenterId = null;
+    if (mainVideo && iframe) {
+      mainVideo.srcObject = null;
+      mainVideo.classList.add('hidden');
+      iframe.classList.remove('hidden');
+    }
+  }
+}
 
 async function enterPopcornRoom(dbRoom = null) {
-  // Exit voice and cleanup message/presence realtime channels from old room
   if (messageChannel) sbClient.removeChannel(messageChannel);
   if (presenceChannel) sbClient.removeChannel(presenceChannel);
   if (typeof leaveVoice === 'function') leaveVoice();
 
-  // Mark sidebar item active
   document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
   const popcornLi = document.querySelector('#room-list li[data-room-id="popcorn-virtual"]');
   if (popcornLi) popcornLi.classList.add('active');
 
-  // Set virtual/db room state
   if (dbRoom) {
     currentRoom = { ...dbRoom, is_audio_enabled: true };
   } else {
     currentRoom = { id: 'popcorn-virtual', name: 'Popcorn', is_audio_enabled: true, _virtual: true };
   }
 
-  // Update topbar title
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '🍿 Popcorn Room';
   document.title = '🍿 Popcorn – ChatCorner';
 
-  // Show popcorn container, hide chat/IPTV/Ludo elements
   const popcornContainer = document.getElementById('popcorn-container');
   if (popcornContainer) popcornContainer.classList.remove('hidden');
 
@@ -6053,16 +6089,13 @@ async function enterPopcornRoom(dbRoom = null) {
     shell.classList.remove('ludo-active');
   }
 
-  // Hide mobile tabs for clean full-screen
   const mobileTabs = document.getElementById('mobile-tabs');
   if (mobileTabs) mobileTabs.style.display = 'none';
 
-  // Check roles (Host vs Guest)
   const isHost = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
   const urlBar = document.getElementById('popcorn-url-bar');
   const knockWaiting = document.getElementById('popcorn-knock-waiting');
 
-  // Configure UI visibility based on authority
   if (urlBar) {
     if (isHost) {
       urlBar.classList.remove('hidden');
@@ -6071,7 +6104,6 @@ async function enterPopcornRoom(dbRoom = null) {
     }
   }
 
-  // Setup broadcast channel for room control and knocking
   if (_popcornChannel) sbClient.removeChannel(_popcornChannel);
   _popcornChannel = sbClient.channel('popcorn-room', {
     config: { broadcast: { self: true } }
@@ -6081,7 +6113,6 @@ async function enterPopcornRoom(dbRoom = null) {
     .on('broadcast', { event: 'popcorn_knock' }, ({ payload }) => {
       const { knockerId, knockerName } = payload;
       if (knockerId === currentUser?.id) return;
-      // Only admins, mods, or owners see the knock approval popup
       const isAuthority = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
       if (isAuthority) {
         showPopcornKnockPopup(knockerId, knockerName);
@@ -6105,6 +6136,17 @@ async function enterPopcornRoom(dbRoom = null) {
     .on('broadcast', { event: 'popcorn_url_change' }, ({ payload }) => {
       const { url } = payload;
       loadPopcornBrowserUrl(url);
+    })
+    .on('broadcast', { event: 'popcorn_presenter_change' }, ({ payload }) => {
+      const { presenterId, isSharing } = payload;
+      handlePopcornPresenterChange(presenterId, isSharing);
+    })
+    .on('broadcast', { event: 'popcorn_sync_state' }, ({ payload }) => {
+      const { url, presenterId } = payload;
+      loadPopcornBrowserUrl(url);
+      if (presenterId) {
+        handlePopcornPresenterChange(presenterId, true);
+      }
     });
 
   _popcornChannel.subscribe(async (status) => {
@@ -6113,7 +6155,6 @@ async function enterPopcornRoom(dbRoom = null) {
         if (knockWaiting) knockWaiting.classList.add('hidden');
         initPopcornRoomState();
       } else {
-        // Non-host sends a knock request
         if (knockWaiting) knockWaiting.classList.remove('hidden');
         _popcornChannel.send({
           type: 'broadcast',
@@ -6166,19 +6207,29 @@ window.respondPopcornKnock = function(knockerId, allowed) {
       event: 'popcorn_knock_response',
       payload: { targetId: knockerId, allowed }
     });
+
+    if (allowed) {
+      const urlInput = document.getElementById('popcorn-url-input');
+      const currentUrl = urlInput ? urlInput.value : 'browser_home.html';
+      _popcornChannel.send({
+        type: 'broadcast',
+        event: 'popcorn_sync_state',
+        payload: {
+          url: currentUrl,
+          presenterId: _popcornActiveStream ? currentUser?.id : null
+        }
+      });
+    }
   }
 };
 
 function initPopcornRoomState() {
-  // Load default home page
   loadPopcornBrowserUrl('browser_home.html');
 
-  // Trigger voice/video join automatically
   if (typeof joinVoice === 'function') {
     _isPopcornVoiceJoinInProgress = true;
     joinVoice().finally(() => {
       _isPopcornVoiceJoinInProgress = false;
-      // Configure local camera/mic initial states
       const micBtn = document.getElementById('btn-popcorn-mic');
       const camBtn = document.getElementById('btn-popcorn-cam');
       if (micBtn) micBtn.classList.toggle('active', !isMuted);
@@ -6186,7 +6237,6 @@ function initPopcornRoomState() {
     });
   }
 
-  // Bind iframe load listener
   const iframe = document.getElementById('popcorn-iframe');
   if (iframe) {
     iframe.onload = () => {
@@ -6217,7 +6267,6 @@ function loadPopcornBrowserUrl(url) {
   if (url === 'browser_home.html' || url === '' || !url) {
     iframe.src = 'browser_home.html';
   } else {
-    // Resolve relative URL if needed and run through local server proxy
     let cleanUrl = url.trim();
     if (!/^https?:\/\//i.test(cleanUrl)) {
       cleanUrl = 'https://' + cleanUrl;
@@ -6240,39 +6289,32 @@ window.syncPopcornUrl = function() {
 };
 
 window.exitPopcornRoom = function() {
-  // Disconnect from voice/video signaling channels
   if (typeof leaveVoice === 'function') leaveVoice();
 
-  // Disconnect screen sharing if active
   if (_popcornActiveStream) {
     _popcornActiveStream.getTracks().forEach(track => track.stop());
     _popcornActiveStream = null;
   }
 
-  // Clean up supabase broadcast channel
   if (_popcornChannel) {
     sbClient.removeChannel(_popcornChannel);
     _popcornChannel = null;
   }
 
-  // Restore layout classes and container visibility
   const shell = document.querySelector('.page-shell');
   if (shell) shell.classList.remove('popcorn-active');
 
   const popcornContainer = document.getElementById('popcorn-container');
   if (popcornContainer) popcornContainer.classList.add('hidden');
 
-  // Restore mobile tabs
   const mobileTabs = document.getElementById('mobile-tabs');
   if (mobileTabs) mobileTabs.style.display = '';
 
-  // Return to General/Lobby room
   if (cachedRooms && cachedRooms.length > 0) {
     enterRoom(cachedRooms[0]);
   }
 };
 
-// Toolbar browser actions
 window.popcornBrowserBack = function() {
   try { document.getElementById('popcorn-iframe').contentWindow.history.back(); } catch(_) {}
 };
@@ -6286,7 +6328,6 @@ window.popcornBrowserHome = function() {
   loadPopcornBrowserUrl('browser_home.html');
 };
 
-// Control Bar toggles
 window.togglePopcornMic = function() {
   if (typeof toggleMute === 'function') {
     toggleMute();
@@ -6312,42 +6353,69 @@ window.togglePopcornCam = function() {
 
 window.togglePopcornScreenShare = async function() {
   const btn = document.getElementById('btn-popcorn-screen');
+  
   if (_popcornActiveStream) {
-    // Stop screen share, restore camera video track
     _popcornActiveStream.getTracks().forEach(track => track.stop());
     _popcornActiveStream = null;
+    
     if (btn) {
       btn.classList.remove('active');
       btn.textContent = '🖥️ Share Screen';
     }
-    // Re-verify local preview
+    
+    if (_popcornChannel) {
+      _popcornChannel.send({
+        type: 'broadcast',
+        event: 'popcorn_presenter_change',
+        payload: { presenterId: currentUser?.id, isSharing: false }
+      });
+    }
+    
+    handlePopcornPresenterChange(currentUser?.id, false);
+    
     if (typeof updateLocalPreview === 'function') updateLocalPreview();
     return;
   }
 
   try {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: "always" },
+      audio: true
+    });
+    
     _popcornActiveStream = screenStream;
+    
     if (btn) {
       btn.classList.add('active');
       btn.textContent = '❌ Stop Sharing';
     }
 
     const track = screenStream.getVideoTracks()[0];
-    // Replace track on all WebRTC peer connections
+    
     if (typeof peers !== 'undefined') {
       Object.values(peers).forEach(pc => {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) sender.replaceTrack(track);
+        if (sender) {
+          sender.replaceTrack(track);
+        }
       });
     }
 
-    // Handle screen share stop from browser popup bar
+    if (_popcornChannel) {
+      _popcornChannel.send({
+        type: 'broadcast',
+        event: 'popcorn_presenter_change',
+        payload: { presenterId: currentUser?.id, isSharing: true }
+      });
+    }
+    
+    handlePopcornPresenterChange(currentUser?.id, true);
+
     track.onended = () => {
       togglePopcornScreenShare();
     };
   } catch (err) {
-    console.error('Screen sharing error', err);
+    console.error('Screen sharing capture failed', err);
     showChatToast('⚠️ Could not start screen sharing.', 'error');
   }
 };

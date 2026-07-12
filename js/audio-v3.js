@@ -399,6 +399,16 @@ function createPeerConnection(peerId, username) {
     }
     ensurePeerAudioElement(peerId, stream);
     attachAnalyserForStream(peerId, stream);
+
+    if (typeof _popcornPresenterId !== 'undefined' && _popcornPresenterId === peerId) {
+      const mainVideo = document.getElementById('popcorn-main-stage-video');
+      if (mainVideo) {
+        mainVideo.srcObject = stream;
+        mainVideo.muted = false;
+        mainVideo.classList.remove('hidden');
+        document.getElementById('popcorn-iframe')?.classList.add('hidden');
+      }
+    }
   };
 
   pc.onconnectionstatechange = () => {
