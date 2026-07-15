@@ -510,7 +510,7 @@ async function createRoom() {
     description: description || null,
     is_audio_enabled: type === 'voice',
     is_locked: false,
-    room_type: type === 'cowatch' ? 'cowatch' : 'chat',
+    room_type: 'chat',
     owner_id: ownerId
   });
   showLoading(false);

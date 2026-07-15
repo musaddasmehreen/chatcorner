@@ -302,7 +302,6 @@ async function guestLogin() {
 
 async function logout() {
   try {
-    localStorage.setItem('cc_popcorn_logout_time', Date.now().toString());
     if (typeof window.prepareForLogout === 'function') {
       void window.prepareForLogout();
     }

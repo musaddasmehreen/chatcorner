@@ -494,8 +494,8 @@ function _ccDeferredSecurityInit() {
     return _origFetch.call(window, input, init);
   };
 
-  // Idle timeout — auto-logout registered users after 2h inactivity
-  const IDLE_LIMIT_MS = 2 * 60 * 60 * 1000;
+  // Idle timeout — auto-logout registered users after 30min inactivity
+  const IDLE_LIMIT_MS = 30 * 60 * 1000;
   let _idleTimer = null;
   function resetIdleTimer() {
     clearTimeout(_idleTimer);

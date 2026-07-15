@@ -34,7 +34,7 @@ function stopPmRealtime() {
   pmChannel = null;
 }
 
-window.stopPmRealtime = stopPmRealtime;
+
 
 function refreshPmIgnoreState(targetUserId = null) {
   const userIds = targetUserId ? [targetUserId] : Object.keys(pmWindows);
@@ -52,7 +52,7 @@ function refreshPmIgnoreState(targetUserId = null) {
   });
 }
 
-window.refreshPmIgnoreState = refreshPmIgnoreState;
+
 
 function renderPvtBar() {
   const legacyBar = document.getElementById('rooms-topbar');
@@ -215,11 +215,18 @@ async function openPrivateChat(userId, username) {
       <button type="button" class="pm-call-end">End Call</button>
     </div>
     <div class="pm-messages"></div>
-    <div class="pm-voice-preview-row hidden">
-      <audio controls class="pm-voice-preview-audio"></audio>
-      <div style="display:flex; gap:5px; margin-top:5px;">
-        <button type="button" class="pm-voice-send-btn">Send</button>
-        <button type="button" class="pm-voice-cancel-btn">Cancel</button>
+    <div class="pm-recording-row hidden" style="display: none; align-items: center; justify-content: space-between; padding: 6px 10px; background: rgba(0,0,0,0.15); border-radius: 8px; margin-top: 5px;">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span class="blinking-dot pm-rec-blinking-dot" style="color: #ef4444; font-size: 12px; animation: blinker 1s linear infinite;">🔴</span>
+        <span class="pm-rec-timer-display" style="font-family: monospace; font-size: 13px; color: var(--text); font-weight: bold;">00:00</span>
+        <span class="pm-rec-status-text" style="font-size: 0.75rem; color: var(--muted); margin-left: 4px;">Recording...</span>
+        <button type="button" class="pm-rec-playback-play hidden" style="background: var(--accent); color: white; border: none; border-radius: 4px; padding: 1px 6px; cursor: pointer; font-size: 0.7rem; display: none;">▶ Play</button>
+        <audio class="pm-rec-playback-audio hidden" style="display: none;"></audio>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button type="button" class="pm-rec-discard-btn" title="Discard" style="font-size: 1.1rem; background: transparent; border: none; cursor: pointer; padding: 2px;">🗑️</button>
+        <button type="button" class="pm-rec-preview-btn" title="Stop & Preview" style="font-size: 1.1rem; background: transparent; border: none; cursor: pointer; padding: 2px;">⏹️</button>
+        <button type="button" class="pm-rec-send-btn" title="Send" style="font-size: 1.1rem; background: transparent; border: none; cursor: pointer; padding: 2px;">📤</button>
       </div>
     </div>
     <div class="pm-image-url-row hidden">
@@ -239,6 +246,12 @@ async function openPrivateChat(userId, username) {
   `;
 
   stage.appendChild(wrap);
+  // Add corner resize handles
+  ['tl','tr','bl','br'].forEach(corner => {
+    const handle = document.createElement('div');
+    handle.className = 'pm-resizer pm-resizer-' + corner;
+    wrap.appendChild(handle);
+  });
   pmWindows[userId] = {
     el: wrap,
     userId,
@@ -281,9 +294,7 @@ async function openPrivateChat(userId, username) {
     refreshPmIgnoreState(userId);
   };
 
-  recordBtn.addEventListener('pointerdown', (e) => startPmVoiceNoteRecording(e, userId));
-  recordBtn.addEventListener('pointerup', (e) => stopPmVoiceNoteRecording(e, userId));
-  recordBtn.addEventListener('pointerleave', (e) => stopPmVoiceNoteRecording(e, userId));
+  recordBtn.onclick = () => togglePmVoiceNoteRecording(userId);
   // Cancel context menu on long press on mobile
   recordBtn.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -324,6 +335,7 @@ async function openPrivateChat(userId, username) {
   }
 
   enablePmDragging(userId);
+  enablePmResizing(userId);
   setInitialPmWindowPosition(userId);
   renderPmTextHistory(userId);
   refreshPmIgnoreState(userId);
@@ -495,6 +507,72 @@ document.addEventListener('pointerup', () => {
   item?.el.querySelector('.pm-header')?.classList.remove('dragging');
   pmDragState = null;
 });
+
+function enablePmResizing(userId) {
+  const item = pmWindows[userId];
+  if (!item) return;
+  const handles = item.el.querySelectorAll('.pm-resizer');
+  handles.forEach(handle => {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = item.el.getBoundingClientRect();
+      const isTL = handle.classList.contains('pm-resizer-tl');
+      const isTR = handle.classList.contains('pm-resizer-tr');
+      const isBL = handle.classList.contains('pm-resizer-bl');
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = rect.width;
+      const startH = rect.height;
+      const startL = item.left;
+      const startT = item.top;
+      const MIN_W = 260;
+      const MIN_H = 200;
+      const MAX_W = 600;
+      const MAX_H = window.innerHeight * 0.8;
+
+      function onMove(ev) {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        let newW = startW, newH = startH, newL = startL, newT = startT;
+
+        if (isTL) {
+          newW = Math.min(MAX_W, Math.max(MIN_W, startW - dx));
+          newH = Math.min(MAX_H, Math.max(MIN_H, startH - dy));
+          newL = startL + (startW - newW);
+          newT = startT + (startH - newH);
+        } else if (isTR) {
+          newW = Math.min(MAX_W, Math.max(MIN_W, startW + dx));
+          newH = Math.min(MAX_H, Math.max(MIN_H, startH - dy));
+          newT = startT + (startH - newH);
+        } else if (isBL) {
+          newW = Math.min(MAX_W, Math.max(MIN_W, startW - dx));
+          newH = Math.min(MAX_H, Math.max(MIN_H, startH + dy));
+          newL = startL + (startW - newW);
+        } else {
+          newW = Math.min(MAX_W, Math.max(MIN_W, startW + dx));
+          newH = Math.min(MAX_H, Math.max(MIN_H, startH + dy));
+        }
+
+        item.el.style.width = newW + 'px';
+        item.el.style.maxWidth = newW + 'px';
+        item.el.style.maxHeight = newH + 'px';
+        item.left = newL;
+        item.top = newT;
+        positionPmWindows();
+      }
+
+      function onUp() {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+      }
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  });
+}
 
 window.addEventListener('resize', () => {
   Object.keys(pmWindows).forEach((userId) => clampPmPosition(userId));
@@ -791,16 +869,105 @@ function renderPmTextHistory(userId) {
   });
 }
 
-async function startPmVoiceNoteRecording(e, userId) {
-  if (e && e.button !== 0 && e.type !== 'touchstart') return;
+let pmVoiceTimers = {};
+let pmVoiceSeconds = {};
+let pmVoiceBlobs = {};
+let pmVoicePreviewMode = {};
+let pmAutoSendOnStop = {};
+let pmDiscardOnStop = {};
 
+function togglePmVoiceNoteRecording(userId) {
+  const recorder = pmRecorders[userId];
+  if (recorder && recorder.state === 'recording') {
+    recorder.stop();
+  } else {
+    startPmVoiceNoteRecording(null, userId);
+  }
+}
+
+function resetPmInputState(userId) {
+  const wrap = pmWindows[userId]?.el;
+  if (!wrap) return;
+
+  clearInterval(pmVoiceTimers[userId]);
+  delete pmVoiceTimers[userId];
+  delete pmVoiceSeconds[userId];
+  delete pmVoiceBlobs[userId];
+  delete pmVoicePreviewMode[userId];
+  delete pmAutoSendOnStop[userId];
+  delete pmDiscardOnStop[userId];
+  delete pmRecorders[userId];
+
+  const normalToolbar = wrap.querySelector('.pm-toolbar');
+  const normalInputRow = wrap.querySelector('.pm-input-row');
+  const recRow = wrap.querySelector('.pm-recording-row');
+
+  if (normalToolbar) {
+    normalToolbar.classList.remove('hidden');
+    normalToolbar.style.display = 'flex';
+  }
+  if (normalInputRow) {
+    normalInputRow.classList.remove('hidden');
+    normalInputRow.style.display = 'flex';
+  }
+  if (recRow) {
+    recRow.classList.add('hidden');
+    recRow.style.display = 'none';
+    const playbackAudio = recRow.querySelector('.pm-rec-playback-audio');
+    if (playbackAudio) {
+      playbackAudio.pause();
+      playbackAudio.src = '';
+    }
+  }
+}
+
+async function sendPmVoiceNoteDirectly(userId, blob) {
+  let finalBlob = blob;
+  if (typeof compressVoiceNote === 'function') {
+    finalBlob = await compressVoiceNote(blob);
+  }
+  
+  const reader = new FileReader();
+  reader.readAsDataURL(finalBlob);
+  reader.onloadend = async () => {
+    const base64data = reader.result;
+    
+    // Create local UI message first
+    const createdAt = new Date().toISOString();
+    const msgId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+    const localAudioUrl = URL.createObjectURL(finalBlob);
+    
+    trackPmVoiceUrl(userId, localAudioUrl);
+    
+    const msg = { id: msgId, from: currentUser.id, type: 'voice', audioUrl: localAudioUrl, createdAt };
+    appendPmVoiceMessage(userId, msg, true);
+    
+    if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
+    pmTextHistory[userId].push(msg);
+
+    // Send via db/broadcast
+    await sendPmBroadcast({ to: userId, type: 'voice', voiceDataUrl: base64data, createdAt, id: msgId });
+    if (typeof sendPrivateMessage === 'function') {
+      await sendPrivateMessage(userId, base64data, 'voice');
+    }
+    resetPmInputState(userId);
+  };
+}
+
+async function startPmVoiceNoteRecording(e, userId) {
   if (!currentProfile?.is_registered) {
     if (typeof showChatToast === 'function') showChatToast('Voice notes are available for registered users only.', 'warning');
     return;
   }
 
-  const btn = pmWindows[userId]?.el.querySelector('.pm-record-btn');
-  if (!btn) return;
+  const wrap = pmWindows[userId]?.el;
+  if (!wrap) return;
+
+  const normalToolbar = wrap.querySelector('.pm-toolbar');
+  const normalInputRow = wrap.querySelector('.pm-input-row');
+  const recRow = wrap.querySelector('.pm-recording-row');
+  
+  if (!normalToolbar || !normalInputRow || !recRow) return;
 
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
     if (typeof showChatToast === 'function') showChatToast('Voice recording is not supported in this browser.', 'warning');
@@ -812,27 +979,82 @@ async function startPmVoiceNoteRecording(e, userId) {
     const chunks = [];
     const mediaRecorder = new MediaRecorder(stream);
     pmRecorders[userId] = mediaRecorder;
+    pmDiscardOnStop[userId] = false;
+    pmAutoSendOnStop[userId] = false;
+    pmVoicePreviewMode[userId] = false;
+    pmVoiceBlobs[userId] = null;
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) chunks.push(event.data);
+    normalToolbar.classList.add('hidden');
+    normalToolbar.style.display = 'none';
+    normalInputRow.classList.add('hidden');
+    normalInputRow.style.display = 'none';
+    recRow.classList.remove('hidden');
+    recRow.style.display = 'flex';
+
+    recRow.querySelector('.pm-rec-timer-display').textContent = '00:00';
+    recRow.querySelector('.pm-rec-status-text').textContent = 'Recording...';
+    recRow.querySelector('.pm-rec-blinking-dot').classList.remove('hidden');
+    recRow.querySelector('.pm-rec-blinking-dot').style.display = 'inline';
+    
+    const playbackPlayBtn = recRow.querySelector('.pm-rec-playback-play');
+    playbackPlayBtn.classList.add('hidden');
+    playbackPlayBtn.style.display = 'none';
+    
+    const previewBtn = recRow.querySelector('.pm-rec-preview-btn');
+    previewBtn.textContent = '⏹️';
+    previewBtn.title = 'Stop & Preview';
+
+    pmVoiceSeconds[userId] = 0;
+    clearInterval(pmVoiceTimers[userId]);
+    pmVoiceTimers[userId] = setInterval(() => {
+      pmVoiceSeconds[userId]++;
+      const mins = String(Math.floor(pmVoiceSeconds[userId] / 60)).padStart(2, '0');
+      const secs = String(pmVoiceSeconds[userId] % 60).padStart(2, '0');
+      recRow.querySelector('.pm-rec-timer-display').textContent = `${mins}:${secs}`;
+    }, 1000);
+
+    const discardBtn = recRow.querySelector('.pm-rec-discard-btn');
+    const sendBtn = recRow.querySelector('.pm-rec-send-btn');
+    const playbackAudio = recRow.querySelector('.pm-rec-playback-audio');
+
+    discardBtn.onclick = () => {
+      if (mediaRecorder.state === 'recording') {
+        pmDiscardOnStop[userId] = true;
+        mediaRecorder.stop();
+      } else {
+        resetPmInputState(userId);
+      }
     };
 
-    mediaRecorder.onstop = () => {
-      btn.classList.remove('recording-pulse', 'recording');
-      btn.textContent = '🎙️';
-      stream.getTracks().forEach(t => t.stop());
-
-      if (!chunks.length) return;
-
-      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-      const audioUrl = URL.createObjectURL(blob);
-      
-      showPmVoicePreview(userId, audioUrl, blob);
+    previewBtn.onclick = () => {
+      if (mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      } else if (pmVoicePreviewMode[userId]) {
+        playbackPlayBtn.click();
+      }
     };
 
-    mediaRecorder.start();
-    btn.classList.add('recording-pulse', 'recording');
-    btn.textContent = '⏹️';
+    sendBtn.onclick = async () => {
+      if (mediaRecorder.state === 'recording') {
+        pmAutoSendOnStop[userId] = true;
+        mediaRecorder.stop();
+      } else if (pmVoicePreviewMode[userId] && pmVoiceBlobs[userId]) {
+        await sendPmVoiceNoteDirectly(userId, pmVoiceBlobs[userId]);
+      }
+    };
+
+    playbackPlayBtn.onclick = () => {
+      if (playbackAudio.paused) {
+        playbackAudio.play();
+        playbackPlayBtn.textContent = '⏸ Pause';
+      } else {
+        playbackAudio.pause();
+        playbackPlayBtn.textContent = '▶ Play';
+      }
+    };
+    playbackAudio.onended = () => {
+      playbackPlayBtn.textContent = '▶ Play';
+    };
 
     sbClient.channel('presence-global').send({
       type: 'broadcast',
@@ -840,9 +1062,61 @@ async function startPmVoiceNoteRecording(e, userId) {
       payload: { userId: currentUser.id, username: currentUser.username, roomId: 'pm' }
     }).catch(e => console.warn(e));
 
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) chunks.push(event.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      clearInterval(pmVoiceTimers[userId]);
+      stream.getTracks().forEach(t => t.stop());
+
+      sbClient.channel('presence-global').send({
+        type: 'broadcast',
+        event: 'recording-voice-stop',
+        payload: { userId: currentUser.id, roomId: 'pm' }
+      }).catch(e => console.warn(e));
+
+      if (pmDiscardOnStop[userId]) {
+        resetPmInputState(userId);
+        return;
+      }
+
+      if (!chunks.length) {
+        if (typeof showChatToast === 'function') showChatToast('Voice note cancelled.', 'warning');
+        resetPmInputState(userId);
+        return;
+      }
+
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+
+      if (pmAutoSendOnStop[userId]) {
+        await sendPmVoiceNoteDirectly(userId, blob);
+        return;
+      }
+
+      pmVoiceBlobs[userId] = blob;
+      pmVoicePreviewMode[userId] = true;
+
+      recRow.querySelector('.pm-rec-status-text').textContent = 'Preview Ready';
+      recRow.querySelector('.pm-rec-blinking-dot').style.display = 'none';
+      recRow.querySelector('.pm-rec-blinking-dot').classList.add('hidden');
+      
+      const audioUrl = URL.createObjectURL(blob);
+      playbackAudio.src = audioUrl;
+      playbackPlayBtn.classList.remove('hidden');
+      playbackPlayBtn.style.display = 'inline-block';
+      playbackPlayBtn.textContent = '▶ Play';
+
+      previewBtn.textContent = '▶/⏸';
+      previewBtn.title = 'Play/Pause Preview';
+    };
+
+    mediaRecorder.start();
+
   } catch (error) {
-    console.error('Mic access denied', error);
+    console.error('Mic access failed', error);
     if (typeof showChatToast === 'function') showChatToast('Microphone permission denied.', 'error');
+    resetPmInputState(userId);
   }
 }
 
@@ -850,51 +1124,7 @@ function stopPmVoiceNoteRecording(e, userId) {
   const recorder = pmRecorders[userId];
   if (recorder && recorder.state === 'recording') {
     recorder.stop();
-    sbClient.channel('presence-global').send({
-      type: 'broadcast',
-      event: 'recording-voice-stop',
-      payload: { userId: currentUser.id, roomId: 'pm' }
-    }).catch(e => console.warn(e));
   }
-}
-
-function showPmVoicePreview(userId, audioUrl, blob) {
-  const wrap = pmWindows[userId]?.el;
-  if (!wrap) return;
-  const row = wrap.querySelector('.pm-voice-preview-row');
-  const audioEl = wrap.querySelector('.pm-voice-preview-audio');
-  const sendBtn = wrap.querySelector('.pm-voice-send-btn');
-  const cancelBtn = wrap.querySelector('.pm-voice-cancel-btn');
-  
-  if (!row || !audioEl || !sendBtn || !cancelBtn) return;
-  
-  audioEl.src = audioUrl;
-  row.classList.remove('hidden');
-  
-  sendBtn.onclick = async () => {
-    row.classList.add('hidden');
-    audioEl.pause();
-    
-    trackPmVoiceUrl(userId, audioUrl);
-    
-    // Create message object
-    const createdAt = new Date().toISOString();
-    const msgId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-    const msg = { id: msgId, from: currentUser.id, type: 'voice', audioUrl, createdAt };
-    appendPmVoiceMessage(userId, msg, true);
-    
-    if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
-    pmTextHistory[userId].push(msg);
-
-    const voiceDataUrl = await blobToDataUrl(blob);
-    await sendPmBroadcast({ to: userId, type: 'voice', voiceDataUrl, createdAt, id: msgId });
-  };
-  
-  cancelBtn.onclick = () => {
-    row.classList.add('hidden');
-    audioEl.pause();
-    audioEl.src = '';
-  };
 }
 
 function getPmVoiceChannelKey(userId) {

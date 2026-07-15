@@ -53,6 +53,8 @@
   <meta name="referrer" content="strict-origin-when-cross-origin"/>
   <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
   <meta http-equiv="X-Frame-Options" content="DENY"/>
+  <link rel="preconnect" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
+  <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.3"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=1.5"/>
   <link rel="stylesheet" href="css/resizable-layout.css?v=2.2"/>
@@ -319,82 +321,7 @@
           </iframe>
         </div>
 
-        <!-- Popcorn Room container (Whereby-style Browser + Video Grid) -->
-        <div id="popcorn-container" class="popcorn-container hidden">
-          <header class="popcorn-header">
-            <div class="popcorn-title-group">
-              <span class="popcorn-logo">🍿 Popcorn Room</span>
-              <span id="popcorn-status-badge" class="popcorn-status-badge">🔒 Locked</span>
-            </div>
-            <div class="popcorn-controls">
-              <button id="btn-popcorn-mic" class="popcorn-btn active" onclick="togglePopcornMic()">🎤 Mic On</button>
-              <button id="btn-popcorn-cam" class="popcorn-btn" onclick="togglePopcornCam()">📷 Camera Off</button>
-              <button id="btn-popcorn-screen" class="popcorn-btn" onclick="togglePopcornScreenShare()">🖥️ Share Screen</button>
-              <button id="btn-popcorn-grid" class="popcorn-btn active" onclick="togglePopcornVideoGrid()">👥 Toggle Grid</button>
-              <button id="btn-popcorn-return" class="popcorn-btn danger" onclick="exitPopcornRoom()">🚪 Leave</button>
-            </div>
-          </header>
-          
-          <div class="popcorn-body">
-            <!-- Left panel: Shared Browser Viewport -->
-            <div class="popcorn-browser-panel">
-              <!-- Address bar for hosts/admins/mods/owners -->
-              <div id="popcorn-url-bar" class="popcorn-url-bar id-authority-only hidden">
-                <input type="text" id="popcorn-url-input" class="popcorn-url-input" placeholder="Enter URL to browse (e.g. google.com, archive.org, youtube.com)..." onkeydown="if(event.key==='Enter') syncPopcornUrl()" />
-                <button class="popcorn-btn active" onclick="syncPopcornUrl()" style="padding:0 18px;">Go & Sync</button>
-              </div>
-              
-              <!-- Local browser iframe (embedded locally, loaded via proxy) -->
-              <div class="popcorn-iframe-wrapper">
-                <iframe id="popcorn-iframe" class="popcorn-browser-iframe" src="" allow="autoplay; encrypted-media; picture-in-picture; camera; microphone; display-capture;" allowfullscreen></iframe>
-                <video id="popcorn-main-stage-video" autoplay playsinline style="width:100%; height:100%; object-fit:contain; background:#000;" class="hidden"></video>
-                <div id="popcorn-youtube-player" style="width:100%; height:100%; border:none; background:#000;" class="hidden"></div>
-                <video id="popcorn-video-player" controls playsinline style="width:100%; height:100%; border:none; background:#000;" class="hidden"></video>
-                <div id="popcorn-warning-banner" class="popcorn-warning-banner hidden">
-                  <span style="font-size:16px;">⚠️</span>
-                  <span>Some websites block loading inside frames (SAMEORIGIN/CSP). If the site is blank, use <b>Screen Share</b> to present it!</span>
-                </div>
-                
-                <!-- Browser toolbar controls -->
-                <div class="popcorn-browser-toolbar">
-                  <button class="toolbar-btn" onclick="popcornBrowserBack()" title="Back">⬅️</button>
-                  <button class="toolbar-btn" onclick="popcornBrowserForward()" title="Forward">➡️</button>
-                  <button class="toolbar-btn" onclick="popcornBrowserReload()" title="Reload">🔄</button>
-                  <button class="toolbar-btn" onclick="popcornBrowserHome()" title="Home">🏠</button>
-                  <span id="popcorn-url-display" class="toolbar-url-display">browser://home</span>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Right panel: Participants Grid (Whereby Video list) -->
-            <div class="popcorn-video-panel" id="popcorn-video-panel">
-              <!-- Videos of participants in room will be dynamically rendered here -->
-            </div>
-          </div>
-          
-          <!-- Waiting overlay for knocking guests -->
-          <div id="popcorn-knock-waiting" class="hidden" style="
-            position:absolute; inset:0; z-index:9999;
-            background:rgba(9,7,15,0.96); display:flex; flex-direction:column;
-            align-items:center; justify-content:center; gap:18px;
-            backdrop-filter:blur(10px);
-          ">
-            <div style="font-size:64px; animation:pulse 1.5s infinite">🍿</div>
-            <div style="color:#fff; font-size:20px; font-weight:700">Popcorn Room is Locked</div>
-            <div style="color:#a78bfa; font-size:14px; text-align:center; max-width:320px; line-height:1.5">
-              This is a private screen room. A request has been sent to the hosts. Please wait for approval...
-            </div>
-            <div style="width:36px; height:36px; border:3px solid #8b5cf6; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite"></div>
-            <button onclick="exitPopcornRoom()" style="
-              margin-top:12px; padding:10px 24px; border:1px solid rgba(239,68,68,0.4);
-              background:rgba(239,68,68,0.1); color:#f87171; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600;
-            ">Cancel Request</button>
-            <style>
-              @keyframes spin { to { transform:rotate(360deg) } }
-              @keyframes pulse { 0%,100% { transform:scale(1) } 50% { transform:scale(1.1) } }
-            </style>
-          </div>
-        </div>
+
 
         <!-- Video elements for voice room -->
         <div id="video-grid" class="video-grid hidden"></div>
@@ -428,37 +355,56 @@
 
     <!-- BOTTOM INPUT ROW (full width, split into 3 zones) -->
     <div class="input-strip">
-      <div class="input-strip-left">
-        <div id="emoji-picker" class="emoji-picker hidden" role="dialog"></div>
-        <div id="room-image-url-popover" class="room-image-url-popover hidden">
-          <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
-          <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
-        </div>
-        <div id="voice-note-preview-popover" class="voice-preview-popover hidden">
-          <button id="btn-voice-note-play" class="btn-sm" style="background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">▶ Play</button>
-          <span style="font-size:0.75rem;color:var(--text);margin:0 8px;">Preview Ready</span>
-          <audio id="voice-note-preview-audio" class="hidden"></audio>
-          <button id="btn-voice-note-send" class="btn-sm" style="background:#10b981;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;margin-right:4px;">Send</button>
-          <button id="btn-voice-note-cancel" class="btn-sm" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">Discard</button>
-        </div>
-        
-        <!-- Hamburger extras button (visible on mobile, positioned on the left side) -->
-        <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options">☰</button>
+      <!-- NORMAL INPUT STATE -->
+      <div id="input-strip-normal" style="display: flex; width: 100%; align-items: center;">
+        <div class="input-strip-left">
+          <div id="emoji-picker" class="emoji-picker hidden" role="dialog"></div>
+          <div id="room-image-url-popover" class="room-image-url-popover hidden">
+            <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
+            <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
+          </div>
+          <div id="voice-note-preview-popover" class="voice-preview-popover hidden">
+            <button id="btn-voice-note-play" class="btn-sm" style="background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">▶ Play</button>
+            <span style="font-size:0.75rem;color:var(--text);margin:0 8px;">Preview Ready</span>
+            <audio id="voice-note-preview-audio" class="hidden"></audio>
+            <button id="btn-voice-note-send" class="btn-sm" style="background:#10b981;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;margin-right:4px;">Send</button>
+            <button id="btn-voice-note-cancel" class="btn-sm" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">Discard</button>
+          </div>
+          
+          <!-- Hamburger extras button (visible on mobile, positioned on the left side) -->
+          <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options">☰</button>
 
-        <div id="input-buttons-group" class="input-buttons-group">
-          <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
-          <button class="input-btn" id="btn-image-url" onclick="closeInputExtras()" title="Share image or GIF" aria-label="Share image or GIF">🖼️</button>
-          <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote();closeInputExtras()" title="Send a voice note" aria-label="Record and send voice note">🎙️</button>
-          <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick();closeInputExtras()" title="Join Voice Chat" aria-label="Join voice chat">🔊</button>
+          <div id="input-buttons-group" class="input-buttons-group">
+            <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
+            <button class="input-btn" id="btn-image-url" onclick="closeInputExtras()" title="Share image or GIF" aria-label="Share image or GIF">🖼️</button>
+            <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote();closeInputExtras()" title="Send a voice note" aria-label="Record and send voice note">🎙️</button>
+            <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick();closeInputExtras()" title="Join Voice Chat" aria-label="Join voice chat">🔊</button>
+          </div>
+          <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
         </div>
-        <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
+        <div class="input-strip-center">
+          <textarea id="msg-input" class="msg-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
+          <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap" aria-live="polite" aria-label="Character count">0/500</span>
+        </div>
+        <div class="input-strip-right">
+          <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
+        </div>
       </div>
-      <div class="input-strip-center">
-        <textarea id="msg-input" class="msg-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
-        <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap" aria-live="polite" aria-label="Character count">0/500</span>
-      </div>
-      <div class="input-strip-right">
-        <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
+
+      <!-- RECORDING INPUT STATE -->
+      <div id="input-strip-recording" class="hidden" style="display: none; width: 100%; align-items: center; justify-content: space-between; padding: 4px 12px; height: 100%;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="blinking-dot" id="voice-rec-blinking-dot" style="color: #ef4444; font-size: 14px; animation: blinker 1s linear infinite;">🔴</span>
+          <span id="voice-rec-timer-display" style="font-family: monospace; font-size: 14px; color: var(--text); font-weight: bold;">00:00</span>
+          <span id="voice-rec-status-text" style="font-size: 0.8rem; color: var(--muted); margin-left: 8px;">Recording...</span>
+          <button id="btn-voice-rec-playback-play" class="hidden" style="background: var(--accent); color: white; border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.75rem;">▶ Play</button>
+          <audio id="voice-rec-playback-audio" class="hidden"></audio>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button class="input-btn" id="btn-voice-rec-discard" title="Discard" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">🗑️</button>
+          <button class="input-btn" id="btn-voice-rec-preview" title="Stop & Preview" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">⏹️</button>
+          <button class="input-btn" id="btn-voice-rec-send" title="Send" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">📤</button>
+        </div>
       </div>
     </div>
 

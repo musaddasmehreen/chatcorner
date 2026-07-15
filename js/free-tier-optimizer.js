@@ -9,7 +9,7 @@
 // FIX 1: IDLE DISCONNECT (Free up WebSocket connections)
 // =====================================================================
 
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 let idleTimer = null;
 let userIdleStatus = false;
 
@@ -30,6 +30,7 @@ function resetIdleTimer() {
     userIdleStatus = false;
     reconnectPresence();
   }
+  localStorage.setItem('cc_guest_last_active', Date.now().toString());
   startIdleTimer();
 }
 
@@ -43,7 +44,7 @@ function startIdleTimer() {
 function disconnectPresence() {
   if (typeof presenceChannel !== 'undefined' && presenceChannel) {
     presenceChannel.unsubscribe();
-    console.log('[IDLE] User idle for 5 minutes - disconnected from presence channel');
+    console.log('[IDLE] User idle for 30 minutes - disconnected from presence channel');
   }
   updateIdleStatusUI(true);
 }

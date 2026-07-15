@@ -1367,8 +1367,8 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   position: absolute;
   width: min(330px, calc(100vw - 1.5rem));
   min-width: 280px;
-  max-width: 330px;
-  max-height: min(58vh, 400px);
+  max-width: 600px;
+  max-height: 80vh;
   background:
     linear-gradient(180deg, rgba(var(--accent-rgb),0.12), rgba(255,255,255,0.02) 24%, rgba(255,255,255,0.01)),
     var(--surface);
@@ -1391,6 +1391,35 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
 .pm-window.pm-window-ignored {
   opacity: 0.88;
 }
+.pm-resizer {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 10;
+  background: transparent;
+}
+.pm-resizer::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.35);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.pm-resizer:hover::after,
+.pm-resizer:active::after {
+  opacity: 1;
+}
+.pm-resizer-tl { top: -2px; left: -2px; cursor: nwse-resize; }
+.pm-resizer-tl::after { top: 2px; left: 2px; }
+.pm-resizer-tr { top: -2px; right: -2px; cursor: nesw-resize; }
+.pm-resizer-tr::after { top: 2px; right: 2px; }
+.pm-resizer-bl { bottom: -2px; left: -2px; cursor: nesw-resize; }
+.pm-resizer-bl::after { bottom: 2px; left: 2px; }
+.pm-resizer-br { bottom: -2px; right: -2px; cursor: nwse-resize; }
+.pm-resizer-br::after { bottom: 2px; right: 2px; }
 @keyframes pmPulse {
   0% { transform: scale(1); }
   50% { transform: scale(1.02); }

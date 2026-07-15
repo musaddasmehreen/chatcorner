@@ -209,15 +209,11 @@ async function leaveVoice() {
     participantLevels = {};
   }
 
-  const isPopcorn = currentRoom && (
-    currentRoom.id === 'popcorn-virtual' ||
-    currentRoom.room_type === 'cowatch' ||
-    (currentRoom.name && currentRoom.name.toLowerCase().includes('popcorn'))
-  );
-  const videoGrid = document.getElementById(isPopcorn ? 'popcorn-video-panel' : 'video-grid');
+  const isPopcorn = false;
+  const videoGrid = document.getElementById('video-grid');
   if (videoGrid) {
     videoGrid.innerHTML = '';
-    if (!isPopcorn) videoGrid.classList.add('hidden');
+    videoGrid.classList.add('hidden');
   }
   const localVideo = document.getElementById('local-video');
   if (localVideo) {
@@ -404,15 +400,7 @@ function createPeerConnection(peerId, username) {
     ensurePeerAudioElement(peerId, stream);
     attachAnalyserForStream(peerId, stream);
 
-    if (typeof _popcornPresenterId !== 'undefined' && _popcornPresenterId === peerId) {
-      const mainVideo = document.getElementById('popcorn-main-stage-video');
-      if (mainVideo) {
-        mainVideo.srcObject = stream;
-        mainVideo.muted = false;
-        mainVideo.classList.remove('hidden');
-        document.getElementById('popcorn-iframe')?.classList.add('hidden');
-      }
-    }
+    // popcorn presenter logic removed
   };
 
   pc.onconnectionstatechange = () => {
@@ -426,15 +414,11 @@ function createPeerConnection(peerId, username) {
 
 function ensurePeerTile(peerId, username) {
   let tile = document.getElementById('video-tile-' + peerId);
-  const isPopcorn = currentRoom && (
-    currentRoom.id === 'popcorn-virtual' ||
-    currentRoom.room_type === 'cowatch' ||
-    (currentRoom.name && currentRoom.name.toLowerCase().includes('popcorn'))
-  );
-  const grid = document.getElementById(isPopcorn ? 'popcorn-video-panel' : 'video-grid');
+  const isPopcorn = false;
+  const grid = document.getElementById('video-grid');
   if (!tile && grid) {
     tile = document.createElement('div');
-    tile.className = isPopcorn ? 'popcorn-video-tile' : 'video-tile';
+    tile.className = 'video-tile';
     tile.id = 'video-tile-' + peerId;
 
     const videoEl = document.createElement('video');
@@ -443,7 +427,7 @@ function ensurePeerTile(peerId, username) {
     videoEl.playsInline = true;
 
     const label = document.createElement('span');
-    label.className = isPopcorn ? 'popcorn-video-label' : 'video-label';
+    label.className = 'video-label';
     label.textContent = username || 'User';
 
     tile.appendChild(videoEl);
@@ -453,7 +437,7 @@ function ensurePeerTile(peerId, username) {
 
   const cameraOn = typeof cameraStates !== 'undefined' ? !!cameraStates[peerId] : true;
   tile?.classList.toggle('hidden', !cameraOn);
-  if (!isPopcorn) grid?.classList.remove('hidden');
+  grid?.classList.remove('hidden');
   return tile?.querySelector('video');
 }
 

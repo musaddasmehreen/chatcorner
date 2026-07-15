@@ -25,7 +25,7 @@ const ICE_SERVERS = {
 };
 
 window.sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-const sbClient = window.sbClient;
+var sbClient = window.sbClient;
 
 const ADMIN_BOOTSTRAP_SETTING_KEY = 'admin_bootstrap_enabled';
 
@@ -84,5 +84,5 @@ window.currentRoom = null;
 window.onlineUsers = {};
 window.cameraStates = {};
 
-const POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
+var POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
 window.POST_LOGIN_REDIRECT_KEY = POST_LOGIN_REDIRECT_KEY;
