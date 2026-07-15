@@ -248,9 +248,7 @@ let discardRoomVoiceNoteOnStop = false;
 let oldestMessageTimestamp = null;
 let isLoadingOlderMessages = false;
 let cachedRooms = [];
-let _cowatchActive = false;
-let _cowatchHls = null;
-let _cowatchChannel = null;
+
 let _ytPlayer = null;
 let _isSettingVideoState = false;
 let _bypassPasswordRooms = new Set();
@@ -1142,13 +1140,12 @@ async function loadRooms(preloadedRooms = null) {
       rooms = data;
     }
     if (!rooms?.length) return;
+    // Exclude legacy popcorn/cowatch rooms from sidebar
+    rooms = rooms.filter(r => r.room_type !== 'cowatch' && !(r.name && r.name.toLowerCase().includes('popcorn')));
     cachedRooms = rooms;
     const textList = document.getElementById('room-list');
     if (textList) textList.innerHTML = '';
-    const normalRooms = rooms.filter(r => r.room_type !== 'cowatch');
-    const cowatchRooms = rooms.filter(r => r.room_type === 'cowatch');
-
-    normalRooms.forEach(room => {
+    rooms.forEach(room => {
       const icon = room.is_audio_enabled ? '🎤' : '💬';
       const li = document.createElement('li');
       li.textContent = `${icon} ${room.name}`;
@@ -1291,7 +1288,6 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   const el = document.getElementById('current-room-name');
   if (el) el.textContent = '# ' + currentRoom.name;
 
-  // Co-Watch/Popcorn layout removed
 
   const voiceControls = document.getElementById('voice-controls');
   const barDivider = document.getElementById('bar-divider');
@@ -1325,7 +1321,6 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     .limit(50);
 
   let messages = dbMessages || [];
-  // messages filtering logic for cowatch removed
 
   oldestMessageTimestamp = messages?.length ? messages[0].created_at : null;
   if (messages?.length) {
@@ -1986,7 +1981,6 @@ function renderUserList() {
       }
     }
   }
-  if (_cowatchActive) renderCoWatchParticipants();
 }
 
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
@@ -5793,7 +5787,6 @@ async function checkGlobalChatMute() {
 checkGlobalChatMute();
 setInterval(checkGlobalChatMute, 10000);
 
-// cc_popcorn_last_active interval removed
 
 async function toggleGlobalChatMute(active) {
   if (!currentProfile?.is_owner) {

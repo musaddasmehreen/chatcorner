@@ -209,7 +209,7 @@ async function leaveVoice() {
     participantLevels = {};
   }
 
-  const isPopcorn = false;
+
   const videoGrid = document.getElementById('video-grid');
   if (videoGrid) {
     videoGrid.innerHTML = '';
@@ -400,7 +400,7 @@ function createPeerConnection(peerId, username) {
     ensurePeerAudioElement(peerId, stream);
     attachAnalyserForStream(peerId, stream);
 
-    // popcorn presenter logic removed
+
   };
 
   pc.onconnectionstatechange = () => {
@@ -414,7 +414,7 @@ function createPeerConnection(peerId, username) {
 
 function ensurePeerTile(peerId, username) {
   let tile = document.getElementById('video-tile-' + peerId);
-  const isPopcorn = false;
+
   const grid = document.getElementById('video-grid');
   if (!tile && grid) {
     tile = document.createElement('div');
