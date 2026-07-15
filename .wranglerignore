@@ -1,3 +1,13 @@
 .git
 .wrangler
 node_modules
+*.apk
+*.sql
+*.md
+.github/
+scratch/
+LICENSE
+LICENSE.txt
+backup-proxy/
+mix-js/
+functions/
