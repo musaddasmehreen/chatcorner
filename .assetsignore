@@ -1,0 +1,13 @@
+*.apk
+*.sql
+*.md
+.github/
+scratch/
+LICENSE
+LICENSE.txt
+backup-proxy/
+mix-js/
+functions/
+.wrangler/
+node_modules/
+.git/
