@@ -56,12 +56,13 @@
   <link rel="preconnect" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.3"/>
-  <link rel="stylesheet" href="css/chat-extras-v3.css?v=1.5"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=2.2"/>
-  <link rel="stylesheet" href="css/games.css"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=1.5" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=2.2" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'"/>
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
     const CURRENT_VERSION = 'v19';
@@ -105,7 +106,7 @@
   <!-- ── Connection Error Banner ────────────────────────────────────────────── -->
   <div id="connection-error-banner" class="connection-error-banner hidden" role="alert">
     <span class="banner-text">⚠️ Connection lost or room limit reached. Reconnecting...</span>
-    <button class="banner-close" onclick="this.parentElement.classList.add('hidden')" title="Dismiss">✕</button>
+    <button class="banner-close" onclick="this.parentElement.classList.add('hidden')" title="Dismiss" aria-label="Dismiss">✕</button>
   </div>
 
   <!-- ── VPN Block Overlay ───────────────────────────────────────────────────── -->
@@ -123,11 +124,11 @@
     <div class="avatar-upload-box">
       <h3>🖼️ Update Avatar</h3>
       <div class="avatar-upload-preview">
-        <img id="avatar-preview" alt="Avatar preview" class="hidden"/>
+        <img id="avatar-preview" alt="Avatar preview" class="hidden" width="100" height="100"/>
         <span class="avatar-upload-hint" id="avatar-upload-hint">Select an image to preview your avatar.</span>
       </div>
       <canvas id="avatar-canvas" width="100" height="100" style="display:none" aria-hidden="true"></canvas>
-      <input type="file" id="avatar-file-input" accept="image/*" onchange="onAvatarFileSelect(event)"/>
+      <input type="file" id="avatar-file-input" accept="image/*" onchange="onAvatarFileSelect(event)" aria-label="Choose avatar image file"/>
       <div id="avatar-upload-error" class="avatar-upload-error hidden" role="alert" aria-live="polite"></div>
       <div class="avatar-upload-actions">
         <button class="btn-sm" onclick="closeAvatarUpload()">Cancel</button>
@@ -141,7 +142,7 @@
     <div class="avatar-upload-box">
       <h3>🔒 Password Protected Room</h3>
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">This room is locked. Enter the password to enter.</p>
-      <input type="password" id="room-access-password" placeholder="Enter room password..." style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
+      <input type="password" id="room-access-password" placeholder="Enter room password..." aria-label="Room access password" style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
       <div id="room-password-error" class="avatar-upload-error hidden" role="alert" style="color:#ef4444;margin-bottom:12px;">Incorrect password. Please try again.</div>
       <div class="avatar-upload-actions">
         <button class="btn-sm" onclick="closeRoomPasswordPrompt()">Cancel</button>
@@ -155,7 +156,7 @@
     <div class="avatar-upload-box">
       <h3 id="lock-modal-title">🔒 Room Lock Settings</h3>
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">Set a password to lock this room. Leave blank to unlock.</p>
-      <input type="password" id="room-lock-password" placeholder="Set password (leave blank to unlock)..." style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
+      <input type="password" id="room-lock-password" placeholder="Set password (leave blank to unlock)..." aria-label="Set room lock password" style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
       <div class="avatar-upload-actions">
         <button class="btn-sm" onclick="closeRoomLockSetup()">Cancel</button>
         <button class="btn-primary" id="btn-save-room-lock" onclick="saveRoomLockSettings()">Save</button>
@@ -280,7 +281,7 @@
         <div id="iptv-container" class="iptv-container hidden">
           <div class="iptv-sidebar">
             <div class="iptv-category-select-wrapper">
-              <select id="iptv-category-select" onchange="changeIPTVCategoryOrCountry(this.value)">
+              <select id="iptv-category-select" onchange="changeIPTVCategoryOrCountry(this.value)" aria-label="Select IPTV category or country">
                 <option value="country:pk">🇵🇰 Pakistan Channels</option>
                 <option value="country:in">🇮🇳 India Channels</option>
                 <option value="country:us">🇺🇸 United States Channels</option>
@@ -296,7 +297,7 @@
               </select>
             </div>
             <div class="iptv-search-bar">
-              <input type="text" id="iptv-channel-search" placeholder="Search channels..." oninput="onIPTVChannelSearchInput(this.value)"/>
+              <input type="text" id="iptv-channel-search" placeholder="Search channels..." aria-label="Search IPTV channels" oninput="onIPTVChannelSearchInput(this.value)"/>
             </div>
             <ul class="iptv-channel-list" id="iptv-channel-list"></ul>
           </div>
@@ -340,7 +341,7 @@
         <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
 
         <!-- Scroll to bottom button -->
-        <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom">↓ New messages</button>
+        <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom" aria-label="Scroll to bottom">↓ New messages</button>
 
         <!-- Minimized cams bar -->
         <div class="mini-cams-bar" id="minimized-cams-bar"></div>
@@ -361,8 +362,8 @@
         <div class="input-strip-left">
           <div id="emoji-picker" class="emoji-picker hidden" role="dialog"></div>
           <div id="room-image-url-popover" class="room-image-url-popover hidden">
-            <input id="room-image-url-input" type="url" placeholder="Paste image URL…" autocomplete="off"/>
-            <button class="btn-sm" id="btn-room-image-url-clear" title="Clear">✕</button>
+            <input id="room-image-url-input" type="url" placeholder="Paste image URL…" aria-label="Paste image URL" autocomplete="off"/>
+            <button class="btn-sm" id="btn-room-image-url-clear" title="Clear" aria-label="Clear">✕</button>
           </div>
           <div id="voice-note-preview-popover" class="voice-preview-popover hidden">
             <button id="btn-voice-note-play" class="btn-sm" style="background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">▶ Play</button>
@@ -373,7 +374,7 @@
           </div>
           
           <!-- Hamburger extras button (visible on mobile, positioned on the left side) -->
-          <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options">☰</button>
+          <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options" aria-label="More input options">☰</button>
 
           <div id="input-buttons-group" class="input-buttons-group">
             <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
@@ -402,9 +403,9 @@
           <audio id="voice-rec-playback-audio" class="hidden"></audio>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
-          <button class="input-btn" id="btn-voice-rec-discard" title="Discard" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">🗑️</button>
-          <button class="input-btn" id="btn-voice-rec-preview" title="Stop & Preview" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">⏹️</button>
-          <button class="input-btn" id="btn-voice-rec-send" title="Send" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">📤</button>
+          <button class="input-btn" id="btn-voice-rec-discard" title="Discard" aria-label="Discard recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">🗑️</button>
+          <button class="input-btn" id="btn-voice-rec-preview" title="Stop & Preview" aria-label="Stop recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">⏹️</button>
+          <button class="input-btn" id="btn-voice-rec-send" title="Send" aria-label="Send recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">📤</button>
         </div>
       </div>
     </div>
@@ -421,10 +422,10 @@
         <button class="btn-mute hidden" id="btn-mute" onclick="toggleMute()">🔇 Mute</button>
         <button class="btn-toggle-camera hidden" id="btn-toggle-camera" onclick="toggleCamera()">📷 Camera Off</button>
         <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
-        <label id="stealth-mode-label" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
+        <label id="stealth-mode-label" for="stealth-mode-checkbox" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
           <input type="checkbox" id="stealth-mode-checkbox" onchange="toggleStealthMode(this.checked)" style="cursor:pointer;" /> 🕵️ Stealth
         </label>
-        <label id="owner-global-mute-label" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(239,68,68,0.1);padding:4px 8px;border-radius:4px;border:1px solid #ef4444;">
+        <label id="owner-global-mute-label" for="owner-global-mute-checkbox" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(239,68,68,0.1);padding:4px 8px;border-radius:4px;border:1px solid #ef4444;">
           <input type="checkbox" id="owner-global-mute-checkbox" onchange="toggleGlobalChatMute(this.checked)" style="cursor:pointer;" /> 🚫 Mute Chat
         </label>
       </div>
@@ -434,17 +435,17 @@
 
       <!-- Radio controls -->
       <div class="radio-controls" id="radio-controls">
-        <button class="radio-toggle-btn" id="btn-radio-toggle" onclick="toggleRadioControls()" title="Toggle Online Radio">📻 Radio</button>
+        <button class="radio-toggle-btn" id="btn-radio-toggle" onclick="toggleRadioControls()" title="Toggle Online Radio" aria-label="Toggle radio">📻 Radio</button>
         
         <!-- Volume Control -->
         <div class="radio-volume-container hidden" id="radio-volume-container">
-          <button class="volume-btn" id="btn-radio-mute" onclick="toggleRadioMute()" title="Mute/Unmute">🔊</button>
-          <input type="range" id="radio-volume-slider" min="0" max="100" value="80" class="radio-volume-slider" title="Radio Volume" oninput="onRadioVolumeChange(this.value)"/>
+          <button class="volume-btn" id="btn-radio-mute" onclick="toggleRadioMute()" title="Mute/Unmute" aria-label="Mute radio">🔊</button>
+          <input type="range" id="radio-volume-slider" min="0" max="100" value="80" class="radio-volume-slider" title="Radio Volume" aria-label="Radio volume" oninput="onRadioVolumeChange(this.value)"/>
           <span class="volume-val" id="radio-volume-val">80%</span>
         </div>
         
         <div class="radio-selectors hidden" id="radio-selectors">
-          <select id="radio-country-select" class="radio-select" onchange="onRadioCountryChange(this.value)">
+          <select id="radio-country-select" class="radio-select" onchange="onRadioCountryChange(this.value)" aria-label="Select radio country">
             <option value="">-- Country --</option>
             <option value="PK">Pakistan 🇵🇰</option>
             <option value="IN">India 🇮🇳</option>
@@ -455,7 +456,7 @@
             <option value="AU">Australia 🇦🇺</option>
           </select>
           
-          <select id="radio-category-select" class="radio-select" onchange="onRadioCategoryChange(this.value)" disabled>
+          <select id="radio-category-select" class="radio-select" onchange="onRadioCategoryChange(this.value)" disabled aria-label="Select radio category">
             <option value="">-- Category --</option>
             <option value="all">All Categories</option>
             <option value="music">🎵 Music & Hits</option>
@@ -465,7 +466,7 @@
             <option value="devotional">🕌 Devotional / Sufi</option>
           </select>
           
-          <select id="radio-channel-select" class="radio-select" onchange="onRadioChannelChange(this.value)" disabled>
+          <select id="radio-channel-select" class="radio-select" onchange="onRadioChannelChange(this.value)" disabled aria-label="Select radio channel">
             <option value="">-- Set Channel --</option>
           </select>
         </div>
@@ -478,7 +479,7 @@
             <span></span>
             <span></span>
           </div>
-          <button class="btn-stop-radio" id="btn-stop-radio" onclick="stopRadioPlayer()">⏹️ Stop</button>
+          <button class="btn-stop-radio" id="btn-stop-radio" onclick="stopRadioPlayer()" aria-label="Stop radio">⏹️ Stop</button>
         </div>
       </div>
     </div>
@@ -495,7 +496,7 @@
   <div id="floating-camera-window" class="floating-camera hidden" aria-live="polite">
     <div id="floating-camera-header" class="floating-camera-header">
       <span id="floating-camera-title">📷 Camera</span>
-      <button id="floating-camera-close" class="floating-camera-close" type="button">✕</button>
+      <button id="floating-camera-close" class="floating-camera-close" type="button" aria-label="Close camera">✕</button>
     </div>
     <video id="floating-camera-video" autoplay playsinline></video>
   </div>
@@ -503,11 +504,11 @@
   <!-- Mobile Download App Modal -->
   <div id="download-app-modal" class="download-modal hidden" role="dialog" aria-modal="true">
     <div class="download-modal-content">
-      <button class="download-modal-close" onclick="closeDownloadModal()" title="Dismiss">✕</button>
+      <button class="download-modal-close" onclick="closeDownloadModal()" title="Dismiss" aria-label="Close download modal">✕</button>
       <div class="download-modal-icon">📱</div>
       <h3>Download ChatCorner Android App</h3>
       <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
-      <a href="https://github.com/musaddasmehreen/chatcorner/raw/main/chatcorner.apk" class="download-modal-btn" download>Download for Android</a>
+      <a href="https://github.com/musaddasmehreen/chatcorner/raw/main/chatcorner.apk" class="download-modal-btn" download rel="noopener">Download for Android</a>
       <div style="font-family: monospace; font-size: 11px; margin-top: 10px; color: rgba(255,255,255,0.6); word-break: break-all; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2);">
         SHA-256: <span id="apk-sha256">d146953b6576bd47d3e26fbb4c6b0e80724a895a2151e7b4645458e7004c005c</span>
       </div>
