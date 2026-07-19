@@ -6,11 +6,8 @@ $chatcornerPath = "C:\Users\HP\.gemini\antigravity\scratch\chatcorner"
 $androidPath = "C:\Users\HP\.gemini\antigravity\scratch\chatcorner-android"
 $wwwPath = "$androidPath\www"
 
-Write-Host "1. Syncing www repository with origin/main..." -ForegroundColor Cyan
-Set-Location $wwwPath
-git reset --hard
-git clean -fd
-git pull origin main
+Write-Host "1. Syncing www repository with latest local changes..." -ForegroundColor Cyan
+Copy-Item -Path "$chatcornerPath\*" -Destination $wwwPath -Recurse -Force -Exclude ".git", "node_modules", "chatcorner-updated.apk", "chatcorner.apk"
 
 Write-Host "2. Running Capacitor sync..." -ForegroundColor Cyan
 Set-Location $androidPath
@@ -21,7 +18,7 @@ Set-Location "$androidPath\android"
 .\gradlew.bat assembleDebug
 
 $builtApk = "$androidPath\android\app\build\outputs\apk\debug\app-debug.apk"
-$targetApk = "$chatcornerPath\chatcorner-updated.apk"
+$targetApk = "$chatcornerPath\chatcorner.apk"
 
 if (Test-Path $builtApk) {
     Write-Host "4. Copying built APK to chatcorner repository..." -ForegroundColor Cyan
@@ -43,7 +40,7 @@ if (Test-Path $builtApk) {
     
     Write-Host "7. Committing and pushing updated APK and chat.html..." -ForegroundColor Cyan
     Set-Location $chatcornerPath
-    git add chatcorner-updated.apk chat.html
+    git add chatcorner.apk chat.html
     git commit -m "Update Android APK & SHA-256 hash in chat.html"
     git push origin main
     
