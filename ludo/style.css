@@ -514,21 +514,21 @@ button {
 
 .game-layout {
   width: 100%;
-  max-width: 1600px;
+  max-width: none;
   margin: 0 auto;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  height: calc(100vh - 70px);
-  padding: 10px;
+  gap: 15px;
+  height: calc(100vh - 65px);
+  padding: 5px 15px;
   box-sizing: border-box;
 }
 
 @supports (height: 100dvh) {
   .game-layout {
-    height: calc(100dvh - 70px);
+    height: calc(100dvh - 65px);
   }
 }
 
@@ -539,36 +539,41 @@ button {
   flex: 1;
   height: 100%;
   position: relative;
+  min-width: 0;
 }
 
 .ludo-board {
-  width: min(90vw, 85vh);
-  height: min(90vw, 85vh);
+  width: min(calc(100vw - 360px), calc(100vh - 75px));
+  height: min(calc(100vw - 360px), calc(100vh - 75px));
+  aspect-ratio: 1 / 1;
   background: #f8fafc;
   border: 4px solid #111827;
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 0 10px rgba(0,0,0,0.1);
   position: relative;
-  max-width: 800px;
-  max-height: 800px;
+  max-width: none;
+  max-height: none;
 }
 
 @supports (height: 100dvh) {
   .ludo-board {
-    width: min(90vw, 85dvh);
-    height: min(90vw, 85dvh);
+    width: min(calc(100vw - 360px), calc(100dvh - 75px));
+    height: min(calc(100vw - 360px), calc(100dvh - 75px));
+    aspect-ratio: 1 / 1;
   }
 }
 
 .side-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 320px;
-  max-height: 100%;
+  gap: 10px;
+  width: 330px;
+  height: 100%;
+  max-height: calc(100vh - 75px);
   overflow-y: auto;
   padding-right: 5px;
+  flex-shrink: 0;
 }
 
 /* Mobile responsive layout */
@@ -1317,46 +1322,49 @@ button {
 
 @media (max-width: 1100px) {
   .game-layout {
-    max-width: 930px;
-    grid-template-columns: minmax(320px, 520px) minmax(215px, 260px);
+    max-width: none;
   }
 
   .ludo-board {
-    width: min(86vw, 56dvh, 520px);
-    height: min(86vw, 56dvh, 520px);
-  }
-
-  @supports (height: 100svh) {
-    .ludo-board {
-      width: min(86vw, 56svh, 520px);
-      height: min(86vw, 56svh, 520px);
-    }
+    width: min(calc(100vw - 340px), calc(100vh - 75px));
+    height: min(calc(100vw - 340px), calc(100vh - 75px));
+    aspect-ratio: 1 / 1;
+    max-width: none;
+    max-height: none;
   }
 }
 
 @media (max-width: 880px) {
   .game-layout {
-    grid-template-columns: 1fr;
-    max-width: 560px;
-    gap: 5px;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 65px);
+    max-width: none;
+    gap: 10px;
   }
 
   .side-panel {
     position: static;
-    max-width: 560px;
+    max-width: 600px;
     width: 100%;
     margin: 0 auto;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .ludo-board {
-    width: min(96vw, 45dvh, 500px);
-    height: min(96vw, 45dvh, 500px);
+    width: min(96vw, calc(100vh - 240px));
+    height: min(96vw, calc(100vh - 240px));
+    aspect-ratio: 1 / 1;
+    max-width: none;
+    max-height: none;
   }
 
-  @supports (height: 100svh) {
+  @supports (height: 100dvh) {
     .ludo-board {
-      width: min(96vw, 45svh, 500px);
-      height: min(96vw, 45svh, 500px);
+      width: min(96vw, calc(100dvh - 240px));
+      height: min(96vw, calc(100dvh - 240px));
+      aspect-ratio: 1 / 1;
     }
   }
 
@@ -2994,46 +3002,49 @@ button {
 
 @media (max-width: 1100px) {
   .game-layout {
-    max-width: 930px;
-    grid-template-columns: minmax(320px, 520px) minmax(215px, 260px);
+    max-width: none;
   }
 
   .ludo-board {
-    width: min(86vw, 56dvh, 520px);
-    height: min(86vw, 56dvh, 520px);
-  }
-
-  @supports (height: 100svh) {
-    .ludo-board {
-      width: min(86vw, 56svh, 520px);
-      height: min(86vw, 56svh, 520px);
-    }
+    width: min(calc(100vw - 340px), calc(100vh - 75px));
+    height: min(calc(100vw - 340px), calc(100vh - 75px));
+    aspect-ratio: 1 / 1;
+    max-width: none;
+    max-height: none;
   }
 }
 
 @media (max-width: 880px) {
   .game-layout {
-    grid-template-columns: 1fr;
-    max-width: 560px;
-    gap: 5px;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 65px);
+    max-width: none;
+    gap: 10px;
   }
 
   .side-panel {
     position: static;
-    max-width: 560px;
+    max-width: 600px;
     width: 100%;
     margin: 0 auto;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .ludo-board {
-    width: min(96vw, 45dvh, 500px);
-    height: min(96vw, 45dvh, 500px);
+    width: min(96vw, calc(100vh - 240px));
+    height: min(96vw, calc(100vh - 240px));
+    aspect-ratio: 1 / 1;
+    max-width: none;
+    max-height: none;
   }
 
-  @supports (height: 100svh) {
+  @supports (height: 100dvh) {
     .ludo-board {
-      width: min(96vw, 45svh, 500px);
-      height: min(96vw, 45svh, 500px);
+      width: min(96vw, calc(100dvh - 240px));
+      height: min(96vw, calc(100dvh - 240px));
+      aspect-ratio: 1 / 1;
     }
   }
 
@@ -3435,23 +3446,6 @@ button {
 
   .status-box {
     min-height: 26px;
-    font-size: 9.5px;
-  }
-
-  .summary-card,
-  .rules-box {
-    display: none;
-  }
-
-  .players-compact {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .player-card {
-    min-height: 28px;
-    padding: 4px;
-  }
-}
     font-size: 9.5px;
   }
 
