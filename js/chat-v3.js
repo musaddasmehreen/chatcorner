@@ -562,7 +562,59 @@ window._stealthModeActive = false;
 window._lastYouTubeLinkSentTime = 0;
 let _globalChatMuted = false;
 
+function toggleStealthMode(enabled) {
+  const isStaff = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  if (!isStaff) {
+    if (typeof showChatToast === 'function') showChatToast("⚠️ Only staff members can use Stealth Mode.", "warning");
+    const checkbox = document.getElementById('stealth-mode-checkbox');
+    if (checkbox) checkbox.checked = false;
+    return;
+  }
+
+  _stealthModeActive = !!enabled;
+  window._stealthModeActive = _stealthModeActive;
+  presenceBaseData.isStealth = _stealthModeActive;
+
+  try {
+    localStorage.setItem('chatcorner_stealth_mode', _stealthModeActive ? 'true' : 'false');
+  } catch (_) {}
+
+  const checkbox = document.getElementById('stealth-mode-checkbox');
+  if (checkbox) checkbox.checked = _stealthModeActive;
+
+  updateCurrentUserBadge();
+
+  if (presenceChannel) {
+    debouncedPresenceTrack();
+  }
+
+  if (typeof showChatToast === 'function') {
+    showChatToast(
+      _stealthModeActive 
+        ? "🕵️ Stealth Mode ENABLED. You are hidden from regular users in the roster." 
+        : "👁️ Stealth Mode DISABLED. You are now visible to everyone in the roster.", 
+      _stealthModeActive ? "info" : "success"
+    );
+  }
+  scheduleRenderUserList();
+}
+window.toggleStealthMode = toggleStealthMode;
+
 function updatePresenceBaseFromProfile(profile = currentProfile) {
+  const isStaff = profile?.is_admin || profile?.is_owner || profile?.is_mod;
+  if (isStaff) {
+    try {
+      const savedStealth = localStorage.getItem('chatcorner_stealth_mode');
+      if (savedStealth === 'true') {
+        _stealthModeActive = true;
+        window._stealthModeActive = true;
+      }
+    } catch (_) {}
+  } else {
+    _stealthModeActive = false;
+    window._stealthModeActive = false;
+  }
+
   presenceBaseData = {
     userId: currentUser?.id,
     username: profile?.username,
@@ -585,13 +637,16 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
 
   // Toggle visibility of stealth mode checkbox based on permissions
   const stealthLabel = document.getElementById('stealth-mode-label');
+  const stealthCheckbox = document.getElementById('stealth-mode-checkbox');
   if (stealthLabel) {
-    if (profile?.is_admin || profile?.is_owner || profile?.is_mod) {
+    if (isStaff) {
       stealthLabel.classList.remove('hidden');
       stealthLabel.style.display = 'inline-flex';
+      if (stealthCheckbox) stealthCheckbox.checked = _stealthModeActive;
     } else {
       stealthLabel.classList.add('hidden');
       stealthLabel.style.display = 'none';
+      if (stealthCheckbox) stealthCheckbox.checked = false;
     }
   }
 
@@ -1854,6 +1909,16 @@ function scheduleRenderUserList() {
   });
 }
 
+function shouldShowUserInRoster(u) {
+  if (!u) return false;
+  if (u.isStealth) {
+    const isViewerStaff = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+    if (!isViewerStaff) return false;
+  }
+  return true;
+}
+window.shouldShowUserInRoster = shouldShowUserInRoster;
+
 function renderUserList() {
   const ul   = document.getElementById('user-list');
   const ulMobile = document.getElementById('mobile-online-users');
@@ -1863,11 +1928,12 @@ function renderUserList() {
   const sortedUsers = getSortedOnlineUsers();
 
   sortedUsers.forEach(u => {
-    if (typeof shouldShowUserInRoster === 'function' && !shouldShowUserInRoster(u)) return;
+    if (!shouldShowUserInRoster(u)) return;
     const li = document.createElement('li');
     li.className = 'user-item';
     li.dataset.userId = u.userId;
     const roleBadge = getRoleBadgeHtml(u);
+    const stealthBadge = u.isStealth ? '<span class="role-badge" style="background:rgba(100,116,139,0.3);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);" title="Staff member in Stealth Mode">🕵️ Stealth</span>' : '';
     const viewerEye = onlineUsers[u.userId]?.viewingCam ? '<span class="viewer-eye" title="Watching a camera">👁️</span>' : '';
     const avatarHtml = u.avatarUrl
       ? `<img class="roster-avatar" src="${escHtml(u.avatarUrl)}" alt="${escHtml(u.username || '')} avatar"/>`
@@ -1885,6 +1951,7 @@ function renderUserList() {
       <span class="dot${u.registered ? '' : ' guest'}"></span>
       ${avatarHtml}
       ${roleBadge}
+      ${stealthBadge}
       <button type="button" class="user-name-btn${nameClass}${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${displayName}</button>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${escHtml(u.userId)}" title="View camera">\ud83d\udcf7</button>
@@ -1948,6 +2015,7 @@ function renderUserList() {
     bar.innerHTML = '';
     const bfrag = document.createDocumentFragment();
     sortedUsers.forEach(u => {
+      if (!shouldShowUserInRoster(u)) return;
       const pill = document.createElement('span');
       pill.className = 'room-user-pill';
       const isTyping = typingUsers.has(u.userId);
@@ -2089,7 +2157,8 @@ function showBlockedOverlay(message) {
 /* ── Typing indicator ── */
 function updateTypingIndicator() {
   let el = document.getElementById('typing-indicator');
-  const others = [...typingUsers.values()].filter(u => u.userId !== currentUser?.id);
+  const isViewerStaff = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  const others = [...typingUsers.values()].filter(u => u.userId !== currentUser?.id && (!onlineUsers[u.userId]?.isStealth || isViewerStaff));
   if (!others.length) { if (el) el.remove(); return; }
   if (!el) {
     el = document.createElement('div');
