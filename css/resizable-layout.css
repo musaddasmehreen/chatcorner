@@ -131,14 +131,25 @@
   flex-shrink: 0;
 }
 .theme-dot {
-  width: 16px;
-  height: 16px;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
   flex-shrink: 0;
   outline: none;
   transition: transform 0.12s, border-color 0.12s;
+}
+.theme-dot::before {
+  content: '';
+  position: absolute;
+  top: -13px;
+  bottom: -13px;
+  left: -13px;
+  right: -13px;
 }
 .theme-dot:hover { transform: scale(1.2); }
 .theme-dot.active { border-color: white; }
@@ -534,12 +545,14 @@
 
 /* Input buttons (emoji, image, mic) */
 .input-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 9px;
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.04);
-  font-size: 1rem;
+  font-size: 1.1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
