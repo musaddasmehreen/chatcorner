@@ -418,20 +418,22 @@ async function renderRoomsTable() {
   }
 
   const msgCounts = {};
-  const { data: counts } = await sbClient.from('messages').select('room_id');
-  (counts || []).forEach(m => { msgCounts[m.room_id] = (msgCounts[m.room_id] || 0) + 1; });
+  await Promise.all(roomsCache.map(async (room) => {
+    const { count } = await sbClient.from('messages').select('id', { count: 'exact', head: true }).eq('room_id', room.id);
+    msgCounts[room.id] = count || 0;
+  }));
 
   body.innerHTML = roomsCache.map(room => `
     <tr>
-      <td>${escHtml(room.name)}</td>
-      <td>${room.is_audio_enabled ? 'voice' : 'text'}</td>
+      <td><strong>${escHtml(room.name)}</strong></td>
+      <td><span class="badge ${room.is_audio_enabled ? 'admin' : 'registered'}">${room.is_audio_enabled ? '🎙️ Voice' : '💬 Text'}</span></td>
       <td>${formatDate(room.created_at)}</td>
-      <td>${msgCounts[room.id] || 0}</td>
-      <td>${room.is_locked ? '<span class="badge banned">Locked</span>' : '<span class="badge registered">Open</span>'}</td>
+      <td><strong>${msgCounts[room.id] || 0}</strong> msgs</td>
+      <td>${room.is_locked ? '<span class="badge banned">🔒 Locked</span>' : '<span class="badge registered">🟢 Open</span>'}</td>
       <td class="inline-row">
-        <button class="btn" title="Edit room name" onclick="editRoomName('${room.id}')">✏️ Edit Name</button>
-        <button class="btn" title="Toggle voice chat availability" onclick="toggleRoomVoice('${room.id}')">🔊 Toggle Voice</button>
-        <button class="btn" title="Lock or unlock message sending" onclick="toggleRoomLock('${room.id}')">🔒 Lock/Unlock</button>
+        <button class="btn" title="Edit room name" onclick="editRoomName('${room.id}')">✏️ Rename</button>
+        <button class="btn" title="Toggle voice chat availability" onclick="toggleRoomVoice('${room.id}')">🔊 ${room.is_audio_enabled ? 'Disable Voice' : 'Enable Voice'}</button>
+        <button class="btn" title="Lock or unlock message sending" onclick="toggleRoomLock('${room.id}')">${room.is_locked ? '🔓 Unlock' : '🔒 Lock'}</button>
         <button class="btn danger" title="Delete this room permanently" onclick="deleteRoom('${room.id}')">🗑️ Delete</button>
       </td>
     </tr>
@@ -687,32 +689,49 @@ function renderUsersTable() {
 
   body.innerHTML = rows.map(p => {
     const typeBadge = p.is_admin
-      ? '<span class="badge admin">admin</span>'
+      ? '<span class="badge admin">👑 Admin</span>'
       : (p.is_mod
-        ? '<span class="badge registered">mod</span>'
-        : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'registered' : 'guest'}</span>`);
-    const statusBadge = p.is_banned
-      ? `<span class="badge banned"><span class="status-dot red"></span>banned (${escHtml(formatBanExpiry(p))})</span>`
-      : '<span class="badge registered"><span class="status-dot green"></span>active</span>';
+        ? '<span class="badge registered" style="background:rgba(56,200,232,0.15);color:#38c8e8;border-color:rgba(56,200,232,0.3);">🛡️ Mod</span>'
+        : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'Registered' : 'Guest'}</span>`);
+
+    const vipBadge = p.is_vip ? ' <span class="badge" style="background:rgba(236,72,153,0.15);color:#f472b6;border-color:rgba(236,72,153,0.3);">🌟 VIP</span>' : '';
+    
+    const isKicked = p.kicked_until && new Date(p.kicked_until) > new Date();
+    let statusBadge = '<span class="badge registered"><span class="status-dot green"></span>Active</span>';
+    if (p.is_banned) {
+      statusBadge = `<span class="badge banned"><span class="status-dot red"></span>Banned (${escHtml(formatBanExpiry(p))})</span>`;
+    } else if (isKicked) {
+      const minsLeft = Math.ceil((new Date(p.kicked_until) - new Date()) / 60000);
+      statusBadge = `<span class="badge warning" style="background:rgba(245,158,11,0.15);color:#f59e0b;border-color:rgba(245,158,11,0.3);"><span class="status-dot orange"></span>Kicked (${minsLeft}m left)</span>`;
+    }
+
     const roleActions = p.is_admin || p.is_mod
       ? `<button class="btn" title="Remove admin/mod privileges" onclick="demoteUser('${p.id}')">⬇️ Demote</button>`
-      : `<button class="btn" title="Promote to admin" onclick="promoteToAdmin('${p.id}')">👑 Promote to Admin</button>
-         <button class="btn" title="Grant moderator role" onclick="makeMod('${p.id}')">🛡️ Make Mod</button>`;
+      : `<button class="btn" title="Promote to admin" onclick="promoteToAdmin('${p.id}')">👑 Admin</button>
+         <button class="btn" title="Grant moderator role" onclick="makeMod('${p.id}')">🛡️ Mod</button>`;
+
+    const kickAction = isKicked
+      ? `<button class="btn" title="Unkick user" onclick="unkickUser('${p.id}')">🔓 Unkick</button>`
+      : `<button class="btn" title="Kick user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>`;
+
+    const vipAction = `<button class="btn" title="${p.is_vip ? 'Revoke VIP status' : 'Grant VIP status'}" onclick="toggleVip('${p.id}')">${p.is_vip ? '💔 Revoke VIP' : '🌟 Make VIP'}</button>`;
+
     return `
       <tr>
         <td><input type="checkbox" class="user-select" value="${p.id}" /></td>
-        <td>${escHtml(p.username || 'Unknown')}</td>
+        <td><strong>${escHtml(p.username || 'Unknown')}</strong>${vipBadge}</td>
         <td>${escHtml(p.email || '—')}</td>
         <td>${typeBadge}</td>
         <td>${formatDate(p.created_at)}</td>
         <td>${formatDate(p.last_active || p.updated_at || p.created_at)}</td>
         <td>${statusBadge}</td>
         <td class="inline-row">
-          <button class="btn" title="View full profile details" onclick="viewProfile('${p.id}')">👁️ View</button>
+          <button class="btn" title="View full profile details" onclick="viewProfile('${p.id}')">👁️ Details</button>
           <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
-          <button class="btn" title="Kick this user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>
-          <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
+          ${kickAction}
+          ${vipAction}
           ${roleActions}
+          <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
         </td>
       </tr>
     `;
@@ -725,7 +744,7 @@ function renderUsersTable() {
 function viewProfile(userId) {
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
-  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nMod: ${p.is_mod ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nBan Expires: ${formatBanExpiry(p)}\nKicked Until: ${formatDate(p.kicked_until)}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nReason: ${p.ban_reason || '—'}`);
+  alert(`Profile Details\n\nUsername: ${p.username || '—'}\nEmail: ${p.email || '—'}\nRegistered: ${p.is_registered ? 'Yes' : 'No'}\nAdmin: ${p.is_admin ? 'Yes' : 'No'}\nMod: ${p.is_mod ? 'Yes' : 'No'}\nVIP: ${p.is_vip ? 'Yes' : 'No'}\nBanned: ${p.is_banned ? 'Yes' : 'No'}\nBan Expires: ${formatBanExpiry(p)}\nKicked Until: ${formatDate(p.kicked_until)}\nJoined: ${formatDate(p.created_at)}\nLast Active: ${formatDate(p.last_active || p.updated_at || p.created_at)}\nBan Reason: ${p.ban_reason || '—'}`);
 }
 
 async function setUserBan(userId, banned, reason = '', durationHours = null) {
@@ -809,27 +828,38 @@ async function demoteUser(userId) {
   await Promise.all([loadUsers(), loadStats(true)]);
 }
 
-async function kickUser(userId) {
-  if (!confirm('Kick this user for 30 minutes?')) return;
+async function kickUser(userId, minutes = 30) {
+  const p = profilesCache.find(x => x.id === userId);
+  const name = p ? p.username : 'user';
+  if (!confirm(`Kick ${name} for ${minutes} minutes?`)) return;
   showLoading(true);
-  const { error } = await sbClient.from('profiles').update({
-    kicked_until: new Date(Date.now() + (30 * 60 * 1000)).toISOString()
-  }).eq('id', userId);
+  const kickedUntil = new Date(Date.now() + (minutes * 60 * 1000)).toISOString();
+  const { error } = await sbClient.from('profiles').update({ kicked_until: kickedUntil }).eq('id', userId);
   showLoading(false);
   if (error) return toast(error.message, 'error');
-  toast('User kicked for 30 minutes.');
+  toast(`User ${name} kicked for ${minutes} minutes.`);
   await loadUsers();
 }
 
-// FIX 5D — Kick a user for 30 minutes
-async function kickUser(userId) {
-  const p = profilesCache.find(x => x.id === userId);
-  if (!p || !confirm('Kick ' + p.username + ' for 30 minutes?')) return;
+async function unkickUser(userId) {
   showLoading(true);
-  const { error } = await sbClient.from('profiles').update({ kicked_until: new Date(Date.now() + 1800000).toISOString() }).eq('id', userId);
+  const { error } = await sbClient.from('profiles').update({ kicked_until: null }).eq('id', userId);
   showLoading(false);
   if (error) return toast(error.message, 'error');
-  toast('User kicked for 30 minutes.');
+  toast('User kick status removed.');
+  await loadUsers();
+}
+
+async function toggleVip(userId) {
+  const p = profilesCache.find(x => x.id === userId);
+  if (!p) return;
+  const newVip = !p.is_vip;
+  if (!confirm((newVip ? 'Grant VIP status to ' : 'Remove VIP status from ') + (p.username || 'user') + '?')) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_vip: newVip }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast(`VIP status ${newVip ? 'granted' : 'removed'}.`);
   await loadUsers();
 }
 
