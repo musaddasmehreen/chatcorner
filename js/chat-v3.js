@@ -1848,7 +1848,7 @@ function buildMessageNode(msg) {
       ${deleteButton}
       ${reportButton}
       <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-text" style="${msgStyle}">${window.parseYouTubeEmbedHtml(escHtml(msg.content))}</div>
+      <div class="msg-text" style="${msgStyle}">${window.parseYouTubeEmbedHtml ? window.parseYouTubeEmbedHtml(escHtml(msg.content)) : escHtml(msg.content)}</div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -2215,6 +2215,25 @@ function showCamInArea(userId, username) {
 function escHtml(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+/* Convert YouTube URLs in already-escaped message text into a clickable link
+   plus a responsive sandboxed embed. Returns the input unchanged when no
+   YouTube URL is found. Defined on window so pm.js can reuse it. */
+window.parseYouTubeEmbedHtml = function(escapedText) {
+  const str = String(escapedText ?? '');
+  if (!str) return str;
+  const ytRe = /(https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?[^\s<>]*v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{6,15})[^\s<>]*)/i;
+  const match = str.match(ytRe);
+  if (!match) return str;
+  const videoId = match[2].replace(/[^A-Za-z0-9_-]/g, '');
+  if (!videoId) return str;
+  const link = `<a href="${match[1]}" target="_blank" rel="noopener noreferrer nofollow">${match[1]}</a>`;
+  const embed = `<div class="yt-embed" style="position:relative;width:100%;max-width:420px;padding-top:56.25%;margin-top:6px;border-radius:8px;overflow:hidden;">` +
+    `<iframe src="https://www.youtube.com/embed/${videoId}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" ` +
+    `sandbox="allow-scripts allow-same-origin allow-presentation" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" ` +
+    `allowfullscreen loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
+  return str.replace(match[1], link) + embed;
+};
 
 function formatTime(iso) {
   if (!iso) return '';
