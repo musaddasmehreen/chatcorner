@@ -85,7 +85,7 @@ function parseSuperEmojisHtml(text) {
 
 function setTheme(name) {
   if (!THEMES.includes(name)) return;
-  localStorage.setItem('cc-theme', name);
+  try { localStorage.setItem('cc-theme', name); } catch (_) {}
   applyTheme(name, true);
 }
 
@@ -1621,7 +1621,7 @@ async function sendMessage() {
     appendSystemMessage('No room selected. Please wait for rooms to load...');
     return;
   }
-  if (currentRoom.is_locked) {
+  if (currentRoom.is_locked && !isAdminOrOwnerOrMod) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
     return;
   }
@@ -2305,12 +2305,12 @@ function updateComposerState() {
   const guestNoticeBar = document.getElementById('guest-notice-bar');
   const joinVoiceBtn = document.getElementById('btn-join-voice');
   const isGuest = !isRegisteredUser();
-  const isLocked = !!currentRoom?.is_locked;
+  const isAdminOrOwnerOrMod = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  const isLocked = !!currentRoom?.is_locked && !isAdminOrOwnerOrMod;
 
   document.body.classList.toggle('guest-mode', isGuest);
   if (guestNoticeBar) guestNoticeBar.classList.toggle('hidden', !isGuest);
 
-  const isAdminOrOwnerOrMod = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
   const isChatBlocked = _globalChatMuted && !isAdminOrOwnerOrMod;
 
   if (isChatBlocked) {
@@ -2652,7 +2652,8 @@ async function startVoiceNoteRecording() {
       return;
     }
   }
-  if (currentRoom?.is_locked) {
+  const isAdminOrOwnerOrMod = currentProfile?.is_admin || currentProfile?.is_owner || currentProfile?.is_mod;
+  if (currentRoom?.is_locked && !isAdminOrOwnerOrMod) {
     appendSystemMessage('This room is locked by admin. Voice notes are disabled.');
     return;
   }
