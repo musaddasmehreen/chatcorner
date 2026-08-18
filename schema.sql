@@ -76,8 +76,8 @@ ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable read access to messages for all users" ON public.messages
     FOR SELECT USING (true);
 
-CREATE POLICY "Enable insert access to messages for all users" ON public.messages
-    FOR INSERT WITH CHECK (true);
+CREATE POLICY "Enable insert access to messages for authenticated users" ON public.messages
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
 
 -- 4. TABLE: active_users
@@ -97,11 +97,11 @@ ALTER TABLE public.active_users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable read access for active users" ON public.active_users
     FOR SELECT USING (true);
 
-CREATE POLICY "Enable insert/update for all users" ON public.active_users
-    FOR INSERT WITH CHECK (true);
+CREATE POLICY "Enable insert for authenticated users" ON public.active_users
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Enable update for all users" ON public.active_users
-    FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Enable update for authenticated users" ON public.active_users
+    FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
 
 
 -- 5. TABLE: app_settings

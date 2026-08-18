@@ -1,5 +1,14 @@
-const SUPABASE_URL  = 'https://zefcqrnhaeounzdmjscc.supabase.co';
-const SUPABASE_ANON = 'sb_publishable_eK7zh_aQUiFstC0xwqg3JQ_wWSt4S8M';
+// Load Supabase credentials from env-config.js if available; otherwise fall back to placeholders.
+const ENV = (typeof window !== 'undefined' && window.ENV) || {};
+
+let SUPABASE_URL = ENV.SUPABASE_URL || '';
+let SUPABASE_ANON = ENV.SUPABASE_ANON_KEY || '';
+
+if (!SUPABASE_URL || !SUPABASE_ANON) {
+  console.warn('[ChatCorner] SUPABASE_URL or SUPABASE_ANON_KEY not found in window.ENV. Using placeholder values; auth will fail. Run `node scripts/build-env-config.js` with the proper environment variables before deploying.');
+  SUPABASE_URL = SUPABASE_URL || 'https://YOUR_SUPABASE_PROJECT.supabase.co';
+  SUPABASE_ANON = SUPABASE_ANON || 'YOUR_SUPABASE_ANON_KEY';
+}
 
 const ICE_SERVERS = {
   iceServers: [

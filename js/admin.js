@@ -161,6 +161,44 @@ function bindUI() {
   document.getElementById('send-broadcast').addEventListener('click', sendBroadcast);
 
   document.getElementById('save-settings').addEventListener('click', saveSettings);
+
+  bindDelegatedActions();
+}
+
+function bindDelegatedActions() {
+  // Rooms table
+  const roomsBody = document.getElementById('rooms-body');
+  if (roomsBody) {
+    roomsBody.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const row = btn.closest('tr[data-room-id]');
+      if (!row) return;
+      const roomId = row.dataset.roomId;
+      const action = btn.dataset.action;
+      if (action === 'edit-room') editRoomName(roomId);
+      else if (action === 'toggle-room-voice') toggleRoomVoice(roomId);
+      else if (action === 'toggle-room-lock') toggleRoomLock(roomId);
+      else if (action === 'delete-room') deleteRoom(roomId);
+    });
+  }
+
+  // Messages logs table
+  const logsBody = document.getElementById('logs-body');
+  if (logsBody) {
+    logsBody.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const row = btn.closest('tr[data-message-id]');
+      if (!row) return;
+      const messageId = row.dataset.messageId;
+      const userId = row.dataset.userId;
+      const username = row.dataset.username;
+      const action = btn.dataset.action;
+      if (action === 'delete-message') deleteMessage(messageId);
+      else if (action === 'ban-from-message') banFromMessage(userId, username);
+    });
+  }
 }
 
 async function checkAdminAuth() {
@@ -424,17 +462,17 @@ async function renderRoomsTable() {
   }));
 
   body.innerHTML = roomsCache.map(room => `
-    <tr>
+    <tr data-room-id="${escHtml(room.id)}">
       <td><strong>${escHtml(room.name)}</strong></td>
       <td><span class="badge ${room.is_audio_enabled ? 'admin' : 'registered'}">${room.is_audio_enabled ? '🎙️ Voice' : '💬 Text'}</span></td>
       <td>${formatDate(room.created_at)}</td>
       <td><strong>${msgCounts[room.id] || 0}</strong> msgs</td>
       <td>${room.is_locked ? '<span class="badge banned">🔒 Locked</span>' : '<span class="badge registered">🟢 Open</span>'}</td>
       <td class="inline-row">
-        <button class="btn" title="Edit room name" onclick="editRoomName('${room.id}')">✏️ Rename</button>
-        <button class="btn" title="Toggle voice chat availability" onclick="toggleRoomVoice('${room.id}')">🔊 ${room.is_audio_enabled ? 'Disable Voice' : 'Enable Voice'}</button>
-        <button class="btn" title="Lock or unlock message sending" onclick="toggleRoomLock('${room.id}')">${room.is_locked ? '🔓 Unlock' : '🔒 Lock'}</button>
-        <button class="btn danger" title="Delete this room permanently" onclick="deleteRoom('${room.id}')">🗑️ Delete</button>
+        <button class="btn" title="Edit room name" data-action="edit-room">✏️ Rename</button>
+        <button class="btn" title="Toggle voice chat availability" data-action="toggle-room-voice">🔊 ${room.is_audio_enabled ? 'Disable Voice' : 'Enable Voice'}</button>
+        <button class="btn" title="Lock or unlock message sending" data-action="toggle-room-lock">${room.is_locked ? '🔓 Unlock' : '🔒 Lock'}</button>
+        <button class="btn danger" title="Delete this room permanently" data-action="delete-room">🗑️ Delete</button>
       </td>
     </tr>
   `).join('');
@@ -582,14 +620,14 @@ function renderLogsTable() {
     const profile = profilesCache.find(p => p.id === m.user_id);
     const type = profile?.is_registered ? 'registered ✓' : 'guest';
     return `
-      <tr>
+      <tr data-message-id="${escHtml(m.id)}" data-user-id="${escHtml(m.user_id || '')}" data-username="${escHtml(m.username || 'User')}">
         <td>${formatDate(m.created_at)}</td>
         <td>${escHtml(m.username || 'Unknown')}</td>
         <td><span class="badge ${profile?.is_registered ? 'registered' : 'guest'}">${escHtml(type)}</span></td>
         <td>${escHtml(m.content || '')}</td>
         <td class="inline-row">
-          <button class="btn danger" title="Delete this message permanently" onclick="deleteMessage('${m.id}')">🗑️ Delete</button>
-          <button class="btn" title="Ban this message sender" onclick="banFromMessage('${m.user_id}','${escHtml(m.username || 'User')}')">🚫 Ban User</button>
+          <button class="btn danger" title="Delete this message permanently" data-action="delete-message">🗑️ Delete</button>
+          <button class="btn" title="Ban this message sender" data-action="ban-from-message">🚫 Ban User</button>
         </td>
       </tr>
     `;

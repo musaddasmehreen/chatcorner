@@ -2,8 +2,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = 5000;
-const HOST = '0.0.0.0';
+const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -22,6 +22,12 @@ const MIME_TYPES = {
   '.txt': 'text/plain',
 };
 
+function setSecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+}
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -34,130 +40,6 @@ const server = http.createServer((req, res) => {
   }
 
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  if (parsedUrl.pathname === '/proxy') {
-    const targetUrl = parsedUrl.searchParams.get('url');
-    if (!targetUrl) {
-      res.writeHead(400, { 'Content-Type': 'text/plain' });
-      res.end('Missing url parameter');
-      return;
-    }
-    
-    let cleanUrl = targetUrl.trim();
-    if (!/^https?:\/\//i.test(cleanUrl)) {
-      cleanUrl = 'https://' + cleanUrl;
-    }
-
-    const clientModule = cleanUrl.startsWith('https') ? require('https') : require('http');
-    const options = {
-      headers: {
-        'User-Agent': req.headers['user-agent'] || '',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-      }
-    };
-
-    clientModule.get(cleanUrl, options, (proxyRes) => {
-      const resHeaders = {};
-      for (const [key, val] of Object.entries(proxyRes.headers)) {
-        if (!['x-frame-options', 'content-security-policy', 'frame-options', 'csp'].includes(key.toLowerCase())) {
-          resHeaders[key] = val;
-        }
-      }
-      resHeaders['Access-Control-Allow-Origin'] = '*';
-
-      const contentType = proxyRes.headers['content-type'] || '';
-      if (contentType.includes('text/html')) {
-        let body = '';
-        proxyRes.on('data', (chunk) => body += chunk);
-        proxyRes.on('end', () => {
-          // Strip client-side CSP and X-Frame-Options meta tags
-          body = body.replace(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
-          body = body.replace(/<meta\s+http-equiv=["']X-Frame-Options["'][^>]*>/gi, '');
-
-          const hostUrl = `http://${req.headers.host || 'localhost:5000'}`;
-          const proxyOrigin = hostUrl + '/proxy';
-
-          // Helper to resolve relative URLs
-          const resolveUrl = (rel, base) => {
-            try {
-              return new URL(rel, base).toString();
-            } catch(e) {
-              return rel;
-            }
-          };
-
-          // Rewrite links and forms to run absolutely through this proxy origin
-          body = body.replace(/(<a[^>]+href=["'])([^"']*)(["'])/gi, (match, p1, p2, p3) => {
-            const trimmed = p2.trim();
-            if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('javascript:') || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:')) {
-              return match;
-            }
-            return p1 + proxyOrigin + '?url=' + encodeURIComponent(resolveUrl(trimmed, cleanUrl)) + p3;
-          });
-          body = body.replace(/(<form[^>]+action=["'])([^"']*)(["'])/gi, (match, p1, p2, p3) => {
-            const trimmed = p2.trim();
-            if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('javascript:')) {
-              return match;
-            }
-            return p1 + proxyOrigin + '?url=' + encodeURIComponent(resolveUrl(trimmed, cleanUrl)) + p3;
-          });
-
-          const baseTag = `<base href="${cleanUrl}">`;
-          const injectScript = `
-<script>
-  (function() {
-    // Double-layer backup: Intercept link clicks in iframe
-    document.addEventListener('click', function(e) {
-      var a = e.target.closest('a');
-      if (a && a.href) {
-        var href = a.href.trim();
-        if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
-          return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        window.location.href = "${hostUrl}/proxy?url=" + encodeURIComponent(a.href);
-      }
-    }, true);
-
-    // Intercept form submissions in iframe
-    document.addEventListener('submit', function(e) {
-      var form = e.target;
-      var method = (form.method || 'get').toLowerCase();
-      if (method === 'get' && form.action) {
-        e.preventDefault();
-        e.stopPropagation();
-        var url = new URL(form.action);
-        var formData = new FormData(form);
-        for (var pair of formData.entries()) {
-          url.searchParams.set(pair[0], pair[1]);
-        }
-        window.location.href = "${hostUrl}/proxy?url=" + encodeURIComponent(url.toString());
-      }
-    }, true);
-  })();
-</script>
-`;
-          if (body.includes('<head>')) {
-            body = body.replace('<head>', `<head>${baseTag}${injectScript}`);
-          } else if (body.includes('<HEAD>')) {
-            body = body.replace('<HEAD>', `<HEAD>${baseTag}${injectScript}`);
-          } else {
-            body = baseTag + injectScript + body;
-          }
-          
-          res.writeHead(proxyRes.statusCode || 200, resHeaders);
-          res.end(body);
-        });
-      } else {
-        res.writeHead(proxyRes.statusCode || 200, resHeaders);
-        proxyRes.pipe(res);
-      }
-    }).on('error', (err) => {
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('Proxy Error: ' + err.message);
-    });
-    return;
-  }
 
   let urlPath = req.url.split('?')[0];
   if (urlPath === '/') urlPath = '/chat.html';
@@ -175,10 +57,12 @@ const server = http.createServer((req, res) => {
       const chatPath = path.join(__dirname, 'chat.html');
       fs.readFile(chatPath, (err2, data) => {
         if (err2) {
+          setSecurityHeaders(res);
           res.writeHead(404);
           res.end('Not found');
           return;
         }
+        setSecurityHeaders(res);
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(data);
       });
@@ -190,10 +74,12 @@ const server = http.createServer((req, res) => {
 
     fs.readFile(filePath, (err2, data) => {
       if (err2) {
+        setSecurityHeaders(res);
         res.writeHead(500);
         res.end('Internal server error');
         return;
       }
+      setSecurityHeaders(res);
       res.writeHead(200, { 'Content-Type': contentType });
       res.end(data);
     });

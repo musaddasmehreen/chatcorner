@@ -1,0 +1,24 @@
+{
+  "name": "chatcorner",
+  "version": "1.0.0",
+  "description": "Real-time decentralized chat with voice, video, and private messaging",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "node scripts/build-env-config.js && echo 'Static build ready'",
+    "start": "node server.js"
+  },
+  "keywords": [
+    "chat",
+    "pwa",
+    "supabase",
+    "webrtc"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
