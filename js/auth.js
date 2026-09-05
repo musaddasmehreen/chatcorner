@@ -29,8 +29,9 @@ async function loginUser() {
     }
   }
 
-  // ── Security: sanitise identifier (strip HTML, limit length) ─────
-  const safeId = window.ccSanitize ? window.ccSanitize.username(loginId).slice(0, 128) : loginId;
+  const lowerLoginId = loginId.toLowerCase();
+  const isEmailIdentifier = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lowerLoginId);
+  const safeId = window.ccSanitize ? window.ccSanitize.username(loginId) : loginId;
   if (window.ccThreatDetect?.isSuspicious(loginId)) {
     showMsg(msg, 'Incorrect username/email or password.', 'error'); // generic — don't reveal reason
     return;
@@ -38,28 +39,29 @@ async function loginUser() {
 
   showMsg(msg, 'Logging in…', '');
 
-  let email = '';
+  let email = isEmailIdentifier ? lowerLoginId : '';
 
-  // 1) Try username lookup in profiles (may be blocked by RLS when unauthenticated)
-  const { data: byUsername } = await sbClient
-    .from('profiles')
-    .select('email')
-    .ilike('username', safeId)
-    .maybeSingle();
-  if (byUsername?.email) email = byUsername.email;
-
-  // 2) Try email lookup in profiles
-  if (!email) {
-    const { data: byEmail } = await sbClient
+  if (!isEmailIdentifier) {
+    // 1) Try username lookup in profiles (may be blocked by RLS when unauthenticated)
+    const { data: byUsername, error: byUsernameErr } = await sbClient
       .from('profiles')
       .select('email')
-      .ilike('email', safeId)
+      .ilike('username', safeId)
       .maybeSingle();
-    if (byEmail?.email) email = byEmail.email;
-  }
+    if (byUsernameErr) console.warn('[login] username lookup error:', byUsernameErr);
+    if (byUsername?.email) email = byUsername.email;
 
-  // 3) Direct email field
-  if (!email && safeId.includes('@')) email = safeId;
+    // 2) If username lookup misses but identifier still looks email-like, try profiles.email
+    if (!email && safeId.includes('@')) {
+      const { data: byEmail, error: byEmailErr } = await sbClient
+        .from('profiles')
+        .select('email')
+        .ilike('email', lowerLoginId)
+        .maybeSingle();
+      if (byEmailErr) console.warn('[login] email lookup error:', byEmailErr);
+      if (byEmail?.email) email = byEmail.email;
+    }
+  }
 
   // 4) Fallback: use cc_pending_email saved at registration time.
   //    This handles the case where RLS blocks the profiles lookup for
