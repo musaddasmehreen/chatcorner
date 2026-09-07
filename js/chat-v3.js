@@ -350,6 +350,41 @@ function isGuestProfile(profile = currentProfile) {
   return !!profile && profile.is_registered === false;
 }
 
+function buildGuestProfile(user = currentUser) {
+  const fallbackId = String(user?.id || '').replace(/-/g, '');
+  const randomSuffix = fallbackId
+    || (window.crypto?.randomUUID ? window.crypto.randomUUID().replace(/-/g, '') : String(Date.now()));
+  return {
+    id: user?.id,
+    username: currentProfile?.username || `Guest_${randomSuffix.slice(0, 8).toUpperCase()}`,
+    avatar_color: currentProfile?.avatar_color || randomColor(),
+    avatar_url: currentProfile?.avatar_url || null,
+    is_registered: false
+  };
+}
+
+async function ensureGuestProfileRecord(user = currentUser) {
+  if (!user?.id || user.is_anonymous !== true) {
+    return currentProfile;
+  }
+
+  const guestProfile = buildGuestProfile(user);
+  const { data, error } = await sbClient
+    .from('profiles')
+    .upsert(guestProfile)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.warn('Guest profile upsert failed:', error);
+    currentProfile = { ...guestProfile };
+    return currentProfile;
+  }
+
+  currentProfile = { ...guestProfile, ...data };
+  return currentProfile;
+}
+
 function clearGuestLocalState(userId = currentUser?.id) {
   if (!userId) return;
   delete onlineUsers[userId];
@@ -901,15 +936,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   const initialRooms = roomsResult.data || [];
 
   if (!prof) {
-    const username = 'Guest' + currentUser.id.substr(0,4);
-    // [EPHEMERAL GUEST FIX] Do not insert guest into DB 'profiles' table
-    // Guests only exist in memory and in the messages table
-    prof = {
-      id: currentUser.id,
-      username: username,
-      avatar_color: randomColor(),
-      is_registered: false
-    };
+    prof = currentUser?.is_anonymous
+      ? await ensureGuestProfileRecord(currentUser)
+      : buildGuestProfile(currentUser);
   }
 
   currentProfile = prof;
@@ -1659,6 +1688,9 @@ async function sendMessage() {
       return;
     }
   }
+  if (currentUser?.is_anonymous) {
+    await ensureGuestProfileRecord();
+  }
   const safeText = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
   const finalContent = isSendingImage ? safeImageUrl : safeText;
 
@@ -1724,11 +1756,6 @@ async function sendMessage() {
   } else if (optimisticNode) {
     optimisticNode.classList.remove('msg-row--pending');
     _optimisticPending.delete(tempId);
-  }
-
-  // Delete guest messages immediately from the database to keep history empty for guests
-  if (!isRegisteredUser() && insertedMsgs?.[0]?.id) {
-    void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
   }
 
   if (isSendingImage) {
@@ -2777,6 +2804,9 @@ async function startVoiceNoteRecording() {
               showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
               return;
             }
+            if (currentUser?.is_anonymous) {
+              await ensureGuestProfileRecord();
+            }
             previewPopover.classList.add('hidden');
             previewAudio.src = '';
 
@@ -2790,9 +2820,6 @@ async function startVoiceNoteRecording() {
             if (error) {
               appendSystemMessage('Could not send voice note. Please try again.');
             } else if (!isRegisteredUser()) {
-              if (insertedMsgs?.[0]?.id) {
-                void sbClient.from('messages').delete().eq('id', insertedMsgs[0].id);
-              }
               const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
               localStorage.setItem('cc-guest-voice-used', String(newCount));
               if (newCount >= GUEST_VOICE_LIMIT) {
@@ -6053,4 +6080,3 @@ window.enterLudoRoom = enterLudoRoom;
 window.exitLudoRoom = exitLudoRoom;
 
 window.toggleGlobalChatMute = toggleGlobalChatMute;
-
