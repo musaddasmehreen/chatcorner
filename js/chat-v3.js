@@ -352,9 +352,11 @@ function isGuestProfile(profile = currentProfile) {
 
 function buildGuestProfile(user = currentUser) {
   const fallbackId = String(user?.id || '').replace(/-/g, '');
+  const randomSuffix = fallbackId
+    || (window.crypto?.randomUUID ? window.crypto.randomUUID().replace(/-/g, '') : String(Date.now()));
   return {
     id: user?.id,
-    username: currentProfile?.username || `Guest_${fallbackId.slice(0, 8).toUpperCase() || Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+    username: currentProfile?.username || `Guest_${randomSuffix.slice(0, 8).toUpperCase()}`,
     avatar_color: currentProfile?.avatar_color || randomColor(),
     avatar_url: currentProfile?.avatar_url || null,
     is_registered: false
