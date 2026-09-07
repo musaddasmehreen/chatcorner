@@ -258,6 +258,8 @@ let _pendingRoomEntryCallback = null;
 const CLEARED_MESSAGE_ARCHIVE_KEY = 'cc-cleared-message-archive';
 const MAX_CLEARED_MESSAGE_ARCHIVE_ITEMS = 250;
 const DELETED_MESSAGE_PREFIX = '🗑️ Message deleted by ';
+const MESSAGE_CACHE_TTL_MS = 60 * 60 * 1000;
+const DELETED_MESSAGE_TOMBSTONE_KEY_PREFIX = 'cc-deleted-msgs-';
 const AUTH_ENTRY_PAGE_URL = 'login.html';
 const IGNORED_USERS_STORAGE_KEY = 'cc-ignored-users';
 const POST_LOGIN_REDIRECT_MAX_AGE_MS = 15_000;
@@ -299,6 +301,70 @@ function autoResizeTextarea(el) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRoomMessageCacheKey(roomId) {
+  return roomId ? `cc-msgs-${roomId}` : '';
+}
+
+function getDeletedMessageTombstoneKey(roomId) {
+  return roomId ? `${DELETED_MESSAGE_TOMBSTONE_KEY_PREFIX}${roomId}` : '';
+}
+
+function readDeletedMessageTombstones(roomId) {
+  if (!roomId) return {};
+  const storageKey = getDeletedMessageTombstoneKey(roomId);
+  try {
+    const raw = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    const now = Date.now();
+    const tombstones = {};
+    let changed = false;
+    Object.entries(raw || {}).forEach(([messageId, ts]) => {
+      if (!messageId) {
+        changed = true;
+        return;
+      }
+      const stamp = Number(ts);
+      if (!Number.isFinite(stamp) || now - stamp > MESSAGE_CACHE_TTL_MS) {
+        changed = true;
+        return;
+      }
+      tombstones[messageId] = stamp;
+    });
+    if (changed) {
+      localStorage.setItem(storageKey, JSON.stringify(tombstones));
+    }
+    return tombstones;
+  } catch (_) {
+    return {};
+  }
+}
+
+function filterDeletedMessages(messages, roomId = currentRoom?.id) {
+  if (!Array.isArray(messages) || !messages.length) return [];
+  const tombstones = readDeletedMessageTombstones(roomId);
+  return messages.filter(msg => msg && msg.type !== 'system' && !msg.is_deleted && (!msg.id || !tombstones[msg.id]));
+}
+
+function rememberDeletedMessage(messageId, roomId = currentRoom?.id) {
+  if (!messageId || !roomId) return;
+  try {
+    const tombstones = readDeletedMessageTombstones(roomId);
+    tombstones[messageId] = Date.now();
+    localStorage.setItem(getDeletedMessageTombstoneKey(roomId), JSON.stringify(tombstones));
+
+    const cacheKey = getRoomMessageCacheKey(roomId);
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+    if (cached?.msgs?.length) {
+      const msgs = cached.msgs.filter(msg => msg?.id !== messageId);
+      localStorage.setItem(cacheKey, JSON.stringify({ ...cached, msgs }));
+    }
+  } catch (_) {}
+}
+
+function isDeletedMessage(messageId, roomId = currentRoom?.id) {
+  if (!messageId || !roomId) return false;
+  return Boolean(readDeletedMessageTombstones(roomId)[messageId]);
 }
 
 async function waitForRestoredSession({ attempts = 12, delayMs = 250 } = {}) {
@@ -1404,7 +1470,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     .order('created_at', { ascending: true })
     .limit(50);
 
-  let messages = dbMessages || [];
+  let messages = filterDeletedMessages(dbMessages || [], room.id);
 
   oldestMessageTimestamp = messages?.length ? messages[0].created_at : null;
   if (messages?.length) {
@@ -1415,22 +1481,24 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !messages || messages.length < 50);
 
   // Batch-append for performance (skip persisted system/deletion notices so newcomers don't see them)
-  const MSG_CACHE_KEY = `cc-msgs-${room.id}`;
-  const MSG_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+  const MSG_CACHE_KEY = getRoomMessageCacheKey(room.id);
 
   // Feature 3 — Try restoring from localStorage cache first (shows instantly before DB responds)
   if (!messages?.length) {
     try {
       const cached = JSON.parse(localStorage.getItem(MSG_CACHE_KEY) || 'null');
-      if (cached && cached.ts && Date.now() - cached.ts < MSG_CACHE_TTL && cached.msgs?.length) {
+      if (cached && cached.ts && Date.now() - cached.ts < MESSAGE_CACHE_TTL_MS && cached.msgs?.length) {
+        const cachedMessages = filterDeletedMessages(cached.msgs, room.id);
         const container = document.getElementById('messages');
         const frag = document.createDocumentFragment();
-        cached.msgs.forEach(m => {
-          if (m.type === 'system') return;
+        cachedMessages.forEach(m => {
           const node = buildMessageNode(m);
           if (node) { node.classList.add('msg-row--cached'); frag.appendChild(node); }
         });
         container.appendChild(frag);
+        if (cachedMessages.length !== cached.msgs.length) {
+          localStorage.setItem(MSG_CACHE_KEY, JSON.stringify({ ...cached, msgs: cachedMessages }));
+        }
         refreshIgnoredMessageVisibility();
         scrollToBottom();
       }
@@ -1441,7 +1509,6 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     const container = document.getElementById('messages');
     const frag = document.createDocumentFragment();
     messages.forEach(m => {
-      if (m.type === 'system') return; // deletion notices are transient — don't show in history
       const node = buildMessageNode(m);
       if (node) frag.appendChild(node);
     });
@@ -1463,7 +1530,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     }, async payload => {
       if (!canProcessIncomingPayload(payload.new?.user_id)) return;
       // Skip system (deletion notice) messages from DB realtime — they are shown locally and auto-expire
-      if (payload.new?.type === 'system') return;
+      if (payload.new?.type === 'system' || payload.new?.is_deleted || isDeletedMessage(payload.new?.id, room.id)) return;
       // Skip if this is our own optimistic message already shown
       if (payload.new?.id && _optimisticPending.has(payload.new.id)) {
         _optimisticPending.delete(payload.new.id);
@@ -1497,6 +1564,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       event: 'DELETE', schema: 'public', table: 'messages',
       filter: `room_id=eq.${room.id}`
     }, payload => {
+      rememberDeletedMessage(payload.old?.id, room.id);
       removeMessageNodeById(payload.old?.id);
     })
     .on('postgres_changes', {
@@ -1504,6 +1572,11 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       filter: `room_id=eq.${room.id}`
     }, payload => {
       handleRealtimeMessageUpdate(payload.new);
+    })
+    .on('broadcast', { event: 'message-deleted' }, ({ payload }) => {
+      if (payload?.roomId !== room.id) return;
+      rememberDeletedMessage(payload.messageId, room.id);
+      removeMessageNodeById(payload.messageId);
     })
     .subscribe((status) => {
       const banner = document.getElementById('connection-error-banner');
@@ -2103,28 +2176,29 @@ async function loadOlderMessages() {
   isLoadingOlderMessages = false;
   if (btn) { btn.disabled = false; btn.textContent = '⬆ Load older messages'; }
 
-  if (!older?.length) {
+  const olderMessages = filterDeletedMessages(older || [], currentRoom.id);
+
+  if (!olderMessages.length) {
     if (btn) { btn.classList.add('hidden'); btn.textContent = 'No more messages'; }
     return;
   }
 
-  const senderIds = Array.from(new Set(older.map(m => m.user_id).filter(Boolean)));
+  const senderIds = Array.from(new Set(olderMessages.map(m => m.user_id).filter(Boolean)));
   await cacheSenderProfiles(senderIds);
 
   const container = document.getElementById('messages');
   const prevScrollHeight = container.scrollHeight;
   const frag = document.createDocumentFragment();
 
-  [...older].reverse().forEach(m => {
-    if (m.type === 'system') return; // skip deletion notices in paginated history too
+  [...olderMessages].reverse().forEach(m => {
     const node = buildMessageNode(m);
     if (node) frag.appendChild(node);
   });
   container.insertBefore(frag, container.firstChild);
   container.scrollTop = container.scrollHeight - prevScrollHeight;
 
-  oldestMessageTimestamp = older[older.length - 1].created_at;
-  if (older.length < 50 && btn) btn.classList.add('hidden');
+  oldestMessageTimestamp = olderMessages[olderMessages.length - 1].created_at;
+  if ((older?.length || 0) < 50 && btn) btn.classList.add('hidden');
 }
 
 /* ── Message Search ── */
@@ -2914,6 +2988,7 @@ function buildSystemMessageNode(content, createdAt) {
 
 function handleRealtimeMessageUpdate(msg) {
   if (!msg?.id || !msg?.is_deleted) return;
+  rememberDeletedMessage(msg.id, currentRoom?.id);
   const deletedBy = msg.deleted_by || msg.username || 'Moderator';
   const replacement = buildSystemMessageNode(
     `${DELETED_MESSAGE_PREFIX}${deletedBy}`,
@@ -2936,6 +3011,23 @@ async function deleteMessageForEveryone(messageId, targetUserId, targetUsername)
   const deletingAsModerator = !deletingOwn && canDeleteAnyMessage();
   const { error: deleteError } = await sbClient.from('messages').delete().eq('id', messageId);
   if (deleteError) throw deleteError;
+
+  rememberDeletedMessage(messageId, currentRoom?.id);
+  if (messageChannel && currentRoom?.id) {
+    try {
+      await messageChannel.send({
+        type: 'broadcast',
+        event: 'message-deleted',
+        payload: { roomId: currentRoom.id, messageId }
+      });
+    } catch (broadcastError) {
+      console.warn('Failed to broadcast message deletion', {
+        roomId: currentRoom.id,
+        messageId,
+        error: broadcastError?.message || broadcastError
+      });
+    }
+  }
 
   if (deletingAsModerator && currentRoom?.id) {
     const deleterName = currentProfile?.username || 'Admin';
