@@ -1,32 +1,36 @@
 # ChatCorner
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+ChatCorner is a mixed static + Supabase realtime chat app with virtual rooms (including Ludo and IPTV), PM, voice, moderation, and an auxiliary Vite frontend bundle.
 
-ChatCorner is a realtime chat application built with JavaScript, HTML, and CSS.
+## Stack
+- Static entry pages: HTML/CSS/vanilla JS
+- Realtime/auth/data: Supabase (`@supabase/supabase-js`)
+- Voice/PM signaling: Supabase broadcast + WebRTC helpers
+- Optional frontend app: React + Vite under `/frontend`
+- Deployment: Cloudflare Pages assets configuration via `wrangler.jsonc`
 
-## Tech Stack
+## Primary entry points
+- Root chat UI: `/chat.html`, `/js/chat-v3.js`, `/js/audio-v3.js`, `/js/pm.js`
+- Legacy/alternate chat UI: `/chat.js`, `/js/chat.js`, `/js/audio.js`
+- Shared client/session config: `/js/config.js`
+- Ludo room app: `/ludo/index.html`, `/ludo/ludo.js`, `/ludo/style.css`
+- Admin flows: `/admin.html`, `/adminup.html`, `/setup-admin.html`, `/js/admin.js`
 
-- JavaScript
-- HTML
-- CSS
+## Architecture map
+- High-level system lifecycle and realtime event directory: `/ARCHITECTURE.md`
+- AI file ownership cheat sheet: `/AI_CONTEXT.md`
+- Ludo engine/session notes: `/ludo/README.md`
 
-## Features
+## Local run
+- Static pages: serve repository root (or open `chat.html` directly for basic flows)
+- React frontend (optional):
+  - `cd /home/runner/work/chatcorner/chatcorner/frontend`
+  - `npm install`
+  - `npm run dev` or `npm run build`
 
-- User login/register and guest access
-- Room-based text chat
-- Online users list
-- Voice and video room support (guests and registered users)
-
-## How to Run
-
-1. Clone this repository.
-2. Open `chat.html` in your browser (or serve the project with any static file server).
-3. Start chatting in ChatCorner.
-
-## Topics
-
-Recommended repository topics: `chat`, `javascript`, `html`, `css`, `realtime`.
+## Deployment notes
+- Cloudflare deploy workflow uses Wrangler 4 for assets-only deployment (`wrangler.jsonc` + `.github/workflows/deploy.yml`).
+- Supabase schema bootstrap files live at `/schema.sql` and `/schema-updates.sql`.
 
 ## License
-
-This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
+MIT — see `/LICENSE`.
