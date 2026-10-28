@@ -50,6 +50,8 @@ button {
 .mix-ludo-app {
   min-height: 100vh;
   min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
   padding: 5px;
   padding-left: max(5px, env(safe-area-inset-left));
   padding-right: max(5px, env(safe-area-inset-right));
@@ -517,18 +519,20 @@ button {
   max-width: none;
   margin: 0 auto;
   display: flex;
-  flex-direction: row;
+  flex: 1;
+  min-height: 0;
   align-items: center;
   justify-content: center;
-  gap: 15px;
-  height: calc(100vh - 65px);
-  padding: 5px 15px;
+  gap: 8px;
+  height: calc(100vh - 76px);
+  padding: 4px 10px 10px;
   box-sizing: border-box;
+  position: relative;
 }
 
 @supports (height: 100dvh) {
   .game-layout {
-    height: calc(100dvh - 65px);
+    height: calc(100dvh - 76px);
   }
 }
 
@@ -540,11 +544,12 @@ button {
   height: 100%;
   position: relative;
   min-width: 0;
+  min-height: 0;
 }
 
 .ludo-board {
-  width: min(calc(100vw - 360px), calc(100vh - 75px));
-  height: min(calc(100vw - 360px), calc(100vh - 75px));
+  width: min(100%, calc(100dvh - 98px));
+  height: min(100%, calc(100dvh - 98px));
   aspect-ratio: 1 / 1;
   background: #f8fafc;
   border: 4px solid #111827;
@@ -552,14 +557,14 @@ button {
   overflow: hidden;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 0 10px rgba(0,0,0,0.1);
   position: relative;
-  max-width: none;
-  max-height: none;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 @supports (height: 100dvh) {
   .ludo-board {
-    width: min(calc(100vw - 360px), calc(100dvh - 75px));
-    height: min(calc(100vw - 360px), calc(100dvh - 75px));
+    width: min(100%, calc(100dvh - 98px));
+    height: min(100%, calc(100dvh - 98px));
     aspect-ratio: 1 / 1;
   }
 }
@@ -568,12 +573,34 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: 330px;
-  height: 100%;
-  max-height: calc(100vh - 75px);
+  width: min(320px, 30vw);
+  height: calc(100% - 10px);
+  max-height: calc(100% - 10px);
   overflow-y: auto;
-  padding-right: 5px;
+  padding-right: 2px;
   flex-shrink: 0;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 25;
+  transition: transform 0.25s ease;
+}
+
+.side-panel.is-collapsed {
+  transform: translateX(calc(100% - 42px));
+}
+
+.side-panel-toggle {
+  width: fit-content;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(15, 23, 42, 0.65);
+  color: #ffcc00;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  margin: -2px 0 2px;
 }
 
 /* Mobile responsive layout */
@@ -581,7 +608,7 @@ button {
   .game-layout {
     flex-direction: column;
     height: auto;
-    min-height: calc(100vh - 70px);
+    min-height: calc(100vh - 76px);
     justify-content: flex-start;
   }
   .board-wrap {
@@ -593,9 +620,13 @@ button {
     height: 96vw;
   }
   .side-panel {
+    position: static;
+    height: auto;
+    max-height: none;
     width: 100%;
     max-width: 500px;
     overflow-y: visible;
+    transform: none !important;
   }
 }
 
@@ -1320,17 +1351,267 @@ button {
   background: #020617;
 }
 
+.ludo-entry-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.78);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 18px;
+}
+
+.ludo-entry-modal.visible {
+  display: flex;
+}
+
+.ludo-entry-card {
+  width: min(360px, 92vw);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: center;
+}
+
+.ludo-entry-card h2 {
+  margin: 0 0 6px;
+  color: #ffcc00;
+  font-size: 20px;
+}
+
+.ludo-entry-card p {
+  margin: 0 0 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.ludo-entry-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ludo-entry-actions button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 8px;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, #ffcc00, #ff7a00);
+  color: #111827;
+}
+
+.ludo-entry-actions button.secondary {
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+  color: #fff;
+}
+
+.ludo-entry-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ludo-room-dock {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  bottom: 8px;
+  width: min(360px, 32vw);
+  z-index: 24;
+  display: flex;
+  transform: translateX(0);
+  transition: transform 0.25s ease;
+}
+
+.ludo-room-dock.collapsed {
+  transform: translateX(calc(-100% + 42px));
+}
+
+.room-dock-toggle {
+  width: 42px;
+  border: 0;
+  border-radius: 12px 0 0 12px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #ffcc00;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.room-dock-content {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-left: 0;
+  border-radius: 0 14px 14px 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.room-card {
+  background: rgba(2, 6, 23, 0.5);
+  border-radius: 10px;
+  padding: 7px;
+}
+
+.room-card-title {
+  color: #ffcc00;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.room-seat-list {
+  display: grid;
+  gap: 6px;
+}
+
+.room-seat-row {
+  border-radius: 8px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.room-seat-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.room-seat-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.room-seat-actions button {
+  flex: 1;
+  border: 0;
+  border-radius: 7px;
+  padding: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+}
+
+.room-chat-feed {
+  min-height: 90px;
+  max-height: 180px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.room-chat-msg {
+  font-size: 11px;
+  line-height: 1.25;
+  color: #e2e8f0;
+  word-break: break-word;
+}
+
+.room-chat-msg.system {
+  color: #fcd34d;
+}
+
+.room-chat-form {
+  display: flex;
+  gap: 6px;
+}
+
+.room-chat-form input {
+  flex: 1;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #111827;
+  font-size: 12px;
+}
+
+.room-chat-form button,
+.room-voice-actions button {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+}
+
+.room-voice-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.room-voice-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.room-voice-list {
+  display: grid;
+  gap: 4px;
+}
+
+.room-voice-user {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.room-voice-user .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #475569;
+}
+
+.room-voice-user.speaking .dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.22);
+}
+
+.room-voice-empty {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+body.ludo-watch-mode #rollBtn,
+body.ludo-watch-mode .auto-check {
+  pointer-events: none;
+}
+
+body.ludo-watch-mode #rollBtn {
+  opacity: 0.55;
+}
+
 @media (max-width: 1100px) {
   .game-layout {
     max-width: none;
   }
 
   .ludo-board {
-    width: min(calc(100vw - 340px), calc(100vh - 75px));
-    height: min(calc(100vw - 340px), calc(100vh - 75px));
+    width: min(100%, calc(100dvh - 100px));
+    height: min(100%, calc(100dvh - 100px));
     aspect-ratio: 1 / 1;
-    max-width: none;
-    max-height: none;
+    max-width: 100%;
+    max-height: 100%;
   }
 }
 
@@ -1338,7 +1619,7 @@ button {
   .game-layout {
     flex-direction: column;
     height: auto;
-    min-height: calc(100vh - 65px);
+    min-height: calc(100vh - 76px);
     max-width: none;
     gap: 10px;
   }
@@ -1352,18 +1633,31 @@ button {
     overflow-y: visible;
   }
 
+  .ludo-room-dock {
+    position: static;
+    width: 100%;
+    max-width: 600px;
+    transform: none !important;
+    margin: 0 auto;
+  }
+
+  .room-dock-toggle {
+    border-radius: 10px 0 0 10px;
+    width: 38px;
+  }
+
   .ludo-board {
-    width: min(96vw, calc(100vh - 240px));
-    height: min(96vw, calc(100vh - 240px));
+    width: min(98vw, calc(100vh - 250px));
+    height: min(98vw, calc(100vh - 250px));
     aspect-ratio: 1 / 1;
-    max-width: none;
-    max-height: none;
+    max-width: 100%;
+    max-height: 100%;
   }
 
   @supports (height: 100dvh) {
     .ludo-board {
-      width: min(96vw, calc(100dvh - 240px));
-      height: min(96vw, calc(100dvh - 240px));
+      width: min(98vw, calc(100dvh - 250px));
+      height: min(98vw, calc(100dvh - 250px));
       aspect-ratio: 1 / 1;
     }
   }
@@ -1487,16 +1781,16 @@ button {
   }
 
   .ludo-board {
-    width: min(98vw, 38dvh);
-    height: min(98vw, 38dvh);
+    width: min(99vw, calc(100dvh - 260px));
+    height: min(99vw, calc(100dvh - 260px));
     border-width: 3px;
     border-radius: 10px;
   }
 
   @supports (height: 100svh) {
     .ludo-board {
-      width: min(98vw, 38svh);
-      height: min(98vw, 38svh);
+      width: min(99vw, calc(100svh - 260px));
+      height: min(99vw, calc(100svh - 260px));
     }
   }
 
@@ -1521,6 +1815,11 @@ button {
   .side-panel {
     padding: 4px;
     border-radius: 10px;
+  }
+
+  .room-dock-content {
+    border-radius: 0 10px 10px 0;
+    padding: 6px;
   }
 
   .compact-control-card {
@@ -1647,14 +1946,14 @@ button {
   }
 
   .ludo-board {
-    width: min(99vw, 36dvh);
-    height: min(99vw, 36dvh);
+    width: min(99vw, calc(100dvh - 265px));
+    height: min(99vw, calc(100dvh - 265px));
   }
 
   @supports (height: 100svh) {
     .ludo-board {
-      width: min(99vw, 36svh);
-      height: min(99vw, 36svh);
+      width: min(99vw, calc(100svh - 265px));
+      height: min(99vw, calc(100svh - 265px));
     }
   }
 
@@ -1688,14 +1987,14 @@ button {
   }
 
   .ludo-board {
-    width: min(99vw, 34dvh);
-    height: min(99vw, 34dvh);
+    width: min(99vw, calc(100dvh - 270px));
+    height: min(99vw, calc(100dvh - 270px));
   }
 
   @supports (height: 100svh) {
     .ludo-board {
-      width: min(99vw, 34svh);
-      height: min(99vw, 34svh);
+      width: min(99vw, calc(100svh - 270px));
+      height: min(99vw, calc(100svh - 270px));
     }
   }
 }
