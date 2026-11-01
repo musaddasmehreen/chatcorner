@@ -1,6 +1,6 @@
 /* Mix Ludo Arcade v5.3.1-stable-live | preserved v4.2.8 gameplay + turn/autoplay sync fixes */
 (function () {
-  window.MIX_LUDO_VERSION = "5.3.8-stable-live";
+  window.MIX_LUDO_VERSION = "5.3.9-live-invites";
   var board = document.getElementById('ludoBoard');
   var diceBox = document.getElementById('diceBox');
   var rollBtn = document.getElementById('rollBtn');
@@ -1480,6 +1480,14 @@
       }
 
       joinLiveTableByCode(joinCode);
+    }
+
+    if (params.get('createTable') === '1') {
+      setup.mode = 'classic';
+      setup.players = 2;
+      setup.teamUp = false;
+      teamUpToggle.checked = false;
+      createLiveTableFromSetup();
     }
 
     updateLobbyActionButtons();
@@ -3236,6 +3244,13 @@
       updateLobbyActionButtons();
 
       gameStatus.innerHTML = 'Live table created: <strong>' + liveTable.gameCode + '</strong>. Share this code with players.';
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('createTable') === '1' && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'chatcorner-ludo-table-created',
+          gameCode: liveTable.gameCode
+        }, window.location.origin);
+      }
       loadTableState(liveTable.gameCode);
       refreshOpenTables();
       startTablePolling();
