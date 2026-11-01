@@ -1741,3 +1741,59 @@
   box-shadow: none;
 }
 .audio-bar { flex-wrap: nowrap; }
+
+/* ── Rooms as compact pill buttons in the audio bar (override) ── */
+.audio-bar ul#room-list {
+  display: grid !important;
+  grid-template-rows: repeat(2, 24px) !important;
+  grid-auto-flow: column !important;
+  grid-auto-columns: max-content !important;
+  gap: 4px 6px !important;
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-height: 56px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  list-style: none !important;
+  scrollbar-width: none;
+}
+.audio-bar ul#room-list::-webkit-scrollbar { display: none; }
+.audio-bar #room-list li,
+.audio-bar #room-list li.iptv-room-item,
+.audio-bar #room-list li.ludo-room-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 24px !important;
+  margin: 0 !important;
+  padding: 0 0.65rem !important;
+  font-size: 0.74rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  color: var(--text) !important;
+  background: rgba(var(--accent-rgb), 0.1) !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.28) !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-bar #room-list li:hover { background: rgba(var(--accent-rgb), 0.22) !important; }
+.audio-bar #room-list li.active {
+  background: rgba(var(--accent-rgb), 0.32) !important;
+  border-color: var(--accent) !important;
+}
+.audio-bar #room-list li[data-user-count]::after { display: none !important; }
+
+/* Input icons: never overlap the text field */
+.input-strip-left { flex: 0 0 auto !important; width: auto !important; overflow: visible; }
+.input-strip-left .input-btn {
+  width: 32px !important; height: 32px !important;
+  min-width: 32px !important; min-height: 32px !important;
+  font-size: 0.9rem !important;
+}
+.input-strip-center { flex: 1 1 0 !important; min-width: 0 !important; }
