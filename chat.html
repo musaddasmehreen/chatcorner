@@ -203,7 +203,7 @@
       <div class="rooms-menu" id="rooms-menu">
         <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms">☰</button>
         <div class="rooms-popup" id="rooms-popup" role="menu" hidden>
-          <div class="rooms-popup-title">🏠 Rooms</div>
+          <div class="rooms-popup-title">🏠 Rooms <button type="button" class="rooms-popup-close" aria-label="Close rooms" onclick="document.getElementById('btn-rooms-menu').click()">✕</button></div>
           <ul class="room-list" id="room-list"></ul>
         </div>
       </div>
@@ -494,8 +494,8 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=4.0" defer></script>
-  <script src="js/pm.js?v=1.7" defer></script>
+  <script src="js/chat-v3.js?v=4.1" defer></script>
+  <script src="js/pm.js?v=1.8" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=1.5" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
@@ -581,6 +581,7 @@
         const btn = document.getElementById('btn-rooms-menu');
         const pop = document.getElementById('rooms-popup');
         if (!btn || !pop) return;
+        document.body.appendChild(pop); // escape topbar stacking/overflow so it renders above everything
         const setOpen = (open) => { pop.hidden = !open; btn.setAttribute('aria-expanded', String(open)); btn.classList.toggle('open', open); };
         btn.addEventListener('click', (e) => { e.stopPropagation(); setOpen(pop.hidden); });
         pop.addEventListener('click', (e) => { if (e.target.closest('li')) setOpen(false); });
