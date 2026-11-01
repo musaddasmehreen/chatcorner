@@ -200,6 +200,14 @@
 
     <!-- TOPBAR -->
     <header class="topbar" role="banner">
+      <div class="rooms-menu" id="rooms-menu">
+        <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms">☰</button>
+        <div class="rooms-popup" id="rooms-popup" role="menu" hidden>
+          <div class="rooms-popup-title">🏠 Rooms</div>
+          <ul class="room-list" id="room-list"></ul>
+        </div>
+      </div>
+
       <div class="topbar-logo-area">
         <strong class="topbar-logo">💬 ChatCorner</strong>
         <div class="theme-bar" id="theme-bar">
@@ -241,9 +249,6 @@
 
     <!-- Mobile sidebar backdrop overlay -->
     <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="closeAllSidebars()" aria-hidden="true"></div>
-
-    <!-- ROOMS CHANNEL STRIP -->
-    <nav class="rooms-strip" aria-label="Rooms"><ul class="room-list" id="room-list"></ul></nav>
 
     <!-- THREE COLUMNS -->
     <div class="layout">
@@ -570,6 +575,18 @@
           group.classList.remove('open');
         }
       });
+
+      // Rooms popup (hamburger)
+      (function initRoomsMenu() {
+        const btn = document.getElementById('btn-rooms-menu');
+        const pop = document.getElementById('rooms-popup');
+        if (!btn || !pop) return;
+        const setOpen = (open) => { pop.hidden = !open; btn.setAttribute('aria-expanded', String(open)); btn.classList.toggle('open', open); };
+        btn.addEventListener('click', (e) => { e.stopPropagation(); setOpen(pop.hidden); });
+        pop.addEventListener('click', (e) => { if (e.target.closest('li')) setOpen(false); });
+        document.addEventListener('click', (e) => { if (!pop.hidden && !pop.contains(e.target)) setOpen(false); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+      })();
 
       // Mobile Download App Modal Logic
       window.checkShowDownloadModal = function() {

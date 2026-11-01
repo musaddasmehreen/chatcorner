@@ -1850,3 +1850,37 @@
 .input-strip-center { padding: 0 !important; }
 .input-strip-center .msg-input { padding: 0.5rem 0.75rem !important; border-radius: 8px; }
 .input-strip-center .btn-send { border-radius: 8px; padding: 0.5rem 1rem; }
+
+/* ── Rooms hamburger popup ── */
+.rooms-menu { position: relative; flex-shrink: 0; }
+.rooms-menu-btn {
+  width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text);
+  font-size: 1.1rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s;
+}
+.rooms-menu-btn:hover, .rooms-menu-btn.open { background: rgba(var(--accent-rgb), 0.22); border-color: var(--accent); }
+.rooms-popup {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 300;
+  width: 230px; max-height: min(70vh, 420px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.55); padding: 0.4rem;
+}
+.rooms-popup[hidden] { display: none; }
+.rooms-popup-title { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 0.3rem 0.5rem 0.4rem; }
+.rooms-popup ul#room-list { display: flex !important; flex-direction: column; gap: 2px; padding: 0 !important; margin: 0; list-style: none; overflow: visible; }
+.rooms-popup #room-list li,
+.rooms-popup #room-list li.iptv-room-item,
+.rooms-popup #room-list li.ludo-room-item {
+  display: flex !important; align-items: center; gap: 0.4rem; margin: 0 !important;
+  padding: 0.45rem 0.6rem !important; font-size: 0.82rem !important; font-weight: 500 !important; letter-spacing: 0 !important;
+  color: var(--text) !important; background: transparent !important; border: 0 !important; border-radius: 8px !important;
+  box-shadow: none !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rooms-popup #room-list li:hover { background: rgba(var(--accent-rgb), 0.16) !important; }
+.rooms-popup #room-list li.active { background: rgba(var(--accent-rgb), 0.28) !important; font-weight: 600 !important; box-shadow: inset 3px 0 0 var(--accent) !important; }
+.rooms-popup #room-list li.iptv-room-item { margin-top: 4px !important; border-top: 1px solid var(--border) !important; border-radius: 0 0 8px 8px !important; }
+.rooms-popup #room-list li[data-user-count]::after { display: none !important; }
+
+/* Restore audio bar to a slim single row */
+.audio-bar { padding: 0 0.6rem !important; min-height: 28px; flex-wrap: wrap !important; border-radius: 0 !important; }
