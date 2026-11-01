@@ -11,6 +11,7 @@ let pmAudioCtx = null;
 // Track open private chat users for the private chat tab bar
 const pvtOpenUsers = new Map(); // userId -> username
 let activePmUserId = null;
+const pmUnread = new Set();
 let pmDragState = null;
 
 function ensurePmDockedRoot() {
@@ -19,7 +20,6 @@ function ensurePmDockedRoot() {
   if (!root.querySelector('.pm-popup-shell')) {
     root.innerHTML = `
       <div class="pm-popup-shell">
-        <div class="pm-popup-tabs hidden" id="pm-popup-tabs" aria-label="Open private chats"></div>
         <div class="pm-popup-stage" id="pm-popup-stage"></div>
       </div>
     `;
@@ -73,6 +73,7 @@ function renderPvtBar() {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'private-chat-tab'
+      + (pmUnread.has(userId) ? ' unread' : '')
       + (activePmUserId === userId && !meta?.minimized ? ' active' : '')
       + (meta?.minimized ? ' minimized' : '');
     item.onclick = () => restorePrivateChat(userId);
@@ -99,6 +100,16 @@ function renderPvtBar() {
 window.addEventListener('DOMContentLoaded', () => {
   ensurePmDockedRoot();
   setTimeout(() => { ensurePmRealtime(); }, 600);
+});
+
+document.addEventListener('focusin', (event) => {
+  if (!pmUnread.size) return;
+  for (const id of Array.from(pmUnread)) {
+    if (pmWindows[id] && !pmWindows[id].minimized && pmWindows[id].el.contains(event.target)) {
+      pmUnread.delete(id);
+      renderPvtBar();
+    }
+  }
 });
 
 document.addEventListener('keydown', (event) => {
@@ -376,6 +387,7 @@ function focusPmWindow(userId) {
   if (!item) return;
   item.minimized = false;
   activePmUserId = userId;
+  pmUnread.delete(userId);
   renderPvtBar();
   positionPmWindows();
   item.el.classList.add('pulse');
@@ -417,6 +429,7 @@ function closePrivateChat(userId) {
   delete pmWindows[userId];
   delete pmCallState[userId];
   pvtOpenUsers.delete(userId);
+  pmUnread.delete(userId);
   activePmUserId = activePmUserId === userId ? (pvtOpenUsers.keys().next().value || null) : activePmUserId;
   renderPvtBar();
   positionPmWindows();
@@ -702,6 +715,11 @@ async function handleIncomingPm(payload) {
     openPrivateChat._allowedForGuest = true;
   }
   await openPrivateChatIncoming(fromUserId, username);
+  if (['text', 'image', 'voice'].includes(payload.type)) {
+    const w = pmWindows[fromUserId];
+    const viewing = w && !w.minimized && activePmUserId === fromUserId && w.el.contains(document.activeElement);
+    if (!viewing) { pmUnread.add(fromUserId); renderPvtBar(); }
+  }
 
   if (payload.type && payload.type.startsWith('game_')) {
     const handler = window.handleIncomingGameEvent || (typeof handleIncomingGameEvent === 'function' ? handleIncomingGameEvent : null);

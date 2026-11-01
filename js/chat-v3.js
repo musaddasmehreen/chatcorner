@@ -2728,12 +2728,30 @@ function showChatToast(text, variant = 'success', timeoutMs = 2200) {
   setTimeout(() => toast.remove(), timeoutMs);
 }
 
+let voiceRecTimerId = null;
+
 function setVoiceNoteButtonState(isRecording) {
   const voiceBtn = document.getElementById('btn-voice-note');
-  if (!voiceBtn) return;
-  voiceBtn.classList.toggle('recording', !!isRecording);
-  voiceBtn.textContent = isRecording ? '⏹️' : '🎙️';
-  voiceBtn.title = isRecording ? 'Stop and send voice note' : 'Voice note';
+  if (voiceBtn) {
+    voiceBtn.classList.toggle('recording', !!isRecording);
+    voiceBtn.textContent = isRecording ? '⏹️' : '🎙️';
+    voiceBtn.title = isRecording ? 'Stop and send voice note' : 'Send a voice note';
+  }
+  const normal = document.getElementById('input-strip-normal');
+  const rec = document.getElementById('input-strip-recording');
+  const timer = document.getElementById('voice-rec-timer-display');
+  clearInterval(voiceRecTimerId);
+  voiceRecTimerId = null;
+  if (normal) normal.style.display = isRecording ? 'none' : 'flex';
+  if (rec) rec.style.display = isRecording ? 'flex' : 'none';
+  if (timer) timer.textContent = '00:00';
+  if (isRecording && timer) {
+    const startedAt = Date.now();
+    voiceRecTimerId = setInterval(() => {
+      const sec = Math.floor((Date.now() - startedAt) / 1000);
+      timer.textContent = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+    }, 250);
+  }
 }
 
 function stopRoomVoiceNoteStream() {
@@ -2807,7 +2825,9 @@ async function startVoiceNoteRecording() {
     };
 
     roomVoiceNoteRecorder.onerror = () => {
-      appendSystemMessage('Voice note recording failed.');
+      discardRoomVoiceNoteOnStop = true;
+      setVoiceNoteButtonState(false);
+      showChatToast('Voice note recording failed.', 'warning', 3200);
     };
 
     roomVoiceNoteRecorder.onstop = async () => {
@@ -2836,7 +2856,7 @@ async function startVoiceNoteRecording() {
       }
 
       if (!chunks.length) {
-        appendSystemMessage('Voice note cancelled.');
+        showChatToast('Voice note was empty.', 'warning', 2500);
         return;
       }
 
@@ -2847,68 +2867,9 @@ async function startVoiceNoteRecording() {
         }
         const dataUrl = await roomVoiceBlobToDataUrl(blob);
 
-        const previewPopover = document.getElementById('voice-note-preview-popover');
-        const previewAudio = document.getElementById('voice-note-preview-audio');
-        const playBtn = document.getElementById('btn-voice-note-play');
-        const sendBtn = document.getElementById('btn-voice-note-send');
-        const cancelBtn = document.getElementById('btn-voice-note-cancel');
-
-        if (previewPopover && previewAudio) {
-          previewAudio.src = dataUrl;
-          previewPopover.classList.remove('hidden');
-
-          if (playBtn) {
-            playBtn.textContent = '▶ Play';
-            playBtn.onclick = () => {
-              if (previewAudio.paused) {
-                previewAudio.play();
-                playBtn.textContent = '⏸ Pause';
-              } else {
-                previewAudio.pause();
-                playBtn.textContent = '▶ Play';
-              }
-            };
-            previewAudio.onended = () => {
-              playBtn.textContent = '▶ Play';
-            };
-          }
-
-          sendBtn.onclick = async () => {
-            if (!checkGlobalRateLimit()) {
-              showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
-              return;
-            }
-            if (currentUser?.is_anonymous) {
-              await ensureGuestProfileRecord();
-            }
-            previewPopover.classList.add('hidden');
-            previewAudio.src = '';
-
-            const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
-              room_id: roomIdForVoiceNote,
-              user_id: currentUser.id,
-              username: currentProfile.username,
-              content: dataUrl,
-              type: 'voice'
-            }).select('id');
-            if (error) {
-              appendSystemMessage('Could not send voice note. Please try again.');
-            } else if (!isRegisteredUser()) {
-              const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
-              localStorage.setItem('cc-guest-voice-used', String(newCount));
-              if (newCount >= GUEST_VOICE_LIMIT) {
-                setTimeout(() => showRegisterForVoice(), 800);
-              }
-            }
-          };
-
-          cancelBtn.onclick = () => {
-            previewPopover.classList.add('hidden');
-            previewAudio.src = '';
-          };
-        }
+        await sendRoomVoiceNote(roomIdForVoiceNote, dataUrl);
       } catch (_) {
-        appendSystemMessage('Could not save voice note preview.');
+        showChatToast('Could not process voice note.', 'warning', 3200);
       }
     };
 
@@ -2923,7 +2884,7 @@ async function startVoiceNoteRecording() {
       }, GUEST_VOICE_MAX_DURATION_MS);
     }
   } catch (error) {
-    appendSystemMessage(getVoiceNoteStartErrorMessage(error));
+    showChatToast(getVoiceNoteStartErrorMessage(error), 'warning', 3200);
     setVoiceNoteButtonState(false);
     stopRoomVoiceNoteStream();
     roomVoiceNoteChunks = [];
@@ -2936,9 +2897,49 @@ async function startVoiceNoteRecording() {
 
 function stopVoiceNoteRecording() {
   if (roomVoiceNoteRecorder?.state === 'recording') {
+    setVoiceNoteButtonState(false);
     roomVoiceNoteRecorder.stop();
   }
 }
+
+function cancelVoiceNoteRecording() {
+  if (roomVoiceNoteRecorder?.state === 'recording') {
+    discardRoomVoiceNoteOnStop = true;
+    setVoiceNoteButtonState(false);
+    roomVoiceNoteRecorder.stop();
+  }
+}
+
+async function sendRoomVoiceNote(roomId, dataUrl) {
+  if (!checkGlobalRateLimit()) {
+    showChatToast('⚠️ Please wait before sending another message (max 3 messages per 5s).', 'warning');
+    return;
+  }
+  if (currentUser?.is_anonymous) await ensureGuestProfileRecord();
+  const { error } = await sbClient.from('messages').insert({
+    room_id: roomId,
+    user_id: currentUser.id,
+    username: currentProfile.username,
+    content: dataUrl,
+    type: 'voice'
+  });
+  if (error) {
+    showChatToast('Could not send voice note. Please try again.', 'warning', 3200);
+  } else if (!isRegisteredUser()) {
+    const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
+    localStorage.setItem('cc-guest-voice-used', String(newCount));
+    if (newCount >= GUEST_VOICE_LIMIT) setTimeout(() => showRegisterForVoice(), 800);
+  }
+}
+
+(function initVoiceRecordingControls() {
+  const bind = () => {
+    document.getElementById('btn-voice-rec-send')?.addEventListener('click', stopVoiceNoteRecording);
+    document.getElementById('btn-voice-rec-discard')?.addEventListener('click', cancelVoiceNoteRecording);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
+})();
 
 // Kept for backward compatibility but calls start/stop flow
 async function sendVoiceNote() {

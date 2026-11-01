@@ -57,7 +57,7 @@
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.3"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=1.5" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=2.2" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=2.3" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -200,11 +200,6 @@
 
     <!-- TOPBAR -->
     <header class="topbar" role="banner">
-      <!-- Mobile: Rooms sidebar toggle -->
-      <button class="topbar-mobile-toggle" id="btn-toggle-left-sidebar" onclick="toggleLeftSidebar()" aria-label="Toggle rooms list" title="Rooms">
-        <span class="hamburger-icon">☰</span>
-      </button>
-
       <div class="topbar-logo-area">
         <strong class="topbar-logo">💬 ChatCorner</strong>
         <div class="theme-bar" id="theme-bar">
@@ -220,6 +215,7 @@
         <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">🔙 Return to Rooms</button>
 
       </div>
+      <div class="header-pm-bar hidden" id="pm-popup-tabs" aria-label="Open private chats"></div>
       <div class="topbar-search" id="topbar-search">
         <input
           type="search"
@@ -252,7 +248,6 @@
 
     <!-- Mobile Navigation Tabs (visible only on mobile) -->
     <nav class="mobile-tabs" id="mobile-tabs" aria-label="Mobile navigation">
-      <button class="mobile-tab-btn" onclick="switchMobileTab('rooms')" id="tab-rooms">Rooms</button>
       <button class="mobile-tab-btn active" onclick="switchMobileTab('chat')" id="tab-chat">Chat</button>
       <button class="mobile-tab-btn" onclick="switchMobileTab('users')" id="tab-users">Users</button>
     </nav>
@@ -262,18 +257,6 @@
 
     <!-- THREE COLUMNS -->
     <div class="layout">
-
-      <!-- LEFT SIDEBAR -->
-      <aside class="sidebar sidebar-left" id="sidebar-left">
-
-        <!-- Pin button (Feature 2) -->
-        <button class="btn-pin-rooms" id="btn-pin-rooms" title="Pin/Unpin rooms sidebar" aria-label="Pin rooms sidebar">📌 Pin</button>
-
-
-        <!-- Rooms list -->
-        <div class="sidebar-section-label">🏠 ROOMS</div>
-        <ul class="room-list" id="room-list"></ul>
-      </aside>
 
       <!-- CENTER -->
       <main class="chat-main">
@@ -394,17 +377,14 @@
       </div>
 
       <!-- RECORDING INPUT STATE -->
-      <div id="input-strip-recording" class="hidden" style="display: none; width: 100%; align-items: center; justify-content: space-between; padding: 4px 12px; height: 100%;">
+      <div id="input-strip-recording" style="display: none; width: 100%; align-items: center; justify-content: space-between; padding: 4px 12px; height: 100%;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span class="blinking-dot" id="voice-rec-blinking-dot" style="color: #ef4444; font-size: 14px; animation: blinker 1s linear infinite;">🔴</span>
           <span id="voice-rec-timer-display" style="font-family: monospace; font-size: 14px; color: var(--text); font-weight: bold;">00:00</span>
-          <span id="voice-rec-status-text" style="font-size: 0.8rem; color: var(--muted); margin-left: 8px;">Recording...</span>
-          <button id="btn-voice-rec-playback-play" class="hidden" style="background: var(--accent); color: white; border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.75rem;">▶ Play</button>
-          <audio id="voice-rec-playback-audio" class="hidden"></audio>
+          <span id="voice-rec-status-text" style="font-size: 0.8rem; color: var(--muted); margin-left: 8px;">Recording… tap 📤 to send</span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           <button class="input-btn" id="btn-voice-rec-discard" title="Discard" aria-label="Discard recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">🗑️</button>
-          <button class="input-btn" id="btn-voice-rec-preview" title="Stop & Preview" aria-label="Stop recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">⏹️</button>
           <button class="input-btn" id="btn-voice-rec-send" title="Send" aria-label="Send recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">📤</button>
         </div>
       </div>
@@ -484,6 +464,11 @@
       </div>
     </div>
 
+    <!-- ROOMS BOTTOM BAR -->
+    <nav class="rooms-bottom-bar" id="rooms-bottom-bar" aria-label="Rooms">
+      <ul class="room-list" id="room-list"></ul>
+    </nav>
+
     <!-- Guest notice -->
     <div id="guest-notice-bar" class="guest-bar" style="display:none">
       👤 Guest mode — <a href="login.html">sign in or register</a> for a persistent account
@@ -521,8 +506,8 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=3.9" defer></script>
-  <script src="js/pm.js?v=1.6" defer></script>
+  <script src="js/chat-v3.js?v=4.0" defer></script>
+  <script src="js/pm.js?v=1.7" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=1.5" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
@@ -550,6 +535,7 @@
 
       // Mobile Tabs Logic
       window.switchMobileTab = function(tabName) {
+        if (tabName === 'rooms') tabName = 'chat';
         const tabs = document.querySelectorAll('.mobile-tab-btn');
         tabs.forEach(btn => btn.classList.remove('active'));
         const activeBtn = document.getElementById('tab-' + tabName);
