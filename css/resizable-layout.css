@@ -1638,3 +1638,162 @@
   }
 
 
+
+/* ── Rooms bottom bar (paired 2-row grid, scrolls horizontally) ── */
+.rooms-bottom-bar {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+}
+.rooms-bottom-bar .room-list {
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(110px, max-content);
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  flex: none;
+}
+.rooms-bottom-bar .room-list li {
+  margin: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  max-width: 200px;
+}
+.rooms-bottom-bar .room-list li.active { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* ── Narrow users sidebar ── */
+.sidebar-right { width: 11.5rem; min-width: 11.5rem; }
+.sidebar-right .user-list li,
+.sidebar-right .user-list .user-item { min-width: 0; overflow: hidden; }
+.sidebar-right .user-list li *:not(img):not(.avatar) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-right .user-list img, .sidebar-right .user-list .avatar { flex-shrink: 0; }
+
+/* ── Header PM chips ── */
+.header-pm-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.header-pm-bar.hidden { display: none; }
+.header-pm-bar::-webkit-scrollbar { display: none; }
+.header-pm-bar .private-chat-tab {
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+}
+.header-pm-bar .private-chat-tab.unread {
+  background: #dc2626;
+  border-color: #ef4444;
+  color: #fff;
+  animation: pm-unread-pulse 1.2s ease-in-out infinite;
+}
+@keyframes pm-unread-pulse { 50% { box-shadow: 0 0 0 3px rgba(239,68,68,0.35); } }
+@media (max-width: 1024px) { .rooms-bottom-bar .room-list { grid-auto-columns: minmax(96px, max-content); } }
+@keyframes blinker { 50% { opacity: 0.2; } }
+
+/* ── Input bar fixes ── */
+.input-strip-left { width: auto; min-width: 0; padding: 0 0.4rem; }
+.input-buttons-group { gap: 6px; }
+.input-strip-left .input-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; font-size: 0.95rem; }
+.input-strip-center { gap: 0.5rem; padding: 0 0.6rem; border-right: 0; }
+.input-strip-center .msg-input { flex: 1; width: auto; min-width: 0; padding: 0.5rem 0.75rem; }
+.msg-char-counter { font-size: 0.7rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.input-strip-center .btn-send { padding: 0.45rem 1rem; }
+
+/* ── Rooms inside audio bar ── */
+.audio-bar .room-list {
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 4px 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  margin: 0;
+  scrollbar-width: thin;
+}
+.audio-bar .room-list li {
+  margin: 0;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  max-width: 160px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: none;
+}
+.audio-bar .room-list li.active {
+  background: rgba(var(--accent-rgb),0.2);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.audio-bar { flex-wrap: nowrap; }
+
+/* ── Rooms as compact pill buttons in the audio bar (override) ── */
+.audio-bar ul#room-list {
+  display: grid !important;
+  grid-template-rows: repeat(2, 24px) !important;
+  grid-auto-flow: column !important;
+  grid-auto-columns: max-content !important;
+  gap: 4px 6px !important;
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-height: 56px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  list-style: none !important;
+  scrollbar-width: none;
+}
+.audio-bar ul#room-list::-webkit-scrollbar { display: none; }
+.audio-bar #room-list li,
+.audio-bar #room-list li.iptv-room-item,
+.audio-bar #room-list li.ludo-room-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 24px !important;
+  margin: 0 !important;
+  padding: 0 0.65rem !important;
+  font-size: 0.74rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  color: var(--text) !important;
+  background: rgba(var(--accent-rgb), 0.1) !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.28) !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-bar #room-list li:hover { background: rgba(var(--accent-rgb), 0.22) !important; }
+.audio-bar #room-list li.active {
+  background: rgba(var(--accent-rgb), 0.32) !important;
+  border-color: var(--accent) !important;
+}
+.audio-bar #room-list li[data-user-count]::after { display: none !important; }
+
+/* Input icons: never overlap the text field */
+.input-strip-left { flex: 0 0 auto !important; width: auto !important; overflow: visible; }
+.input-strip-left .input-btn {
+  width: 32px !important; height: 32px !important;
+  min-width: 32px !important; min-height: 32px !important;
+  font-size: 0.9rem !important;
+}
+.input-strip-center { flex: 1 1 0 !important; min-width: 0 !important; }
