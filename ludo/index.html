@@ -5,7 +5,76 @@
   <title>Mix Ludo Arcade</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
-  <link rel="stylesheet" href="/ludo/style.css?v=5.3.0" />
+  <link rel="stylesheet" href="/ludo/style.css?v=5.4.0" />
+  <style>
+    /* Hard full-page layout fix (loaded after stylesheet to override duplicated rules) */
+    html, body, .mix-ludo-app { width: 100% !important; height: 100% !important; max-width: none !important; }
+    .mix-ludo-app { min-height: 100dvh !important; }
+
+    .game-header,
+    .lobby-panel,
+    .setup-panel,
+    .setup-card,
+    .lobby-card,
+    .game-layout {
+      width: 100% !important;
+      max-width: none !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+
+    .game-layout {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(250px, 330px) !important;
+      align-items: stretch !important;
+      justify-items: stretch !important;
+      gap: 10px !important;
+      height: calc(100dvh - 88px) !important;
+      min-height: 560px !important;
+    }
+
+    .board-wrap {
+      width: 100% !important;
+      height: 100% !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+    }
+
+    .ludo-board {
+      width: min(calc(100vw - 420px), calc(100dvh - 120px)) !important;
+      height: min(calc(100vw - 420px), calc(100dvh - 120px)) !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+    }
+
+    .side-panel {
+      position: relative !important;
+      inset: auto !important;
+      width: 100% !important;
+      max-width: none !important;
+      height: 100% !important;
+      max-height: none !important;
+      transform: none !important;
+    }
+
+    @media (max-width: 980px) {
+      .game-layout {
+        grid-template-columns: 1fr !important;
+        height: auto !important;
+        min-height: calc(100dvh - 88px) !important;
+      }
+      .ludo-board {
+        width: min(98vw, calc(100dvh - 300px)) !important;
+        height: min(98vw, calc(100dvh - 300px)) !important;
+      }
+      .side-panel {
+        height: auto !important;
+      }
+    }
+  </style>
 </head>
 
 <body>
