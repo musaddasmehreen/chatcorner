@@ -1636,8 +1636,7 @@
   .page-shell.ludo-active .topbar-mobile-toggle {
     display: none !important;
   }
-
-
+}
 
 /* ── Rooms bottom bar (paired 2-row grid, scrolls horizontally) ── */
 .rooms-bottom-bar {
@@ -1897,4 +1896,4 @@
 .rooms-popup-title { display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem !important; color: var(--text) !important; }
 .rooms-popup-close { background: transparent; border: 0; color: var(--muted); cursor: pointer; font-size: 1rem; }
 .rooms-popup #room-list li { font-size: 0.9rem !important; padding: 0.6rem 0.8rem !important; background: rgba(255,255,255,0.04) !important; }
-.messages, .pm-messages { scroll-behavior: auto !important; }
+.messages, .pm-messages { scroll-behavior: auto !important; overflow-anchor: none; }
