@@ -99,7 +99,7 @@
       </div>
       <button type="button" class="btn-primary btn-sm" style="background:#00f0ff; color:#000; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="tictactoe">Tic-Tac-Toe</button>
       <button type="button" class="btn-primary btn-sm" style="background:#8b6ded; color:#fff; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="chess">Chess</button>
-      <button type="button" class="btn-primary btn-sm" style="background:#ff007f; color:#fff; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="ludo">Ludo (4-Player)</button>
+      <button type="button" class="btn-primary btn-sm" style="background:#ff007f; color:#fff; font-weight:700; border:none; padding: 6px 12px; border-radius:4px; cursor:pointer;" data-game="ludo-room">Ludo Room (2 Users)</button>
     `;
 
     // Click handler to select and send invitation
@@ -128,11 +128,18 @@
   }
 
   // Send an invitation to another player
+  function getGameDisplayName(gameType) {
+    if (gameType === 'tictactoe') return 'Tic-Tac-Toe';
+    if (gameType === 'chess') return 'Chess';
+    if (gameType === 'ludo-room') return 'Ludo Room';
+    return 'Ludo';
+  }
+
   function sendGameInvitation(opponentId, gameType) {
     sendGamePacket(opponentId, 'game_invite', { gameType });
     
     // Add local notice to current chat
-    const inviteName = gameType === 'tictactoe' ? 'Tic-Tac-Toe' : gameType === 'chess' ? 'Chess' : 'Ludo';
+    const inviteName = getGameDisplayName(gameType);
     const box = getPmMessagesBox(opponentId);
     if (box) {
       const row = document.createElement('div');
@@ -155,7 +162,7 @@
     
     if (type === 'game_invite') {
       const gameType = payload.gameType;
-      const gameName = gameType === 'tictactoe' ? 'Tic-Tac-Toe' : gameType === 'chess' ? 'Chess' : 'Ludo';
+      const gameName = getGameDisplayName(gameType);
       const box = getPmMessagesBox(fromUserId);
       if (box) {
         const safeFromUserId = escHtml(fromUserId);
@@ -185,8 +192,11 @@
         acceptBtn.onclick = () => {
           row.querySelector('.pm-game-invite-actions').innerHTML = `<span style="color:#39ff14; font-size:0.8rem; font-weight:700;">Accepted ✅</span>`;
           sendGamePacket(fromUserId, 'game_accept', { gameType });
-          // Launch game window as acceptor
-          launchGame(fromUserId, gameType, 'acceptor');
+          if (gameType === 'ludo-room') {
+            window.openPersonalLudoRoom?.(fromUserId);
+          } else {
+            launchGame(fromUserId, gameType, 'acceptor');
+          }
         };
 
         declineBtn.onclick = () => {
@@ -201,14 +211,16 @@
     } 
     else if (type === 'game_accept') {
       const gameType = payload.gameType;
-      // Remove any waiting banners if applicable
-      // Launch game window as inviter
-      launchGame(fromUserId, gameType, 'inviter');
-      // Sync score across session
-      broadcastScoreSync(fromUserId);
+      if (gameType === 'ludo-room') {
+        window.openPersonalLudoRoom?.(fromUserId);
+      } else {
+        launchGame(fromUserId, gameType, 'inviter');
+        // Sync score across session
+        broadcastScoreSync(fromUserId);
+      }
     } 
     else if (type === 'game_decline') {
-      const gameName = payload.gameType === 'tictactoe' ? 'Tic-Tac-Toe' : payload.gameType === 'chess' ? 'Chess' : 'Ludo';
+      const gameName = getGameDisplayName(payload.gameType);
       const box = getPmMessagesBox(fromUserId);
       if (box) {
         const row = document.createElement('div');
