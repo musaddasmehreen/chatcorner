@@ -6173,3 +6173,44 @@ window.enterLudoRoom = enterLudoRoom;
 window.exitLudoRoom = exitLudoRoom;
 
 window.toggleGlobalChatMute = toggleGlobalChatMute;
+
+/* ── Auto-scroll: keep main room and PM message lists pinned to the newest message ── */
+(function initAutoScroll() {
+  const NEAR_PX = 150;
+  const nearBottom = (el) => el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_PX;
+  const toBottom = (el) => el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+  const isList = (el) => el && el.nodeType === 1 && (el.id === 'messages' || el.classList.contains('pm-messages'));
+  const stuck = new WeakMap();
+
+  document.addEventListener('scroll', (e) => {
+    if (isList(e.target)) stuck.set(e.target, nearBottom(e.target));
+  }, true);
+
+  // Images/embeds change height after insertion
+  document.addEventListener('load', (e) => {
+    const list = e.target?.closest?.('#messages, .pm-messages');
+    if (list && stuck.get(list) !== false) toBottom(list);
+  }, true);
+
+  const observer = new MutationObserver((mutations) => {
+    const touched = new Set();
+    mutations.forEach((m) => { if (m.addedNodes.length && isList(m.target)) touched.add(m.target); });
+    touched.forEach((list) => {
+      const last = list.lastElementChild;
+      const own = last && (last.classList.contains('self') || last.dataset?.userId === currentUser?.id);
+      if (stuck.get(list) !== false || own) {
+        toBottom(list);
+        stuck.set(list, true);
+      }
+    });
+  });
+
+  const start = () => {
+    const main = document.getElementById('messages');
+    if (main) observer.observe(main, { childList: true });
+    const pmRoot = document.getElementById('pm-root');
+    if (pmRoot) observer.observe(pmRoot, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
