@@ -103,15 +103,15 @@
     var entryModal = document.getElementById('ludoEntryModal');
 
     if (entryPlay) {
-      entryPlay.addEventListener('click', function () {
-        var res = session.setMode('play');
+      entryPlay.addEventListener('click', async function () {
+        var res = await session.setMode('play');
         if (res && res.ok && entryModal) entryModal.classList.remove('visible');
       });
     }
 
     if (entryWatch) {
-      entryWatch.addEventListener('click', function () {
-        session.setMode('watch');
+      entryWatch.addEventListener('click', async function () {
+        await session.setMode('watch');
         if (entryModal) entryModal.classList.remove('visible');
       });
     }
@@ -188,17 +188,31 @@
     var seatList = document.getElementById('roomSeatList');
     var seatPicker = document.getElementById('roomSeatPicker');
     if (seatPicker) {
-      var pickerHtml = '';
-      for (var p = 0; p < session.colors.length; p++) {
-        var pickColor = session.colors[p];
-        var pickedSeat = state.seats[pickColor];
-        var isMine = pickedSeat && pickedSeat.id === state.user.id;
-        var disabled = pickedSeat && !isMine;
-        pickerHtml += '<button type="button" class="seat-pick-btn ' + pickColor + (isMine ? ' mine' : '') + '" data-seat-color="' + pickColor + '"' + (disabled ? ' disabled' : '') + '>';
-        pickerHtml += pickColor.charAt(0).toUpperCase() + pickColor.slice(1);
-        pickerHtml += '</button>';
+      var pickerButtons = seatPicker.querySelectorAll('button[data-seat-color]');
+      if (pickerButtons.length !== session.colors.length) {
+        seatPicker.textContent = '';
+        for (var p = 0; p < session.colors.length; p++) {
+          var color = session.colors[p];
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'seat-pick-btn ' + color;
+          button.setAttribute('data-seat-color', color);
+          seatPicker.appendChild(button);
+        }
+        pickerButtons = seatPicker.querySelectorAll('button[data-seat-color]');
       }
-      seatPicker.innerHTML = pickerHtml;
+      var liveTable = window.ludoDebug && window.ludoDebug.liveTable;
+      var liveAttached = !!(liveTable && liveTable.gameCode);
+      for (var b = 0; b < pickerButtons.length; b++) {
+        var pickerButton = pickerButtons[b];
+        var pickColor = pickerButton.getAttribute('data-seat-color');
+        var pickedSeat = state.seats[pickColor];
+        var isMine = (pickedSeat && pickedSeat.id === state.user.id) || state.seatColor === pickColor;
+        pickerButton.textContent = pickColor.charAt(0).toUpperCase() + pickColor.slice(1);
+        pickerButton.disabled = liveAttached || !!(pickedSeat && !isMine);
+        pickerButton.classList.toggle('mine', !!isMine);
+        pickerButton.setAttribute('aria-pressed', isMine ? 'true' : 'false');
+      }
     }
 
     if (seatList) {

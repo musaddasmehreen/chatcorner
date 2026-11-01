@@ -10,6 +10,7 @@
   // Global score storage per session
   // Key: opponent userId -> { winsUser1, winsUser2, ties, hardClosed }
   const gameScores = {};
+  let pendingLudoInvite = null;
 
   // Active game window state
   // Key: opponent userId -> { el, gameType, role ('inviter'|'acceptor'), activeGameInstance }
@@ -60,6 +61,26 @@
       ...payload
     });
   }
+
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    const iframe = document.getElementById('ludo-iframe');
+    if (
+      event.origin !== window.location.origin ||
+      !iframe ||
+      event.source !== iframe.contentWindow ||
+      !data ||
+      data.type !== 'chatcorner-ludo-table-created' ||
+      !pendingLudoInvite ||
+      !data.gameCode
+    ) return;
+
+    sendGamePacket(pendingLudoInvite.opponentId, 'game_start', {
+      gameType: 'ludo-room',
+      gameCode: data.gameCode
+    });
+    pendingLudoInvite = null;
+  });
 
   // ==========================================================================
   // GAME PICKER & INVITATION FLOW
@@ -192,11 +213,7 @@
         acceptBtn.onclick = () => {
           row.querySelector('.pm-game-invite-actions').innerHTML = `<span style="color:#39ff14; font-size:0.8rem; font-weight:700;">Accepted ✅</span>`;
           sendGamePacket(fromUserId, 'game_accept', { gameType });
-          if (gameType === 'ludo-room') {
-            window.openPersonalLudoRoom?.(fromUserId);
-          } else {
-            launchGame(fromUserId, gameType, 'acceptor');
-          }
+          if (gameType !== 'ludo-room') launchGame(fromUserId, gameType, 'acceptor');
         };
 
         declineBtn.onclick = () => {
@@ -212,13 +229,22 @@
     else if (type === 'game_accept') {
       const gameType = payload.gameType;
       if (gameType === 'ludo-room') {
-        window.openPersonalLudoRoom?.(fromUserId);
+        const them = String(fromUserId || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        if (them && !pendingLudoInvite) {
+          pendingLudoInvite = {
+            opponentId: fromUserId
+          };
+          window.openPersonalLudoRoom?.(fromUserId, { createTable: true });
+        }
       } else {
         launchGame(fromUserId, gameType, 'inviter');
         // Sync score across session
         broadcastScoreSync(fromUserId);
       }
     } 
+    else if (type === 'game_start' && payload.gameType === 'ludo-room' && payload.gameCode) {
+      window.openPersonalLudoRoom?.(fromUserId, { gameCode: payload.gameCode });
+    }
     else if (type === 'game_decline') {
       const gameName = getGameDisplayName(payload.gameType);
       const box = getPmMessagesBox(fromUserId);

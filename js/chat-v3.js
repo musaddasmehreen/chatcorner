@@ -1338,7 +1338,7 @@ async function loadRooms(preloadedRooms = null) {
 
         renderRoomsTopbar(rooms);
     // Optimization: skip redundant moderation status check on the first load since we just did it
-    enterRoom(rooms[0], false, true);
+    await enterRoom(rooms[0], false, true);
     tryAutoEnterLudoFromUrl();
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
@@ -6133,6 +6133,7 @@ const _ludoAutoRoomKey = (() => {
 let _ludoAutoEntered = false;
 
 function getDefaultLudoRoomKey() {
+  if (currentRoom?._virtual && currentRoom._ludoRoomKey) return currentRoom._ludoRoomKey;
   const roomId = currentRoom && !currentRoom._virtual ? sanitizeLudoRoomKey(currentRoom.id) : '';
   return roomId ? `room-${roomId}` : 'global';
 }
@@ -6140,11 +6141,11 @@ function getDefaultLudoRoomKey() {
 function tryAutoEnterLudoFromUrl() {
   if (_ludoAutoEntered || !_ludoAutoRoomKey) return;
   _ludoAutoEntered = true;
-  setTimeout(() => enterLudoRoom(_ludoAutoRoomKey), 120);
+  enterLudoRoom(_ludoAutoRoomKey);
 }
 
 /* ── Ludo Room Functions ── */
-function enterLudoRoom(roomKey) {
+function enterLudoRoom(roomKey, options = {}) {
   cleanupVirtualRooms();
 
   // Mark sidebar item active
@@ -6154,7 +6155,7 @@ function enterLudoRoom(roomKey) {
 
   // Set virtual room state
   const resolvedRoomKey = sanitizeLudoRoomKey(roomKey) || getDefaultLudoRoomKey();
-  currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true };
+  currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true, _ludoRoomKey: resolvedRoomKey };
 
   // Update topbar title
   const titleEl = document.getElementById('current-room-name');
@@ -6165,7 +6166,9 @@ function enterLudoRoom(roomKey) {
   const iframe = document.getElementById('ludo-iframe');
   if (iframe) {
     const userNick = currentUser?.username || 'Guest';
-    const nextSrc = 'ludo/index.html?nick=' + encodeURIComponent(userNick) + '&room=' + encodeURIComponent(resolvedRoomKey);
+    let nextSrc = 'ludo/index.html?nick=' + encodeURIComponent(userNick) + '&room=' + encodeURIComponent(resolvedRoomKey);
+    if (options.createTable) nextSrc += '&createTable=1';
+    if (options.gameCode) nextSrc += '&join=' + encodeURIComponent(options.gameCode);
     if (iframe.getAttribute('src') !== nextSrc) iframe.src = nextSrc;
   }
 
@@ -6196,12 +6199,12 @@ function exitLudoRoom() {
 
 window.enterLudoRoom = enterLudoRoom;
 window.exitLudoRoom = exitLudoRoom;
-window.openPersonalLudoRoom = function openPersonalLudoRoom(opponentId) {
+window.openPersonalLudoRoom = function openPersonalLudoRoom(opponentId, options = {}) {
   const me = sanitizeLudoRoomKey(currentUser?.id || 'guest');
   const them = sanitizeLudoRoomKey(opponentId);
   if (!them) return false;
   const roomKey = 'pm-' + [me, them].sort().join('-');
-  enterLudoRoom(roomKey);
+  enterLudoRoom(roomKey, options);
   return true;
 };
 
