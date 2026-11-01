@@ -136,9 +136,6 @@
   }
 
   function sendGameInvitation(opponentId, gameType) {
-    if (gameType === 'ludo-room') {
-      window.openPersonalLudoRoom?.(opponentId);
-    }
     sendGamePacket(opponentId, 'game_invite', { gameType });
     
     // Add local notice to current chat

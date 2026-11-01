@@ -6233,7 +6233,6 @@ window.createPersonalLudoTable = function createPersonalLudoTable(onCreated) {
     createTable();
   } else {
     iframe.addEventListener('load', createTable, { once: true });
-    if (iframe.contentDocument?.readyState === 'complete') createTable();
   }
   return true;
 };

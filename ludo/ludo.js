@@ -61,6 +61,12 @@
 
   var COLOR_ORDER = ['yellow', 'blue', 'red', 'green'];
 
+  function refreshLudoRoomSession() {
+    if (window.LudoRoomSession && typeof window.LudoRoomSession.refresh === 'function') {
+      window.LudoRoomSession.refresh();
+    }
+  }
+
   var COLOR_LABELS = {
     yellow: 'Yellow',
     blue: 'Blue',
@@ -3230,6 +3236,7 @@
       liveTable.role = 'host';
       liveTable.status = data.status || 'waiting';
       liveTable.isHost = true;
+      refreshLudoRoomSession();
 
       getOrCreateCurrentTableBox();
       ensureLiveTableActionButtons();
@@ -3289,6 +3296,7 @@
       liveTable.role = data.role || 'player';
       liveTable.status = data.status || 'waiting';
       liveTable.isHost = data.role === 'host';
+      refreshLudoRoomSession();
 
       getOrCreateCurrentTableBox();
       ensureLiveTableActionButtons();
@@ -3594,6 +3602,7 @@
     }
 
     livePlayersByColor = playerByColor;
+    refreshLudoRoomSession();
 
     for (var nameColor in playerByColor) {
       if (playerByColor.hasOwnProperty(nameColor)) {

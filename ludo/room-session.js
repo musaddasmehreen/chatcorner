@@ -48,11 +48,17 @@
   }
 
   function snapshot() {
+    var liveTable = window.ludoDebug && window.ludoDebug.liveTable;
+    var liveSeatColor = liveTable && liveTable.gameCode && COLORS.indexOf(liveTable.playerColor) !== -1
+      ? liveTable.playerColor
+      : '';
     return {
       roomKey: state.roomKey,
       connected: state.connected,
       mode: state.mode,
       seatColor: state.seatColor,
+      liveTableAttached: !!(liveTable && liveTable.gameCode),
+      liveSeatColor: liveSeatColor,
       user: state.user,
       seats: state.seats,
       activeSeatCount: countActiveSeats(),
@@ -155,13 +161,6 @@
     return count;
   }
 
-  function firstOpenSeat() {
-    for (var i = 0; i < COLORS.length; i++) {
-      if (!state.seats[COLORS[i]]) return COLORS[i];
-    }
-    return '';
-  }
-
   function updateReadonlyState() {
     var isWatch = state.mode === 'watch';
     document.body.classList.toggle('ludo-watch-mode', isWatch);
@@ -170,12 +169,8 @@
       var lt = window.ludoDebug.liveTable;
       if (isWatch) {
         lt.role = 'viewer';
-        if (state.seatColor && lt.playerColor === state.seatColor) lt.playerColor = '';
-      } else if (state.seatColor) {
-        if (!lt.playerColor || lt.role === 'viewer') {
-          lt.playerColor = state.seatColor;
-          lt.role = lt.role === 'host' ? 'host' : 'player';
-        }
+      } else if (lt.gameCode && state.seatColor && lt.playerColor === state.seatColor) {
+        lt.role = lt.isHost ? 'host' : 'player';
       }
       if (typeof window.ludoDebug.syncLiveControlState === 'function') {
         window.ludoDebug.syncLiveControlState();
@@ -185,6 +180,7 @@
 
   function applySeatSnapshot(payload, fromRemote) {
     if (!payload || !payload.seats) return;
+    if (window.ludoDebug && window.ludoDebug.liveTable && window.ludoDebug.liveTable.gameCode) return;
     var incomingTs = Number(payload.ts || 0);
     if (incomingTs && incomingTs < state.seatTs) return;
 
@@ -221,6 +217,7 @@
   }
 
   function broadcastSeats() {
+    if (window.ludoDebug && window.ludoDebug.liveTable && window.ludoDebug.liveTable.gameCode) return;
     sendEvent('s', { ts: now(), seats: state.seats });
   }
 
@@ -357,7 +354,9 @@
 
     state.channel
       .on('broadcast', { event: 'q' }, function () {
-        sendEvent('s', { ts: state.seatTs || now(), seats: state.seats });
+        if (!(window.ludoDebug && window.ludoDebug.liveTable && window.ludoDebug.liveTable.gameCode)) {
+          sendEvent('s', { ts: state.seatTs || now(), seats: state.seats });
+        }
       })
       .on('broadcast', { event: 's' }, function (evt) {
         applySeatSnapshot(evt && evt.payload ? evt.payload : null, true);
@@ -382,69 +381,40 @@
     nextMode = nextMode === 'play' ? 'play' : 'watch';
 
     if (nextMode === 'watch') {
-      var changed = clearMySeat();
+      var hasLiveTable = !!(window.ludoDebug && window.ludoDebug.liveTable && window.ludoDebug.liveTable.gameCode);
+      var changed = hasLiveTable ? false : clearMySeat();
       state.mode = 'watch';
-      state.seatTs = now();
+      if (changed) state.seatTs = now();
       updateReadonlyState();
       if (changed) broadcastSeats();
       emit();
       return { ok: true, mode: state.mode };
     }
 
-    var activeCount = countActiveSeats();
-    var currentMySeat = state.seatColor;
-    if (!currentMySeat && activeCount >= 4) {
-      emit();
-      return { ok: false, reason: 'full' };
-    }
-
-    if (!currentMySeat) {
-      var open = firstOpenSeat();
-      if (!open) return { ok: false, reason: 'full' };
-      clearMySeat();
-      state.seats[open] = { id: state.user.id, nick: state.user.nick };
-      state.seatColor = open;
-      state.mode = 'play';
-      state.seatTs = now();
-      updateReadonlyState();
-      broadcastSeats();
-      emit();
-      return { ok: true, mode: state.mode, seatColor: open };
-    }
-
+    var table = window.ludoDebug && window.ludoDebug.liveTable;
+    var assignedColor = table && table.gameCode && COLORS.indexOf(table.playerColor) !== -1
+      ? table.playerColor
+      : '';
+    if (!assignedColor) return { ok: false, reason: 'live-table-required' };
+    state.seatColor = assignedColor;
+    state.seats[assignedColor] = { id: state.user.id, nick: state.user.nick };
     state.mode = 'play';
-    state.seatTs = now();
     updateReadonlyState();
     emit();
-    return { ok: true, mode: state.mode, seatColor: currentMySeat };
+    return { ok: true, mode: state.mode, seatColor: assignedColor };
   }
 
   function claimSeat(color) {
     color = String(color || '').toLowerCase();
     if (COLORS.indexOf(color) === -1) return { ok: false, reason: 'invalid' };
 
-    var seat = state.seats[color];
-    if (seat && seat.id !== state.user.id) {
-      emit();
-      return { ok: false, reason: 'taken' };
-    }
-
-    if (seat && seat.id === state.user.id) {
-      state.mode = 'play';
-      updateReadonlyState();
-      emit();
-      return { ok: true, mode: state.mode, seatColor: color };
-    }
-
-    clearMySeat();
-    state.seats[color] = { id: state.user.id, nick: state.user.nick };
-    state.seatColor = color;
-    state.mode = 'play';
-    state.seatTs = now();
-    updateReadonlyState();
-    broadcastSeats();
-    emit();
-    return { ok: true, mode: state.mode, seatColor: color };
+    var table = window.ludoDebug && window.ludoDebug.liveTable;
+    var assignedColor = table && table.gameCode && COLORS.indexOf(table.playerColor) !== -1
+      ? table.playerColor
+      : '';
+    if (!assignedColor) return { ok: false, reason: 'live-table-required' };
+    if (color !== assignedColor) return { ok: false, reason: 'server-assigned' };
+    return setMode('play');
   }
 
   function sendChat(text) {
@@ -631,6 +601,7 @@
     leaveVoice: leaveVoice,
     adminKick: adminKick,
     countActiveSeats: countActiveSeats,
+    refresh: emit,
     colors: COLORS
   };
 })();
