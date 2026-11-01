@@ -1339,6 +1339,7 @@ async function loadRooms(preloadedRooms = null) {
         renderRoomsTopbar(rooms);
     // Optimization: skip redundant moderation status check on the first load since we just did it
     enterRoom(rooms[0], false, true);
+    tryAutoEnterLudoFromUrl();
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
 }
@@ -6117,8 +6118,33 @@ function cleanupVirtualRooms() {
   if (mobileTabs) mobileTabs.style.display = '';
 }
 
+function sanitizeLudoRoomKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+}
+
+const _ludoAutoRoomKey = (() => {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    return sanitizeLudoRoomKey(params.get('ludo') || params.get('ludoRoom') || '');
+  } catch (_) {
+    return '';
+  }
+})();
+let _ludoAutoEntered = false;
+
+function getDefaultLudoRoomKey() {
+  const roomId = currentRoom && !currentRoom._virtual ? sanitizeLudoRoomKey(currentRoom.id) : '';
+  return roomId ? `room-${roomId}` : 'global';
+}
+
+function tryAutoEnterLudoFromUrl() {
+  if (_ludoAutoEntered || !_ludoAutoRoomKey) return;
+  _ludoAutoEntered = true;
+  setTimeout(() => enterLudoRoom(_ludoAutoRoomKey), 120);
+}
+
 /* ── Ludo Room Functions ── */
-function enterLudoRoom() {
+function enterLudoRoom(roomKey) {
   cleanupVirtualRooms();
 
   // Mark sidebar item active
@@ -6127,6 +6153,7 @@ function enterLudoRoom() {
   if (ludoLi) ludoLi.classList.add('active');
 
   // Set virtual room state
+  const resolvedRoomKey = sanitizeLudoRoomKey(roomKey) || getDefaultLudoRoomKey();
   currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true };
 
   // Update topbar title
@@ -6137,11 +6164,9 @@ function enterLudoRoom() {
   // Load the game iframe (lazy-load only on first entry)
   const iframe = document.getElementById('ludo-iframe');
   if (iframe) {
-    const currentSrc = iframe.getAttribute('src');
-    if (!currentSrc || currentSrc === '') {
-      const userNick = currentUser?.username || 'Guest';
-      iframe.src = 'ludo/index.html?nick=' + encodeURIComponent(userNick);
-    }
+    const userNick = currentUser?.username || 'Guest';
+    const nextSrc = 'ludo/index.html?nick=' + encodeURIComponent(userNick) + '&room=' + encodeURIComponent(resolvedRoomKey);
+    if (iframe.getAttribute('src') !== nextSrc) iframe.src = nextSrc;
   }
 
   // Show ludo container, hide chat elements
@@ -6171,6 +6196,14 @@ function exitLudoRoom() {
 
 window.enterLudoRoom = enterLudoRoom;
 window.exitLudoRoom = exitLudoRoom;
+window.openPersonalLudoRoom = function openPersonalLudoRoom(opponentId) {
+  const me = sanitizeLudoRoomKey(currentUser?.id || 'guest');
+  const them = sanitizeLudoRoomKey(opponentId);
+  if (!them) return false;
+  const roomKey = 'pm-' + [me, them].sort().join('-');
+  enterLudoRoom(roomKey);
+  return true;
+};
 
 window.toggleGlobalChatMute = toggleGlobalChatMute;
 

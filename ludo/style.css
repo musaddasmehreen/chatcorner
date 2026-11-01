@@ -3762,3 +3762,137 @@ button {
     padding: 4px;
   }
 }
+
+  /* Full-page practical room/game overrides */
+  .mix-ludo-app {
+    height: 100vh;
+    height: 100dvh;
+    max-width: none;
+  }
+
+  .game-header,
+  .lobby-panel,
+  .setup-panel {
+    max-width: none;
+  }
+
+  .game-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+    align-items: stretch;
+    justify-content: stretch;
+    height: calc(100dvh - 86px);
+    max-width: none;
+    width: 100%;
+  }
+
+  .board-wrap {
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ludo-board {
+    width: min(calc(100vw - 430px), calc(100dvh - 115px));
+    height: min(calc(100vw - 430px), calc(100dvh - 115px));
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .side-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+  }
+
+  .room-card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .room-seat-hint {
+    color: #cbd5e1;
+    font-size: 10px;
+  }
+
+  .room-seat-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 7px;
+  }
+
+  .seat-pick-btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 4px;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .seat-pick-btn.red { background: #ef4444; }
+  .seat-pick-btn.green { background: #22c55e; }
+  .seat-pick-btn.yellow { background: #facc15; }
+  .seat-pick-btn.blue { background: #3b82f6; color: #fff; }
+  .seat-pick-btn.mine {
+    box-shadow: inset 0 0 0 2px #fff;
+  }
+  .seat-pick-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .room-invite-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .room-invite-row input {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 8px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #111827;
+    font-size: 11px;
+  }
+
+  .room-invite-row button {
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    background: linear-gradient(135deg, #38bdf8, #2563eb);
+    color: #fff;
+  }
+
+  .room-chat-feed {
+    min-height: 70px;
+    max-height: 130px;
+  }
+
+  @media (max-width: 980px) {
+    .game-layout {
+      grid-template-columns: 1fr;
+      height: auto;
+      min-height: calc(100dvh - 80px);
+    }
+
+    .ludo-board {
+      width: min(98vw, calc(100dvh - 300px));
+      height: min(98vw, calc(100dvh - 300px));
+    }
+  }

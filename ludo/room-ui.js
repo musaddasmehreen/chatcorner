@@ -22,14 +22,22 @@
       '<button id="roomDockToggle" class="room-dock-toggle" type="button">Room</button>',
       '<div class="room-dock-content">',
       '  <section class="room-card seat-card">',
-      '    <div class="room-card-title">Room Seats</div>',
+      '    <div class="room-card-title-row"><div class="room-card-title">Open for all</div><span class="room-seat-hint">First come first select</span></div>',
+      '    <div id="roomSeatPicker" class="room-seat-picker"></div>',
       '    <div id="roomSeatList" class="room-seat-list"></div>',
       '  </section>',
       '  <section class="room-card">',
-      '    <div class="room-card-title">Room Chat</div>',
+      '    <div class="room-card-title">Invite Link</div>',
+      '    <div class="room-invite-row">',
+      '      <input id="roomInviteLink" type="text" readonly />',
+      '      <button id="roomCopyInviteBtn" type="button">Copy</button>',
+      '    </div>',
+      '  </section>',
+      '  <section class="room-card">',
+      '    <div class="room-card-title">Smart Chat</div>',
       '    <div id="roomChatFeed" class="room-chat-feed"></div>',
       '    <form id="roomChatForm" class="room-chat-form">',
-      '      <input id="roomChatInput" type="text" maxlength="240" placeholder="Say hi..." autocomplete="off" />',
+      '      <input id="roomChatInput" type="text" maxlength="240" placeholder="Type..." autocomplete="off" />',
       '      <button type="submit">Send</button>',
       '    </form>',
       '  </section>',
@@ -129,6 +137,32 @@
         session.toggleMute();
       });
     }
+
+    var seatPicker = document.getElementById('roomSeatPicker');
+    if (seatPicker) {
+      seatPicker.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('button[data-seat-color]') : null;
+        if (!btn) return;
+        var color = btn.getAttribute('data-seat-color');
+        if (color) session.claimSeat(color);
+      });
+    }
+
+    var copyInviteBtn = document.getElementById('roomCopyInviteBtn');
+    var inviteInput = document.getElementById('roomInviteLink');
+    if (copyInviteBtn && inviteInput) {
+      copyInviteBtn.addEventListener('click', function () {
+        var text = inviteInput.value || '';
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch(function () {});
+        } else {
+          inviteInput.focus();
+          inviteInput.select();
+          try { document.execCommand('copy'); } catch (e) {}
+        }
+      });
+    }
   }
 
   function render(state, session) {
@@ -152,13 +186,28 @@
     }
 
     var seatList = document.getElementById('roomSeatList');
+    var seatPicker = document.getElementById('roomSeatPicker');
+    if (seatPicker) {
+      var pickerHtml = '';
+      for (var p = 0; p < session.colors.length; p++) {
+        var pickColor = session.colors[p];
+        var pickedSeat = state.seats[pickColor];
+        var isMine = pickedSeat && pickedSeat.id === state.user.id;
+        var disabled = pickedSeat && !isMine;
+        pickerHtml += '<button type="button" class="seat-pick-btn ' + pickColor + (isMine ? ' mine' : '') + '" data-seat-color="' + pickColor + '"' + (disabled ? ' disabled' : '') + '>';
+        pickerHtml += pickColor.charAt(0).toUpperCase() + pickColor.slice(1);
+        pickerHtml += '</button>';
+      }
+      seatPicker.innerHTML = pickerHtml;
+    }
+
     if (seatList) {
       var html = '';
       for (var i = 0; i < session.colors.length; i++) {
         var color = session.colors[i];
         var seat = state.seats[color];
         html += '<div class="room-seat-row ' + color + '">';
-        html += '<div><strong>' + color.charAt(0).toUpperCase() + color.slice(1) + '</strong><span>' + (seat ? esc(seat.nick) : 'Open') + '</span></div>';
+        html += '<div><strong>' + color.charAt(0).toUpperCase() + color.slice(1) + '</strong><span>' + (seat ? esc(seat.nick) : 'Open for all') + '</span></div>';
         if (state.user.isAdmin && seat && seat.id !== state.user.id) {
           html += '<div class="room-seat-actions">';
           html += '<button type="button" data-action="kick" data-color="' + color + '">Kick</button>';
@@ -182,12 +231,18 @@
     var feed = document.getElementById('roomChatFeed');
     if (feed) {
       var chatHtml = '';
-      for (var c = Math.max(0, state.chat.length - 40); c < state.chat.length; c++) {
+      for (var c = Math.max(0, state.chat.length - 24); c < state.chat.length; c++) {
         var m = state.chat[c];
         chatHtml += '<div class="room-chat-msg' + (m.system ? ' system' : '') + '"><b>' + esc(m.nick) + ':</b> ' + esc(m.text) + '</div>';
       }
       feed.innerHTML = chatHtml;
       feed.scrollTop = feed.scrollHeight;
+    }
+
+    var inviteInput = document.getElementById('roomInviteLink');
+    if (inviteInput) {
+      var roomKey = encodeURIComponent(state.roomKey || 'global');
+      inviteInput.value = window.location.origin + '/chat.html?ludo=' + roomKey;
     }
 
     var joinVoiceBtn = document.getElementById('roomJoinVoiceBtn');

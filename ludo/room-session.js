@@ -384,6 +384,7 @@
     if (nextMode === 'watch') {
       var changed = clearMySeat();
       state.mode = 'watch';
+      state.seatTs = now();
       updateReadonlyState();
       if (changed) broadcastSeats();
       emit();
@@ -404,6 +405,7 @@
       state.seats[open] = { id: state.user.id, nick: state.user.nick };
       state.seatColor = open;
       state.mode = 'play';
+      state.seatTs = now();
       updateReadonlyState();
       broadcastSeats();
       emit();
@@ -411,9 +413,38 @@
     }
 
     state.mode = 'play';
+    state.seatTs = now();
     updateReadonlyState();
     emit();
     return { ok: true, mode: state.mode, seatColor: currentMySeat };
+  }
+
+  function claimSeat(color) {
+    color = String(color || '').toLowerCase();
+    if (COLORS.indexOf(color) === -1) return { ok: false, reason: 'invalid' };
+
+    var seat = state.seats[color];
+    if (seat && seat.id !== state.user.id) {
+      emit();
+      return { ok: false, reason: 'taken' };
+    }
+
+    if (seat && seat.id === state.user.id) {
+      state.mode = 'play';
+      updateReadonlyState();
+      emit();
+      return { ok: true, mode: state.mode, seatColor: color };
+    }
+
+    clearMySeat();
+    state.seats[color] = { id: state.user.id, nick: state.user.nick };
+    state.seatColor = color;
+    state.mode = 'play';
+    state.seatTs = now();
+    updateReadonlyState();
+    broadcastSeats();
+    emit();
+    return { ok: true, mode: state.mode, seatColor: color };
   }
 
   function sendChat(text) {
@@ -593,6 +624,7 @@
     subscribe: subscribe,
     getState: snapshot,
     setMode: setMode,
+    claimSeat: claimSeat,
     sendChat: sendChat,
     joinVoice: joinVoice,
     toggleMute: toggleMute,
