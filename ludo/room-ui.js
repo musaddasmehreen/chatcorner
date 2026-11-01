@@ -22,7 +22,7 @@
       '<button id="roomDockToggle" class="room-dock-toggle" type="button">Room</button>',
       '<div class="room-dock-content">',
       '  <section class="room-card seat-card">',
-      '    <div class="room-card-title-row"><div class="room-card-title">Open for all</div><span class="room-seat-hint">First come first select</span></div>',
+      '    <div class="room-card-title-row"><div class="room-card-title">Live Table Seats</div><span id="roomSeatHint" class="room-seat-hint"></span></div>',
       '    <div id="roomSeatPicker" class="room-seat-picker"></div>',
       '    <div id="roomSeatList" class="room-seat-list"></div>',
       '  </section>',
@@ -170,10 +170,10 @@
     var watchBtn = document.getElementById('ludoEntryWatch');
     var modal = document.getElementById('ludoEntryModal');
 
-    var full = state.activeSeatCount >= 4 && !state.seatColor;
+    var full = state.liveTableAttached && state.activeSeatCount >= 4 && !state.liveSeatColor;
     if (playBtn) {
-      playBtn.disabled = full;
-      playBtn.textContent = full ? 'Full (4/4)' : 'Play';
+      playBtn.disabled = full || !state.liveSeatColor;
+      playBtn.textContent = full ? 'Full (4/4)' : state.liveSeatColor ? 'Play' : 'Join Live Table First';
     }
 
     if (watchBtn) {
@@ -187,44 +187,61 @@
 
     var seatList = document.getElementById('roomSeatList');
     var seatPicker = document.getElementById('roomSeatPicker');
+    var seatHint = document.getElementById('roomSeatHint');
+    if (seatHint) {
+      seatHint.textContent = state.liveTableAttached
+        ? 'Assigned by live table'
+        : 'Join a live table to claim seats';
+    }
     if (seatPicker) {
-      var pickerHtml = '';
-      for (var p = 0; p < session.colors.length; p++) {
-        var pickColor = session.colors[p];
-        var pickedSeat = state.seats[pickColor];
-        var isMine = pickedSeat && pickedSeat.id === state.user.id;
-        var disabled = pickedSeat && !isMine;
-        pickerHtml += '<button type="button" class="seat-pick-btn ' + pickColor + (isMine ? ' mine' : '') + '" data-seat-color="' + pickColor + '"' + (disabled ? ' disabled' : '') + '>';
-        pickerHtml += pickColor.charAt(0).toUpperCase() + pickColor.slice(1);
-        pickerHtml += '</button>';
+      if (!seatPicker.querySelector('button[data-seat-color]')) {
+        for (var p = 0; p < session.colors.length; p++) {
+          var color = session.colors[p];
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'seat-pick-btn ' + color;
+          button.dataset.seatColor = color;
+          button.textContent = color.charAt(0).toUpperCase() + color.slice(1);
+          seatPicker.appendChild(button);
+        }
       }
-      seatPicker.innerHTML = pickerHtml;
+      var seatButtons = seatPicker.querySelectorAll('button[data-seat-color]');
+      for (var b = 0; b < seatButtons.length; b++) {
+        var seatColor = seatButtons[b].getAttribute('data-seat-color');
+        var isMine = state.liveSeatColor === seatColor;
+        seatButtons[b].disabled = !isMine;
+        seatButtons[b].classList.toggle('mine', isMine);
+      }
     }
 
     if (seatList) {
-      var html = '';
-      for (var i = 0; i < session.colors.length; i++) {
-        var color = session.colors[i];
-        var seat = state.seats[color];
-        html += '<div class="room-seat-row ' + color + '">';
-        html += '<div><strong>' + color.charAt(0).toUpperCase() + color.slice(1) + '</strong><span>' + (seat ? esc(seat.nick) : 'Open for all') + '</span></div>';
-        if (state.user.isAdmin && seat && seat.id !== state.user.id) {
-          html += '<div class="room-seat-actions">';
-          html += '<button type="button" data-action="kick" data-color="' + color + '">Kick</button>';
-          html += '<button type="button" data-action="take" data-color="' + color + '">Kick &amp; Take Over Seat</button>';
+      if (state.liveTableAttached) {
+        seatList.textContent = 'Seat ownership is managed by the live table.';
+      } else {
+        var html = '';
+        for (var i = 0; i < session.colors.length; i++) {
+          var color = session.colors[i];
+          var seat = state.seats[color];
+          html += '<div class="room-seat-row ' + color + '">';
+          html += '<div><strong>' + color.charAt(0).toUpperCase() + color.slice(1) + '</strong><span>' + (seat ? esc(seat.nick) : 'Open for all') + '</span></div>';
+          if (state.user.isAdmin && seat && seat.id !== state.user.id) {
+            html += '<div class="room-seat-actions">';
+            html += '<button type="button" data-action="kick" data-color="' + color + '">Kick</button>';
+            html += '<button type="button" data-action="take" data-color="' + color + '">Kick &amp; Take Over Seat</button>';
+            html += '</div>';
+          }
           html += '</div>';
         }
-        html += '</div>';
-      }
-      seatList.innerHTML = html;
+        seatList.innerHTML = html;
 
-      var actionButtons = seatList.querySelectorAll('button[data-action]');
-      for (var b = 0; b < actionButtons.length; b++) {
-        actionButtons[b].addEventListener('click', function () {
-          var color = this.getAttribute('data-color');
-          var action = this.getAttribute('data-action');
-          session.adminKick(color, action === 'take');
-        });
+        var actionButtons = seatList.querySelectorAll('button[data-action]');
+        for (var a = 0; a < actionButtons.length; a++) {
+          actionButtons[a].addEventListener('click', function () {
+            var color = this.getAttribute('data-color');
+            var action = this.getAttribute('data-action');
+            session.adminKick(color, action === 'take');
+          });
+        }
       }
     }
 

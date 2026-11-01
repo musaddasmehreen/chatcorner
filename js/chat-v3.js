@@ -1338,7 +1338,7 @@ async function loadRooms(preloadedRooms = null) {
 
         renderRoomsTopbar(rooms);
     // Optimization: skip redundant moderation status check on the first load since we just did it
-    enterRoom(rooms[0], false, true);
+    await enterRoom(rooms[0], false, true);
     tryAutoEnterLudoFromUrl();
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
@@ -6133,6 +6133,9 @@ const _ludoAutoRoomKey = (() => {
 let _ludoAutoEntered = false;
 
 function getDefaultLudoRoomKey() {
+  if (currentRoom && currentRoom._virtual) {
+    return sanitizeLudoRoomKey(currentRoom._ludoRoomKey) || 'global';
+  }
   const roomId = currentRoom && !currentRoom._virtual ? sanitizeLudoRoomKey(currentRoom.id) : '';
   return roomId ? `room-${roomId}` : 'global';
 }
@@ -6140,11 +6143,11 @@ function getDefaultLudoRoomKey() {
 function tryAutoEnterLudoFromUrl() {
   if (_ludoAutoEntered || !_ludoAutoRoomKey) return;
   _ludoAutoEntered = true;
-  setTimeout(() => enterLudoRoom(_ludoAutoRoomKey), 120);
+  enterLudoRoom(_ludoAutoRoomKey);
 }
 
 /* ── Ludo Room Functions ── */
-function enterLudoRoom(roomKey) {
+function enterLudoRoom(roomKey, gameCode) {
   cleanupVirtualRooms();
 
   // Mark sidebar item active
@@ -6154,7 +6157,9 @@ function enterLudoRoom(roomKey) {
 
   // Set virtual room state
   const resolvedRoomKey = sanitizeLudoRoomKey(roomKey) || getDefaultLudoRoomKey();
-  currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true };
+  const reuseCurrentRoom = currentRoom?._virtual && currentRoom._ludoRoomKey === resolvedRoomKey;
+  const resolvedGameCode = sanitizeLudoRoomKey(gameCode) || (reuseCurrentRoom ? currentRoom._ludoGameCode : '');
+  currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true, _ludoRoomKey: resolvedRoomKey, _ludoGameCode: resolvedGameCode };
 
   // Update topbar title
   const titleEl = document.getElementById('current-room-name');
@@ -6165,7 +6170,8 @@ function enterLudoRoom(roomKey) {
   const iframe = document.getElementById('ludo-iframe');
   if (iframe) {
     const userNick = currentUser?.username || 'Guest';
-    const nextSrc = 'ludo/index.html?nick=' + encodeURIComponent(userNick) + '&room=' + encodeURIComponent(resolvedRoomKey);
+    const nextSrc = 'ludo/index.html?nick=' + encodeURIComponent(userNick) + '&room=' + encodeURIComponent(resolvedRoomKey) +
+      (resolvedGameCode ? '&join=' + encodeURIComponent(resolvedGameCode) : '');
     if (iframe.getAttribute('src') !== nextSrc) iframe.src = nextSrc;
   }
 
@@ -6196,12 +6202,38 @@ function exitLudoRoom() {
 
 window.enterLudoRoom = enterLudoRoom;
 window.exitLudoRoom = exitLudoRoom;
-window.openPersonalLudoRoom = function openPersonalLudoRoom(opponentId) {
+window.openPersonalLudoRoom = function openPersonalLudoRoom(opponentId, gameCode) {
   const me = sanitizeLudoRoomKey(currentUser?.id || 'guest');
   const them = sanitizeLudoRoomKey(opponentId);
   if (!them) return false;
   const roomKey = 'pm-' + [me, them].sort().join('-');
-  enterLudoRoom(roomKey);
+  enterLudoRoom(roomKey, gameCode);
+  return true;
+};
+
+window.createPersonalLudoTable = function createPersonalLudoTable(onCreated) {
+  const iframe = document.getElementById('ludo-iframe');
+  if (!iframe || typeof onCreated !== 'function') return false;
+
+  let started = false;
+  const createTable = () => {
+    if (started) return;
+    started = true;
+    const create = iframe.contentWindow?.ludoDebug?.createLiveTableFromSetup;
+    if (typeof create !== 'function') {
+      onCreated({ ok: false, error: 'Ludo game is not ready.' });
+      return;
+    }
+    Promise.resolve(create({ playerCount: 2 })).then(onCreated).catch(() => {
+      onCreated({ ok: false, error: 'Could not create a live table.' });
+    });
+  };
+
+  if (iframe.contentWindow?.ludoDebug) {
+    createTable();
+  } else {
+    iframe.addEventListener('load', createTable, { once: true });
+  }
   return true;
 };
 

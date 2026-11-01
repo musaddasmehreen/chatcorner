@@ -194,6 +194,11 @@
           sendGamePacket(fromUserId, 'game_accept', { gameType });
           if (gameType === 'ludo-room') {
             window.openPersonalLudoRoom?.(fromUserId);
+            window.createPersonalLudoTable?.(function (result) {
+              if (result && result.ok && result.game_code) {
+                sendGamePacket(fromUserId, 'game_ludo_table', { gameCode: result.game_code });
+              }
+            });
           } else {
             launchGame(fromUserId, gameType, 'acceptor');
           }
@@ -219,6 +224,11 @@
         broadcastScoreSync(fromUserId);
       }
     } 
+    else if (type === 'game_ludo_table') {
+      if (payload.gameCode) {
+        window.openPersonalLudoRoom?.(fromUserId, payload.gameCode);
+      }
+    }
     else if (type === 'game_decline') {
       const gameName = getGameDisplayName(payload.gameType);
       const box = getPmMessagesBox(fromUserId);

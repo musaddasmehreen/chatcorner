@@ -61,6 +61,12 @@
 
   var COLOR_ORDER = ['yellow', 'blue', 'red', 'green'];
 
+  function refreshLudoRoomSession() {
+    if (window.LudoRoomSession && typeof window.LudoRoomSession.refresh === 'function') {
+      window.LudoRoomSession.refresh();
+    }
+  }
+
   var COLOR_LABELS = {
     yellow: 'Yellow',
     blue: 'Blue',
@@ -3199,7 +3205,7 @@
     }, 900);
   }
 
-  function createLiveTableFromSetup() {
+  function createLiveTableFromSetup(options) {
     if (liveTable.gameCode) {
       gameStatus.innerHTML =
         'You are already in table <strong>' + liveTable.gameCode +
@@ -3213,16 +3219,16 @@
     var nick = getLobbyNick();
     var pcid = findPersistentClientId();
 
-    apiPost('https://www.mixchatroom.com/ludo/api/create_table.php', {
+    return apiPost('https://www.mixchatroom.com/ludo/api/create_table.php', {
       nick: nick,
       persistent_client_id: pcid,
       mode: setup.mode,
-      player_count: setup.players,
+      player_count: options && parseInt(options.playerCount, 10) === 2 ? 2 : setup.players,
       team_up: setup.teamUp ? 1 : 0
     }).then(function (data) {
       if (!data || !data.ok) {
         gameStatus.innerHTML = 'Could not create table: <strong>' + (data && data.error ? data.error : 'Unknown error') + '</strong>';
-        return;
+        return data || { ok: false, error: 'Could not create table.' };
       }
 
       liveTable.gameCode = data.game_code;
@@ -3230,6 +3236,7 @@
       liveTable.role = 'host';
       liveTable.status = data.status || 'waiting';
       liveTable.isHost = true;
+      refreshLudoRoomSession();
 
       getOrCreateCurrentTableBox();
       ensureLiveTableActionButtons();
@@ -3241,8 +3248,10 @@
       startTablePolling();
       ensureLiveTableActionButtons();
       updateLobbyActionButtons();
+      return data;
     }).catch(function () {
       gameStatus.innerHTML = 'Could not create table due to a network/server error.';
+      return { ok: false, error: 'Network/server error' };
     });
   }
 
@@ -3287,6 +3296,7 @@
       liveTable.role = data.role || 'player';
       liveTable.status = data.status || 'waiting';
       liveTable.isHost = data.role === 'host';
+      refreshLudoRoomSession();
 
       getOrCreateCurrentTableBox();
       ensureLiveTableActionButtons();
@@ -3592,6 +3602,7 @@
     }
 
     livePlayersByColor = playerByColor;
+    refreshLudoRoomSession();
 
     for (var nameColor in playerByColor) {
       if (playerByColor.hasOwnProperty(nameColor)) {
