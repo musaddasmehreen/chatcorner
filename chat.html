@@ -57,7 +57,7 @@
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.3"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=1.5" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=2.3" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=2.4" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -216,19 +216,6 @@
 
       </div>
       <div class="header-pm-bar hidden" id="pm-popup-tabs" aria-label="Open private chats"></div>
-      <div class="topbar-search" id="topbar-search">
-        <input
-          type="search"
-          id="search-input"
-          class="search-input"
-          placeholder="🔍 Search messages…"
-          aria-label="Search messages in this room"
-          autocomplete="off"
-          oninput="searchMessages(this.value)"
-        />
-        <span id="search-count" class="search-count" aria-live="polite"></span>
-        <button class="search-clear-btn" onclick="clearSearch()" title="Clear search" aria-label="Clear search">✕</button>
-      </div>
       <div class="topbar-actions">
         <div class="topbar-clears-stack" id="topbar-clears-stack">
           <button class="topbar-clear-btn" id="btn-clear-my-messages" onclick="clearMyMessages()" title="Delete my messages for everyone in this room">Clear My Messages</button>
@@ -369,9 +356,7 @@
         </div>
         <div class="input-strip-center">
           <textarea id="msg-input" class="msg-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
-          <span id="msg-char-counter" style="font-size:0.7rem;color:var(--muted);align-self:center;white-space:nowrap" aria-live="polite" aria-label="Character count">0/500</span>
-        </div>
-        <div class="input-strip-right">
+          <span id="msg-char-counter" class="msg-char-counter" aria-live="polite" aria-label="Character count">0/500</span>
           <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
         </div>
       </div>
@@ -462,12 +447,11 @@
           <button class="btn-stop-radio" id="btn-stop-radio" onclick="stopRadioPlayer()" aria-label="Stop radio">⏹️ Stop</button>
         </div>
       </div>
-    </div>
 
-    <!-- ROOMS BOTTOM BAR -->
-    <nav class="rooms-bottom-bar" id="rooms-bottom-bar" aria-label="Rooms">
-      <ul class="room-list" id="room-list"></ul>
-    </nav>
+      <!-- Rooms (paired 2-row grid) -->
+      <div class="bar-divider"></div>
+      <ul class="room-list" id="room-list" aria-label="Rooms"></ul>
+    </div>
 
     <!-- Guest notice -->
     <div id="guest-notice-bar" class="guest-bar" style="display:none">
