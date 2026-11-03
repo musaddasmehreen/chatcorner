@@ -80,6 +80,54 @@
     return dock;
   }
 
+  function makeDraggable(panel, handle) {
+    handle.addEventListener('pointerdown', function (e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      var host = panel.offsetParent || document.body;
+      var hostRect = host.getBoundingClientRect();
+      var rect = panel.getBoundingClientRect();
+      var dx = e.clientX - rect.left;
+      var dy = e.clientY - rect.top;
+      handle.setPointerCapture(e.pointerId);
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+
+      function move(ev) {
+        var x = ev.clientX - dx - hostRect.left;
+        var y = ev.clientY - dy - hostRect.top;
+        x = Math.max(0, Math.min(x, hostRect.width - 60));
+        y = Math.max(0, Math.min(y, hostRect.height - 30));
+        panel.style.left = x + 'px';
+        panel.style.top = y + 'px';
+      }
+      function up() {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        handle.removeEventListener('pointercancel', up);
+      }
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+      handle.addEventListener('pointercancel', up);
+      e.preventDefault();
+    });
+  }
+
+  function addDragHandles() {
+    var content = document.querySelector('#ludoRoomDock .room-dock-content');
+    var dock = document.getElementById('ludoRoomDock');
+    if (content && dock && !content.querySelector('.ludo-drag-handle')) {
+      var h1 = el('div', 'ludo-drag-handle', '&#8801; Players &amp; Room (drag / resize)');
+      content.insertBefore(h1, content.firstChild);
+      makeDraggable(dock, h1);
+    }
+    var side = document.querySelector('.side-panel');
+    if (side && !side.querySelector('.ludo-drag-handle')) {
+      var h2 = el('div', 'ludo-drag-handle', '&#8801; Controls (drag / resize)');
+      side.insertBefore(h2, side.firstChild);
+      makeDraggable(side, h2);
+    }
+  }
+
   function bindUi(session) {
     var dock = document.getElementById('ludoRoomDock');
     var toggleBtn = document.getElementById('roomDockToggle');
@@ -280,6 +328,7 @@
     var session = window.LudoRoomSession;
     if (!session) return;
     mountPanel();
+    addDragHandles();
     bindUi(session);
     session.subscribe(function (state) {
       render(state, session);
