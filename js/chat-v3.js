@@ -7,21 +7,8 @@ const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arcti
 const GUEST_VOICE_LIMIT = 2;
 const EMOJI_GROUPS = [
   {
-    label: 'Super Icons',
-    items: [
-      { emoji: '[super-wreath]', title: 'Wreath' },
-      { emoji: '[super-car]', title: 'Sports Car' },
-      { emoji: '[super-dance]', title: 'Silhouette Girl' },
-      { emoji: '[super-screamer]', title: 'Orange Screaming' },
-      { emoji: '[super-welcome]', title: 'Welcome smiles' },
-      { emoji: '[super-swing]', title: 'Swinging Smiley' },
-      { emoji: '[super-motorcycle]', title: 'Motorcycle Smiley' },
-      { emoji: '[super-kissing]', title: 'Kissing under Umbrella' },
-      { emoji: '[super-shooting]', title: 'Shooting' },
-      { emoji: '[super-sleeping]', title: 'Sleeping' },
-      { emoji: '[super-kitty]', title: 'Hello Kitty' },
-      { emoji: '[super-bunny]', title: 'Rabbit in Basket' }
-    ]
+    label: 'Icons',
+    items: ['🌸','😊','🚗','💨','💃','✨','😱','🔊','👋','🤸','⛓️','🏍️','🔥','💏','☂️','🔫','😴','🐱','🎀','🐰','🧺']
   },
   {
     label: 'Live',
