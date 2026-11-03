@@ -2840,3 +2840,7 @@ body.guest-mode .emoji-bar { display: none; }
   to { transform: translateY(-8px) scaleY(1.05); }
 }
 
+
+/* Super icon previews inside the emoji picker */
+.emoji-btn.emoji-btn-super { overflow: hidden; }
+.emoji-btn.emoji-btn-super .super-emoji-container { font-size: 1.3rem !important; margin: 0 !important; animation: none !important; pointer-events: none; }

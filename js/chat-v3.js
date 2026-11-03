@@ -48,6 +48,10 @@ const EMOJI_GROUPS = [
     items: ['👍','👎','👏','🙌','🫡','🙏','🤝','👋','✌️','🤞','👌','💪','🫶','👀']
   },
   {
+    label: 'New (Unicode 15-16)',
+    items: ['🫩','🫆','🪾','🫜','🪉','🫟','🪏','🪈','🫨','🩷','🩵','🩶','🫷','🫸','🫎','🪽','🐦‍🔥','🫚','🫛','🪭','🪮','🪇','🫠','🫥']
+  },
+  {
     label: 'Fun',
     items: ['🔥','✨','🌈','⭐','⚡','🎉','🎊','🎈','🎵','🎶','💯','💥','🌸','🍕','☕','🎮']
   }
@@ -192,7 +196,13 @@ function renderEmojiPicker() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'emoji-btn' + (config.live ? ` ${config.live}` : '');
-      btn.textContent = config.emoji;
+      if (/^\[super-[a-z]+\]$/.test(config.emoji)) {
+        // static preview from the trusted built-in map (no user input)
+        btn.innerHTML = parseSuperEmojisHtml(config.emoji);
+        btn.classList.add('emoji-btn-super');
+      } else {
+        btn.textContent = config.emoji;
+      }
       btn.title = config.title || config.emoji;
       btn.setAttribute('aria-label', config.title || config.emoji);
       btn.onclick = () => insertEmoji(config.emoji);
