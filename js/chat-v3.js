@@ -6179,7 +6179,7 @@ function enterLudoRoom(roomKey) {
   const iframe = document.getElementById('ludo-iframe');
   if (iframe) {
     const userNick = currentUser?.username || 'Guest';
-    const nextSrc = 'ludo/index.html?nick=' + encodeURIComponent(userNick) + '&room=' + encodeURIComponent(resolvedRoomKey);
+    const nextSrc = 'ludo/index.html?v=5.5&nick=' + encodeURIComponent(userNick) + '&room=' + encodeURIComponent(resolvedRoomKey);
     if (iframe.getAttribute('src') !== nextSrc) iframe.src = nextSrc;
   }
 

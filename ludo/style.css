@@ -4023,3 +4023,21 @@ button {
     margin: 0;
   }
 }
+
+/* Controls panel pinned to the far right; the board never sits under it */
+@media (min-width: 901px) {
+  body .game-layout { padding-right: 320px; }
+  body .game-layout:has(.side-panel.is-collapsed) { padding-right: 52px; }
+  body .side-panel {
+    position: absolute;
+    left: auto !important;
+    right: 8px !important;
+    top: 8px !important;
+    bottom: auto !important;
+    width: 300px;
+    height: calc(100% - 16px);
+    max-height: calc(100% - 16px);
+    resize: none;
+  }
+  body .side-panel .ludo-drag-handle { display: none; }
+}
