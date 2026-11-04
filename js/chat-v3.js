@@ -1318,6 +1318,17 @@ async function loadRooms(preloadedRooms = null) {
       iptvLi.classList.add('iptv-room-item');
       iptvLi.onclick = () => enterIPTVRoom();
       textList.appendChild(iptvLi);
+
+      [['sp-virtual', '🎧 Spotify', 'Spotify – Listen together'],
+       ['yt-virtual', '▶️ YouTube', 'YouTube – Watch together']].forEach(([id, label, title]) => {
+        const li = document.createElement('li');
+        li.textContent = label;
+        li.title = title;
+        li.dataset.roomId = id;
+        li.classList.add('iptv-room-item');
+        li.onclick = () => enterMediaRoom(id);
+        textList.appendChild(li);
+      });
     }
 
     // Inject virtual Ludo room at end of sidebar list
@@ -1369,6 +1380,8 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (room._virtual) {
     if (room.id === 'iptv-virtual') {
       enterIPTVRoom();
+    } else if (room.id === 'sp-virtual' || room.id === 'yt-virtual') {
+      enterMediaRoom(room.id);
     } else if (room.id === 'ludo-virtual') {
       enterLudoRoom();
     } 
@@ -5789,6 +5802,8 @@ window.sendMessage = async function() {
     
     if (_iptvActive && _iptvChannelChannel) {
       await _iptvChannelChannel.send({ type: 'broadcast', event: 'message', payload });
+    } else if (_mediaKind && _mediaChannel) {
+      await _mediaChannel.send({ type: 'broadcast', event: 'message', payload });
     }
     return;
   }
@@ -6089,6 +6104,7 @@ function cleanupVirtualRooms() {
 
   // Reset virtual flags
   if (typeof exitIPTVRoom === 'function') exitIPTVRoom();
+  if (typeof exitMediaRoom === 'function') exitMediaRoom();
 
   // Cleanup layout classes on shell
   const shell = document.querySelector('.page-shell');
@@ -6244,3 +6260,367 @@ window.toggleGlobalChatMute = toggleGlobalChatMute;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })();
+
+
+/* ════════════════════════════════════════════════════════════════
+   🎧 SPOTIFY + ▶️ YouTube ROOMS (synced listening / watching)
+   YouTube: only admins/owner control playback.
+   Spotify: first registered user in the room controls; VIP/Mod/Admin
+   take priority; mods/admins can claim control; guests never control.
+════════════════════════════════════════════════════════════════ */
+let _mediaKind = null;            // 'sp' | 'yt' | null
+let _mediaChannel = null;
+let _mediaTimer = null;
+let _mediaJoinedAt = 0;
+let _mediaClaimed = false;
+let _ytReady = null;
+let _ytState = { videoId: null, playing: false, time: 0 };
+let _spController = null;
+let _spState = { uri: null, paused: true, position: 0 };
+let _spSuppress = false;
+
+function _mediaIsAdmin() { return getViewerRoleLevel() >= 4; }
+function _mediaUserName() {
+  return currentProfile?.username || currentUser?.email?.split('@')[0] || 'Guest';
+}
+function _mediaToast(msg) {
+  const el = document.getElementById(_mediaKind === 'sp' ? 'sp-status' : 'yt-status');
+  if (el) el.textContent = msg;
+}
+
+function enterMediaRoom(id) {
+  cleanupVirtualRooms();
+  const kind = id === 'sp-virtual' ? 'sp' : 'yt';
+  _mediaKind = kind;
+  _mediaJoinedAt = Date.now();
+  _mediaClaimed = false;
+
+  document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
+  const li = document.querySelector(`#room-list li[data-room-id="${id}"]`);
+  if (li) li.classList.add('active');
+
+  const container = document.getElementById(kind === 'sp' ? 'sp-container' : 'yt-container');
+  if (container) container.classList.remove('hidden');
+  const btnReturn = document.getElementById('btn-iptv-return');
+  if (btnReturn) btnReturn.classList.remove('hidden');
+
+  const label = kind === 'sp' ? '🎧 Spotify' : '▶️ YouTube';
+  const titleEl = document.getElementById('current-room-name');
+  if (titleEl) titleEl.textContent = label + ' Room';
+  document.title = label + ' – ChatCorner';
+
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.add('iptv-active', 'media-room');
+  if (typeof switchMobileTab === 'function') switchMobileTab('chat');
+
+  const msgContainer = document.getElementById('messages');
+  if (msgContainer) msgContainer.innerHTML = '';
+  ['voice-controls', 'bar-divider'].forEach(i => document.getElementById(i)?.classList.add('hidden'));
+  const msgInput = document.getElementById('msg-input');
+  if (msgInput) { msgInput.disabled = false; msgInput.placeholder = `💬 Chat in ${label} room...`; }
+  const sendBtn = document.querySelector('.btn-send');
+  if (sendBtn) sendBtn.disabled = false;
+  const emojiBtn = document.getElementById('btn-emoji');
+  if (emojiBtn) emojiBtn.disabled = false;
+
+  const chatMain = document.querySelector('.chat-main');
+  const messages = document.getElementById('messages');
+  const inputStrip = document.querySelector('.input-strip');
+  if (chatMain && messages && inputStrip && !document.querySelector('.iptv-chat-wrapper')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'iptv-chat-wrapper';
+    chatMain.appendChild(wrapper);
+    wrapper.appendChild(messages);
+    wrapper.appendChild(inputStrip);
+  }
+
+  currentRoom = { id, name: kind === 'sp' ? 'Spotify' : 'YouTube', is_audio_enabled: false, _virtual: true };
+
+  if (kind === 'yt') initYouTubeRoom(); else initSpotifyRoom();
+}
+
+function exitMediaRoom() {
+  if (!_mediaKind) return;
+  const kind = _mediaKind;
+  _mediaKind = null;
+  clearInterval(_mediaTimer);
+  _mediaTimer = null;
+
+  ['sp-container', 'yt-container'].forEach(i => document.getElementById(i)?.classList.add('hidden'));
+  const shell = document.querySelector('.page-shell');
+  if (shell) shell.classList.remove('iptv-active', 'media-room');
+  document.getElementById('btn-iptv-return')?.classList.add('hidden');
+
+  const chatMain = document.querySelector('.chat-main');
+  const wrapper = document.querySelector('.iptv-chat-wrapper');
+  if (chatMain && wrapper) {
+    while (wrapper.firstChild) chatMain.appendChild(wrapper.firstChild);
+    wrapper.remove();
+  }
+
+  if (_mediaChannel) { sbClient.removeChannel(_mediaChannel); _mediaChannel = null; }
+  if (kind === 'yt' && _ytPlayer) { try { _ytPlayer.stopVideo(); } catch (e) {} }
+  if (kind === 'sp' && _spController) { try { _spController.pause(); } catch (e) {} }
+  _ytState = { videoId: null, playing: false, time: 0 };
+  _spState = { uri: null, paused: true, position: 0 };
+}
+
+function _mediaSend(event, payload) {
+  if (_mediaChannel) _mediaChannel.send({ type: 'broadcast', event, payload });
+}
+
+function _mediaOpenChannel(name, presence) {
+  if (_mediaChannel) sbClient.removeChannel(_mediaChannel);
+  _mediaChannel = sbClient.channel(name, {
+    config: { broadcast: { self: true }, presence: { key: currentUser?.id || String(Math.random()) } }
+  });
+  _mediaChannel.on('broadcast', { event: 'message' }, ({ payload }) => renderIPTVChatMessage(payload));
+  return _mediaChannel;
+}
+
+/* ───────── YouTube ───────── */
+function _ytParseId(input) {
+  const v = String(input || '').trim();
+  const m = v.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([\w-]{11})/);
+  if (m) return m[1];
+  return /^[\w-]{11}$/.test(v) ? v : null;
+}
+
+function _ytLoadApi() {
+  if (_ytReady) return _ytReady;
+  _ytReady = new Promise(resolve => {
+    if (window.YT && window.YT.Player) return resolve();
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if (prev) prev(); resolve(); };
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  });
+  return _ytReady;
+}
+
+async function initYouTubeRoom() {
+  const admin = _mediaIsAdmin();
+  document.getElementById('yt-admin-bar')?.classList.toggle('hidden', !admin);
+  document.getElementById('yt-guard')?.classList.toggle('hidden', admin);
+  document.getElementById('yt-sync-btn')?.classList.toggle('hidden', admin);
+  _mediaToast(admin ? 'You control playback.' : 'Only admins control playback.');
+
+  const ch = _mediaOpenChannel('yt-chat-room');
+  ch.on('broadcast', { event: 'yt-state' }, ({ payload }) => { if (!_mediaIsAdmin()) _ytApply(payload); });
+  ch.on('broadcast', { event: 'yt-request' }, () => { if (_mediaIsAdmin()) _ytBroadcast(); });
+  ch.subscribe(status => { if (status === 'SUBSCRIBED') _mediaSend('yt-request', {}); });
+
+  await _ytLoadApi();
+  if (_mediaKind !== 'yt') return;
+  if (!_ytPlayer) {
+    _ytPlayer = new YT.Player('yt-player', {
+      width: '100%', height: '100%',
+      playerVars: { playsinline: 1, rel: 0, controls: _mediaIsAdmin() ? 1 : 0, disablekb: _mediaIsAdmin() ? 0 : 1 },
+      events: { onStateChange: _ytOnState }
+    });
+  }
+  clearInterval(_mediaTimer);
+  _mediaTimer = setInterval(() => { if (_mediaIsAdmin() && _ytState.videoId) _ytBroadcast(); }, 4000);
+}
+
+function _ytBroadcast() {
+  if (!_ytPlayer || !_ytPlayer.getPlayerState || !_ytState.videoId) return;
+  const st = _ytPlayer.getPlayerState();
+  _mediaSend('yt-state', {
+    videoId: _ytState.videoId,
+    playing: st === 1 || st === 3,
+    time: _ytPlayer.getCurrentTime() || 0,
+    ts: Date.now()
+  });
+}
+
+function _ytOnState(e) {
+  if (!_mediaIsAdmin() || !_ytState.videoId) return;
+  if ([1, 2, 0].includes(e.data)) _ytBroadcast();
+}
+
+function _ytApply(p) {
+  if (!_ytPlayer || !_ytPlayer.loadVideoById || !p || !p.videoId) return;
+  const target = (p.time || 0) + (p.playing ? (Date.now() - (p.ts || Date.now())) / 1000 : 0);
+  if (_ytState.videoId !== p.videoId) {
+    _ytState.videoId = p.videoId;
+    if (p.playing) _ytPlayer.loadVideoById(p.videoId, target); else _ytPlayer.cueVideoById(p.videoId, target);
+    return;
+  }
+  if (Math.abs((_ytPlayer.getCurrentTime() || 0) - target) > 2) _ytPlayer.seekTo(target, true);
+  const st = _ytPlayer.getPlayerState();
+  if (p.playing && st !== 1 && st !== 3) _ytPlayer.playVideo();
+  if (!p.playing && st === 1) _ytPlayer.pauseVideo();
+}
+
+window.ytLoadVideo = function() {
+  if (!_mediaIsAdmin()) return;
+  const input = document.getElementById('yt-url-input');
+  const id = _ytParseId(input?.value);
+  if (!id) { _mediaToast('Invalid YouTube link.'); return; }
+  _ytState.videoId = id;
+  _ytPlayer.loadVideoById(id, 0);
+  input.value = '';
+  setTimeout(_ytBroadcast, 800);
+  _mediaToast('Video loaded for everyone.');
+};
+
+window.ytSyncNow = function() {
+  if (_ytPlayer && _ytPlayer.playVideo && _ytState.videoId) { _ytPlayer.unMute(); _ytPlayer.playVideo(); }
+  _mediaSend('yt-request', {});
+};
+
+/* ───────── Spotify ───────── */
+function _spParseUri(input) {
+  const m = String(input || '').match(/open\.spotify\.com\/(?:intl-[a-z]+\/)?(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]+)/);
+  if (m) return `spotify:${m[1]}:${m[2]}`;
+  return /^spotify:(track|album|playlist|episode|show|artist):[A-Za-z0-9]+$/.test(String(input || '').trim()) ? input.trim() : null;
+}
+
+function _spRank(meta) {
+  if (!meta || meta.level < 1) return -1;
+  if (meta.claimed && meta.level >= 3) return 3;
+  return meta.level >= 2 ? 2 : 1;
+}
+
+function _spGetController() {
+  const state = _mediaChannel ? _mediaChannel.presenceState() : {};
+  let best = null;
+  Object.entries(state).forEach(([key, metas]) => {
+    const m = metas[0];
+    if (!m) return;
+    const rank = _spRank(m);
+    if (rank < 0) return;
+    if (!best || rank > best.rank || (rank === best.rank && m.joinedAt < best.joinedAt)) {
+      best = { id: key, name: m.name, rank, joinedAt: m.joinedAt };
+    }
+  });
+  return best;
+}
+
+function _spAmController() {
+  const c = _spGetController();
+  return !!c && c.id === currentUser?.id;
+}
+
+function _spRefreshUi() {
+  const c = _spGetController();
+  const me = _spAmController();
+  const level = getViewerRoleLevel();
+  document.getElementById('sp-control-bar')?.classList.toggle('hidden', !me);
+  document.getElementById('sp-guard')?.classList.toggle('hidden', me);
+  document.getElementById('sp-claim-btn')?.classList.toggle('hidden', !(level >= 3 && !me));
+  document.getElementById('sp-sync-btn')?.classList.toggle('hidden', me);
+  _mediaToast(level < 1
+    ? 'Guests can only listen. Register to control music.'
+    : me ? 'You control the music.' : (c ? `${c.name} controls the music.` : 'No one controls the music yet.'));
+}
+
+async function _spTrack() {
+  if (!_mediaChannel) return;
+  await _mediaChannel.track({
+    name: _mediaUserName(),
+    level: getViewerRoleLevel(),
+    joinedAt: _mediaJoinedAt,
+    claimed: _mediaClaimed
+  });
+}
+
+function _spLoadApi() {
+  return new Promise(resolve => {
+    if (window._spIFrameApi) return resolve(window._spIFrameApi);
+    window.onSpotifyIframeApiReady = api => { window._spIFrameApi = api; resolve(api); };
+    if (!document.getElementById('sp-iframe-api')) {
+      const tag = document.createElement('script');
+      tag.id = 'sp-iframe-api';
+      tag.src = 'https://open.spotify.com/embed/iframe-api/v1';
+      tag.async = true;
+      document.head.appendChild(tag);
+    }
+  });
+}
+
+async function initSpotifyRoom() {
+  const ch = _mediaOpenChannel('sp-chat-room');
+  ch.on('presence', { event: 'sync' }, _spRefreshUi);
+  ch.on('broadcast', { event: 'sp-state' }, ({ payload }) => { if (!_spAmController()) _spApply(payload); });
+  ch.on('broadcast', { event: 'sp-request' }, () => { if (_spAmController()) _spBroadcast(); });
+  ch.subscribe(async status => {
+    if (status === 'SUBSCRIBED') {
+      await _spTrack();
+      _mediaSend('sp-request', {});
+    }
+  });
+  _spRefreshUi();
+
+  const api = await _spLoadApi();
+  if (_mediaKind !== 'sp') return;
+  if (!_spController) {
+    const holder = document.getElementById('sp-embed');
+    holder.innerHTML = '<div id="sp-embed-inner"></div>';
+    api.createController(document.getElementById('sp-embed-inner'),
+      { uri: 'spotify:playlist:37i9dQZEVXbMDoHDwVN2tF', width: '100%', height: 352 },
+      ctrl => {
+        _spController = ctrl;
+        ctrl.addListener('playback_update', e => {
+          if (!e || !e.data || !_spAmController() || _spSuppress) return;
+          _spState.paused = !!e.data.isPaused;
+          _spState.position = Math.floor((e.data.position || 0) / 1000);
+          _spBroadcast();
+        });
+      });
+  } else {
+    _spRefreshUi();
+  }
+  clearInterval(_mediaTimer);
+  _mediaTimer = setInterval(() => { if (_spAmController() && _spState.uri) _spBroadcast(); }, 5000);
+}
+
+function _spBroadcast() {
+  _mediaSend('sp-state', { uri: _spState.uri, paused: _spState.paused, position: _spState.position, ts: Date.now() });
+}
+
+function _spApply(p) {
+  if (!_spController || !p || !p.uri) return;
+  _spSuppress = true;
+  if (_spState.uri !== p.uri) {
+    _spState.uri = p.uri;
+    _spController.loadUri(p.uri);
+  }
+  if (!p.paused) {
+    const pos = (p.position || 0) + (Date.now() - (p.ts || Date.now())) / 1000;
+    _spController.seek(Math.max(0, Math.floor(pos)));
+    _spController.resume ? _spController.resume() : _spController.play();
+  } else {
+    _spController.pause();
+  }
+  setTimeout(() => { _spSuppress = false; }, 1500);
+}
+
+window.spLoadUri = function() {
+  if (!_spAmController()) return;
+  const input = document.getElementById('sp-url-input');
+  const uri = _spParseUri(input?.value);
+  if (!uri) { _mediaToast('Invalid Spotify link.'); return; }
+  _spState = { uri, paused: false, position: 0 };
+  _spController.loadUri(uri);
+  setTimeout(() => _spController.play(), 800);
+  input.value = '';
+  setTimeout(_spBroadcast, 1000);
+};
+
+window.spClaimControl = async function() {
+  if (getViewerRoleLevel() < 3) return;
+  _mediaClaimed = true;
+  await _spTrack();
+  _spRefreshUi();
+};
+
+window.spSyncNow = function() {
+  if (_spController && _spState.uri) _spController.play();
+  _mediaSend('sp-request', {});
+};
+
+window.enterMediaRoom = enterMediaRoom;
+window.exitMediaRoom = exitMediaRoom;

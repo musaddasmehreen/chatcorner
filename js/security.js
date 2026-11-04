@@ -60,15 +60,15 @@
   // Allow Supabase, Google Fonts, jsdelivr (Supabase SDK), self only
   meta.content = [
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'",  // unsafe-inline needed for inline handlers on login/chat pages
+    "script-src 'self' https://cdn.jsdelivr.net https://www.youtube.com https://s.ytimg.com https://open.spotify.com https://*.scdn.co 'unsafe-inline'",  // unsafe-inline needed for inline handlers on login/chat pages
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     "media-src 'self' data: blob: https:",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com https: wss: ws: stun: turn: turns:",
     "worker-src 'self' blob:",
-    "child-src 'self' blob: https://www.mixchatroom.com https://mixchatroom.com",
-    "frame-src 'self' blob: https://www.mixchatroom.com https://mixchatroom.com",
+    "child-src 'self' blob: https://www.mixchatroom.com https://mixchatroom.com https://www.youtube.com https://www.youtube-nocookie.com https://open.spotify.com",
+    "frame-src 'self' blob: https://www.mixchatroom.com https://mixchatroom.com https://www.youtube.com https://www.youtube-nocookie.com https://open.spotify.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -627,4 +627,4 @@ window.securityManager = {
     });
   }
 };
-
+

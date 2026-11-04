@@ -288,6 +288,36 @@
           </div>
         </div>
 
+        <!-- YouTube room -->
+        <div id="yt-container" class="media-container hidden">
+          <div id="yt-admin-bar" class="media-bar hidden">
+            <input type="text" id="yt-url-input" placeholder="Paste YouTube link (admin only)" onkeydown="if(event.key==='Enter')ytLoadVideo()"/>
+            <button onclick="ytLoadVideo()">Play for all</button>
+          </div>
+          <div class="media-stage">
+            <div id="yt-player"></div>
+            <div id="yt-guard" class="media-guard hidden"></div>
+          </div>
+          <div class="media-footer"><span id="yt-status"></span><button id="yt-sync-btn" class="hidden" onclick="ytSyncNow()">🔊 Tap to sync</button></div>
+        </div>
+
+        <!-- Spotify room -->
+        <div id="sp-container" class="media-container hidden">
+          <div id="sp-control-bar" class="media-bar hidden">
+            <input type="text" id="sp-url-input" placeholder="Paste Spotify track/album/playlist link" onkeydown="if(event.key==='Enter')spLoadUri()"/>
+            <button onclick="spLoadUri()">Play for all</button>
+          </div>
+          <div class="media-stage media-stage-sp">
+            <div id="sp-embed"></div>
+            <div id="sp-guard" class="media-guard"></div>
+          </div>
+          <div class="media-footer">
+            <span id="sp-status"></span>
+            <button id="sp-claim-btn" class="hidden" onclick="spClaimControl()">Take control</button>
+            <button id="sp-sync-btn" class="hidden" onclick="spSyncNow()">▶ Sync</button>
+          </div>
+        </div>
+
         <!-- Ludo game container -->
         <div id="ludo-container" class="ludo-container hidden">
           <button id="btn-ludo-return" class="btn-ludo-return hidden" onclick="exitLudoRoom()">🔙 Return to Chat</button>
@@ -489,12 +519,12 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="js/security.js?v=3.5" defer></script>
+  <script src="js/security.js?v=3.6" defer></script>
   <script src="js/config.js?v=1.6" defer></script>
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=4.4" defer></script>
+  <script src="js/chat-v3.js?v=4.5" defer></script>
   <script src="js/pm.js?v=1.8" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=1.5" defer></script>

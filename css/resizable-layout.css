@@ -1921,3 +1921,32 @@
 .rooms-popup-close { background: transparent; border: 0; color: var(--muted); cursor: pointer; font-size: 1rem; }
 .rooms-popup #room-list li { font-size: 0.9rem !important; padding: 0.6rem 0.8rem !important; background: rgba(255,255,255,0.04) !important; }
 .messages, .pm-messages { scroll-behavior: auto !important; overflow-anchor: none; }
+
+
+/* ── Spotify / YouTube rooms (share IPTV split layout) ── */
+.media-container { display: none; }
+.page-shell.media-room .iptv-container { display: none !important; }
+.page-shell.media-room .media-container:not(.hidden) {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  background: #000 !important;
+  overflow: hidden !important;
+}
+.media-bar { display: flex; gap: 6px; padding: 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.media-bar input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: inherit; }
+.media-bar button, .media-footer button { padding: 6px 12px; border-radius: 8px; border: none; background: var(--accent); color: #fff; cursor: pointer; }
+.media-bar.hidden, .media-footer button.hidden { display: none !important; }
+.media-stage { position: relative; flex: 1; min-height: 0; }
+.media-stage #yt-player, .media-stage #yt-player iframe { width: 100%; height: 100%; border: 0; }
+.media-stage-sp { padding: 12px; background: var(--bg); overflow: auto; }
+.media-stage-sp iframe { border: 0; }
+.media-guard { position: absolute; inset: 0; z-index: 5; background: transparent; cursor: not-allowed; }
+.media-guard.hidden { display: none !important; }
+.media-footer { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface); border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text-muted, #aaa); }
+.media-footer span { flex: 1; }
+@media (max-width: 1024px) {
+  .page-shell.media-room .media-container:not(.hidden) { height: 40vh !important; flex: none !important; }
+}
