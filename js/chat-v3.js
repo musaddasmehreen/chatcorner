@@ -6360,7 +6360,12 @@ function exitMediaRoom() {
 
   if (_mediaChannel) { sbClient.removeChannel(_mediaChannel); _mediaChannel = null; }
   if (kind === 'yt' && _ytPlayer) { try { _ytPlayer.stopVideo(); } catch (e) {} }
-  if (kind === 'sp' && _spController) { try { _spController.pause(); } catch (e) {} }
+  if (kind === 'sp') {
+    try { if (_spController) _spController.pause(); } catch (e) {}
+    _spController = null;
+    const holder = document.getElementById('sp-embed');
+    if (holder) holder.innerHTML = '';
+  }
   _ytState = { videoId: null, playing: false, time: 0 };
   _spState = { uri: null, paused: true, position: 0 };
 }
@@ -6530,15 +6535,30 @@ async function _spTrack() {
 function _spLoadApi() {
   return new Promise(resolve => {
     if (window._spIFrameApi) return resolve(window._spIFrameApi);
-    window.onSpotifyIframeApiReady = api => { window._spIFrameApi = api; resolve(api); };
+    const timer = setTimeout(() => resolve(null), 8000);
+    window.onSpotifyIframeApiReady = api => { clearTimeout(timer); window._spIFrameApi = api; resolve(api); };
     if (!document.getElementById('sp-iframe-api')) {
       const tag = document.createElement('script');
       tag.id = 'sp-iframe-api';
       tag.src = 'https://open.spotify.com/embed/iframe-api/v1';
       tag.async = true;
+      tag.onerror = () => { clearTimeout(timer); resolve(null); };
       document.head.appendChild(tag);
     }
   });
+}
+
+// Plain iframe embed used when the Spotify IFrame API is unavailable (no play/pause sync)
+function _spRenderFallback(uri) {
+  const m = String(uri || '').match(/^spotify:(\w+):([A-Za-z0-9]+)$/);
+  const holder = document.getElementById('sp-embed');
+  if (!holder || !m) return;
+  holder.innerHTML = `<iframe src="https://open.spotify.com/embed/${m[1]}/${m[2]}?utm_source=generator" width="100%" height="352" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
+}
+
+function _spLoad(uri) {
+  if (_spController) _spController.loadUri(uri);
+  else _spRenderFallback(uri);
 }
 
 async function initSpotifyRoom() {
@@ -6556,22 +6576,26 @@ async function initSpotifyRoom() {
 
   const api = await _spLoadApi();
   if (_mediaKind !== 'sp') return;
+  const defaultUri = _spState.uri || 'spotify:playlist:37i9dQZEVXbMDoHDwVN2tF';
   if (!_spController) {
     const holder = document.getElementById('sp-embed');
-    holder.innerHTML = '<div id="sp-embed-inner"></div>';
-    api.createController(document.getElementById('sp-embed-inner'),
-      { uri: 'spotify:playlist:37i9dQZEVXbMDoHDwVN2tF', width: '100%', height: 352 },
-      ctrl => {
-        _spController = ctrl;
-        ctrl.addListener('playback_update', e => {
-          if (!e || !e.data || !_spAmController() || _spSuppress) return;
-          _spState.paused = !!e.data.isPaused;
-          _spState.position = Math.floor((e.data.position || 0) / 1000);
-          _spBroadcast();
+    if (api) {
+      holder.innerHTML = '<div id="sp-embed-inner"></div>';
+      api.createController(document.getElementById('sp-embed-inner'),
+        { uri: defaultUri, width: '100%', height: 352 },
+        ctrl => {
+          _spController = ctrl;
+          ctrl.addListener('playback_update', e => {
+            if (!e || !e.data || !_spAmController() || _spSuppress) return;
+            _spState.paused = !!e.data.isPaused;
+            _spState.position = Math.floor((e.data.position || 0) / 1000);
+            _spBroadcast();
+          });
         });
-      });
-  } else {
-    _spRefreshUi();
+      setTimeout(() => { if (!_spController && _mediaKind === 'sp') _spRenderFallback(defaultUri); }, 6000);
+    } else {
+      _spRenderFallback(defaultUri);
+    }
   }
   clearInterval(_mediaTimer);
   _mediaTimer = setInterval(() => { if (_spAmController() && _spState.uri) _spBroadcast(); }, 5000);
@@ -6582,7 +6606,11 @@ function _spBroadcast() {
 }
 
 function _spApply(p) {
-  if (!_spController || !p || !p.uri) return;
+  if (!p || !p.uri) return;
+  if (!_spController) {
+    if (_spState.uri !== p.uri) { _spState.uri = p.uri; _spRenderFallback(p.uri); }
+    return;
+  }
   _spSuppress = true;
   if (_spState.uri !== p.uri) {
     _spState.uri = p.uri;
@@ -6604,8 +6632,8 @@ window.spLoadUri = function() {
   const uri = _spParseUri(input?.value);
   if (!uri) { _mediaToast('Invalid Spotify link.'); return; }
   _spState = { uri, paused: false, position: 0 };
-  _spController.loadUri(uri);
-  setTimeout(() => _spController.play(), 800);
+  _spLoad(uri);
+  if (_spController) setTimeout(() => _spController.play(), 800);
   input.value = '';
   setTimeout(_spBroadcast, 1000);
 };
