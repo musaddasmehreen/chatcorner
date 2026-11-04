@@ -1583,15 +1583,15 @@
 }
 
 #ludo-container.ludo-container {
-  position: fixed !important;
+  position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  width: 100vw !important;
+  width: 100% !important;
   max-width: none !important;
-  height: 100vh !important;
-  height: 100dvh !important;
+  height: 100% !important;
+  overflow: hidden !important;
   margin: 0 !important;
   padding: 0 !important;
   gap: 0 !important;
@@ -1609,10 +1609,17 @@
 }
 
 #ludo-container #ludo-iframe {
-  width: 100% !important;
-  height: 100% !important;
-  flex: 1 1 auto;
+  width: calc(100% / var(--ludo-scale, 1)) !important;
+  height: calc(100% / var(--ludo-scale, 1)) !important;
+  flex: none;
+  transform: scale(var(--ludo-scale, 1));
+  transform-origin: top left;
 }
+#btn-ludo-return { display: none !important; }
+.ludo-zoom { display: none; align-items: center; gap: 4px; margin-left: 10px; }
+.page-shell.ludo-active .ludo-zoom { display: inline-flex; }
+.ludo-zoom button { background: var(--surface); color: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-size: 0.8rem; cursor: pointer; }
+.ludo-zoom span { font-size: 0.75rem; min-width: 38px; text-align: center; }
 
 .ludo-container iframe {
   width: 100%;

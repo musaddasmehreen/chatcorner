@@ -5762,6 +5762,7 @@ function exitIPTVRoom() {
 }
 
 function exitIPTVRoomAndShowRooms() {
+  cleanupVirtualRooms();
   if (cachedRooms && cachedRooms.length > 0) {
     enterRoom(cachedRooms[0]);
   }
@@ -6196,9 +6197,24 @@ function enterLudoRoom(roomKey) {
   if (mobileTabs) mobileTabs.style.display = 'none';
 
   // Show/hide return buttons
-  const ludoReturnBtn = document.getElementById('btn-ludo-return');
-  if (ludoReturnBtn) ludoReturnBtn.classList.remove('hidden');
+  document.getElementById('btn-iptv-return')?.classList.remove('hidden');
+  applyLudoScale();
 }
+
+function applyLudoScale() {
+  const scale = parseFloat(localStorage.getItem('ludoScale')) || 1;
+  const box = document.getElementById('ludo-container');
+  if (box) box.style.setProperty('--ludo-scale', scale);
+  const label = document.getElementById('ludo-zoom-label');
+  if (label) label.textContent = Math.round(scale * 100) + '%';
+}
+
+window.ludoZoom = function(delta) {
+  const cur = parseFloat(localStorage.getItem('ludoScale')) || 1;
+  const next = delta === 0 ? 1 : Math.min(1.2, Math.max(0.5, Math.round((cur + delta) * 10) / 10));
+  localStorage.setItem('ludoScale', String(next));
+  applyLudoScale();
+};
 
 function exitLudoRoom() {
   cleanupVirtualRooms();
