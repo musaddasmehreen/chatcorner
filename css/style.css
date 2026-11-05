@@ -921,12 +921,13 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
 .msg-inline-image,
 .pm-inline-image {
   display: block;
-  width: 260px;
-  height: 180px;
-  object-fit: cover;
-  border-radius: 10px;
+  width: min(100%, 520px);
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 6px;
   margin-top: 0.2rem;
-  border: 1px solid var(--border);
+  border: 0;
   background: rgba(255,255,255,0.04);
   transition: transform 0.2s ease;
 }

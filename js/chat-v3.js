@@ -35,12 +35,20 @@ const EMOJI_GROUPS = [
     items: ['👍','👎','👏','🙌','🫡','🙏','🤝','👋','✌️','🤞','👌','💪','🫶','👀']
   },
   {
-    label: 'New (Unicode 15-16)',
-    items: ['🫩','🫆','🪾','🫜','🪉','🫟','🪏','🪈','🫨','🩷','🩵','🩶','🫷','🫸','🫎','🪽','🐦‍🔥','🫚','🫛','🪭','🪮','🪇','🫠','🫥']
+    label: 'New & Trending',
+    items: ['🫩','🫆','🪾','🫜','🪉','🫟','🪏','🪈','🫨','🩷','🩵','🩶','🫷','🫸','🫎','🪽','🐦‍🔥','🫚','🫛','🪭','🪮','🪇','🫠','🫥','🫡','🫣','🫢']
   },
   {
     label: 'Fun',
     items: ['🔥','✨','🌈','⭐','⚡','🎉','🎊','🎈','🎵','🎶','💯','💥','🌸','🍕','☕','🎮']
+  },
+  {
+    label: 'Animals & Nature',
+    items: ['🐶','🐱','🦊','🐻','🐼','🐨','🐯','🦁','🐸','🐵','🦄','🐝','🦋','🐢','🐬','🦈','🌻','🌹','🌙','🌍']
+  },
+  {
+    label: 'Food & Objects',
+    items: ['🍎','🍉','🍓','🍔','🍟','🍿','🍩','🍪','🎂','🍵','⚽','🏆','🎁','🎧','📱','💡','🚀','💻','📸','🎬']
   }
 ];
 
@@ -5705,13 +5713,13 @@ function enterIPTVRoom() {
   // Switch mobile tab to chat
   if (typeof switchMobileTab === 'function') switchMobileTab('chat');
 
-  // Clear messages and disable voice controls
+  // Keep the shared voice chat available in IPTV rooms.
   const msgContainer = document.getElementById('messages');
   if (msgContainer) msgContainer.innerHTML = '';
   const voiceControls = document.getElementById('voice-controls');
-  if (voiceControls) voiceControls.classList.add('hidden');
+  if (voiceControls) voiceControls.classList.remove('hidden');
   const barDivider = document.getElementById('bar-divider');
-  if (barDivider) barDivider.classList.add('hidden');
+  if (barDivider) barDivider.classList.remove('hidden');
 
   // Enable input
   const msgInput = document.getElementById('msg-input');
@@ -5734,7 +5742,8 @@ function enterIPTVRoom() {
   }
 
   // Set currentRoom to a virtual object so message sending works via realtime broadcast
-  currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: false, _virtual: true };
+  currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: true, _virtual: true };
+  updateComposerState();
 
   // Subscribe to realtime broadcast channel for IPTV chat (no DB writes, broadcast only)
   if (_iptvChannelChannel) sbClient.removeChannel(_iptvChannelChannel);
@@ -6384,7 +6393,7 @@ function enterMediaRoom(id) {
 
   const msgContainer = document.getElementById('messages');
   if (msgContainer) msgContainer.innerHTML = '';
-  ['voice-controls', 'bar-divider'].forEach(i => document.getElementById(i)?.classList.add('hidden'));
+  ['voice-controls', 'bar-divider'].forEach(i => document.getElementById(i)?.classList.remove('hidden'));
   const msgInput = document.getElementById('msg-input');
   if (msgInput) { msgInput.disabled = false; msgInput.placeholder = `💬 Chat in ${label} room...`; }
   const sendBtn = document.querySelector('.btn-send');
@@ -6403,7 +6412,8 @@ function enterMediaRoom(id) {
     wrapper.appendChild(inputStrip);
   }
 
-  currentRoom = { id, name: kind === 'sp' ? 'Spotify' : 'YouTube', is_audio_enabled: false, _virtual: true };
+  currentRoom = { id, name: kind === 'sp' ? 'Spotify' : 'YouTube', is_audio_enabled: true, _virtual: true };
+  updateComposerState();
 
   if (kind === 'yt') initYouTubeRoom(); else initSpotifyRoom();
 }
