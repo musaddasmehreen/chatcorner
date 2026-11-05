@@ -5816,21 +5816,42 @@ window.sendMessage = async function() {
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
-    input.value = '';
-    autoResizeTextarea(input);
-    const counter = document.getElementById('msg-char-counter');
-    if (counter) counter.textContent = '0/500';
+    const channel = _iptvActive && _iptvChannelChannel ? _iptvChannelChannel : _mediaChannel;
+    if (!channel) {
+      showChatToast('Chat is still connecting. Please try again.', 'warning');
+      return;
+    }
+    if (!_iptvActive) {
+      await Promise.race([
+        _mediaChannelReady,
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ]);
+    }
+    if ((!_iptvActive && channel !== _mediaChannel) || channel.state !== 'joined') {
+      showChatToast('Chat is still connecting. Please try again.', 'warning');
+      return;
+    }
     const payload = {
       username: currentProfile?.username || currentUser?.email?.split('@')[0] || 'Guest',
       text,
       ts: Date.now()
     };
     
+    let sendStatus;
     if (_iptvActive && _iptvChannelChannel) {
-      await _iptvChannelChannel.send({ type: 'broadcast', event: 'message', payload });
-    } else if (_mediaKind && _mediaChannel) {
-      await _mediaChannel.send({ type: 'broadcast', event: 'message', payload });
+      sendStatus = await _iptvChannelChannel.send({ type: 'broadcast', event: 'message', payload });
+    } else if (_mediaKind) {
+      sendStatus = await channel.send({ type: 'broadcast', event: 'message', payload });
     }
+    if (sendStatus !== 'ok') {
+      showChatToast('Could not send message. Please try again.', 'warning');
+      return;
+    }
+    input.value = '';
+    autoResizeTextarea(input);
+    const counter = document.getElementById('msg-char-counter');
+    if (counter) counter.textContent = '0/500';
+    renderIPTVChatMessage(payload);
     return;
   }
   if (typeof _origSendMessage === 'function') return _origSendMessage();
@@ -6316,6 +6337,8 @@ window.toggleGlobalChatMute = toggleGlobalChatMute;
 ════════════════════════════════════════════════════════════════ */
 let _mediaKind = null;            // 'sp' | 'yt' | null
 let _mediaChannel = null;
+let _mediaChannelReady = Promise.resolve();
+let _mediaResolveChannelReady = null;
 let _mediaTimer = null;
 let _mediaJoinedAt = 0;
 let _mediaClaimed = false;
@@ -6422,12 +6445,22 @@ function _mediaSend(event, payload) {
 
 function _mediaOpenChannel(name, presence) {
   if (_mediaChannel) sbClient.removeChannel(_mediaChannel);
+  _mediaChannelReady = new Promise(resolve => {
+    _mediaResolveChannelReady = resolve;
+  });
   const roomKey = String(currentRoom?.id || _mediaKind || 'media').replace(/[^a-zA-Z0-9_-]/g, '_');
   _mediaChannel = sbClient.channel(`${name}:${roomKey}`, {
     config: { broadcast: { self: false }, presence: { key: currentUser?.id || String(Math.random()) } }
   });
   _mediaChannel.on('broadcast', { event: 'message' }, ({ payload }) => renderIPTVChatMessage(payload));
   return _mediaChannel;
+}
+
+function _mediaMarkChannelReady(status) {
+  if (status === 'SUBSCRIBED' && _mediaResolveChannelReady) {
+    _mediaResolveChannelReady();
+    _mediaResolveChannelReady = null;
+  }
 }
 
 /* ───────── YouTube ───────── */
@@ -6461,7 +6494,10 @@ async function initYouTubeRoom() {
   const ch = _mediaOpenChannel('yt-chat-room');
   ch.on('broadcast', { event: 'yt-state' }, ({ payload }) => { if (!_mediaIsAdmin()) _ytApply(payload); });
   ch.on('broadcast', { event: 'yt-request' }, () => { if (_mediaIsAdmin()) _ytBroadcast(); });
-  ch.subscribe(status => { if (status === 'SUBSCRIBED') _mediaSend('yt-request', {}); });
+  ch.subscribe(status => {
+    _mediaMarkChannelReady(status);
+    if (status === 'SUBSCRIBED') _mediaSend('yt-request', {});
+  });
 
   await _ytLoadApi();
   if (_mediaKind !== 'yt') return;
@@ -6614,6 +6650,7 @@ async function initSpotifyRoom() {
   ch.on('broadcast', { event: 'sp-state' }, ({ payload }) => { if (!_spAmController()) _spApply(payload); });
   ch.on('broadcast', { event: 'sp-request' }, () => { if (_spAmController()) _spBroadcast(); });
   ch.subscribe(async status => {
+    _mediaMarkChannelReady(status);
     if (status === 'SUBSCRIBED') {
       await _spTrack();
       _mediaSend('sp-request', {});
