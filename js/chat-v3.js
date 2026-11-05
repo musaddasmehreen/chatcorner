@@ -1894,9 +1894,8 @@ function buildMessageNode(msg) {
       <div class="msg-bubble">
         ${deleteButton}
         ${reportButton}
-        <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
-        ${audioHtml}
-        <div class="msg-time">${formatTime(msg.created_at)}</div>
+        <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text">${audioHtml}</span></div>
+          <div class="msg-time">${formatTime(msg.created_at)}</div>
       </div>`;
 
     const audio = div.querySelector('audio');
@@ -1958,8 +1957,7 @@ function buildMessageNode(msg) {
     <div class="msg-bubble">
       ${deleteButton}
       ${reportButton}
-      <div class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-text" style="${msgStyle}">${window.parseYouTubeEmbedHtml ? window.parseYouTubeEmbedHtml(escHtml(msg.content)) : escHtml(msg.content)}</div>
+      <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text" style="${msgStyle}">${window.parseYouTubeEmbedHtml ? window.parseYouTubeEmbedHtml(escHtml(msg.content)) : escHtml(msg.content)}</span></div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -1970,6 +1968,7 @@ function appendMessage(msg) {
   const node = buildMessageNode(msg);
   if (!node) return;
   document.getElementById('messages').appendChild(node);
+  scheduleMessageScroll();
   pruneMessageDom();
   // Deletion notices (type=system) auto-disappear after 5 minutes for live users
   if (msg?.type === 'system' && String(msg?.content || '').startsWith(DELETED_MESSAGE_PREFIX)) {
@@ -2165,7 +2164,17 @@ function renderUserList() {
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
 function scrollToBottom() {
   const el = document.getElementById('messages');
-  el.scrollTop = el.scrollHeight;
+  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+}
+
+let _messageScrollFrame = 0;
+function scheduleMessageScroll() {
+  cancelAnimationFrame(_messageScrollFrame);
+  _messageScrollFrame = requestAnimationFrame(() => {
+    const el = document.getElementById('messages');
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  });
 }
 
 /* ── Load Older Messages (pagination) ── */
@@ -2583,8 +2592,7 @@ function buildImageMessageNode(msg) {
     <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
-      <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-text">${imageMarkup}</div>
+      <div class="msg-line"><span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text">${imageMarkup}</span></div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -2616,8 +2624,7 @@ function appendVoiceNoteMessage(msg, isMe) {
     <div class="avatar" style="background:${color}">${initial}</div>
     <div class="msg-bubble">
       ${deleteButton}
-      <div class="msg-username">${escHtml(msg.username || 'Unknown')}</div>
-      <div class="msg-voice">${voiceMarkup}</div>
+      <div class="msg-line"><span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-voice">${voiceMarkup}</span></div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -4529,6 +4536,7 @@ function updateColorPreview(input, pickerId) {
   if (picker && /^#[0-9A-F]{6}$/i.test(input.value)) {
     picker.value = input.value;
   }
+  applyMessageColorPreview();
 }
 
 function updateColorText(picker, inputId) {
@@ -4536,6 +4544,16 @@ function updateColorText(picker, inputId) {
   if (input) {
     input.value = picker.value.toUpperCase();
   }
+  applyMessageColorPreview();
+}
+
+function applyMessageColorPreview() {
+  const input = document.getElementById('cc-edit-msgcolor');
+  const value = input?.value.trim();
+  if (!/^#[0-9A-F]{6}$/i.test(value)) return;
+  document.querySelectorAll('#messages .msg-row.self .msg-text').forEach(el => {
+    el.style.color = value;
+  });
 }
 
 function formatDateString(dateStr) {
@@ -5778,9 +5796,9 @@ function renderIPTVChatMessage(payload) {
   div.className = 'message';
   const username = payload.username || 'Anonymous';
   const text = String(payload.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}</span><span class="msg-text">${text}</span>`;
+  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}: </span><span class="msg-text">${text}</span>`;
   container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
+  scheduleMessageScroll();
 }
 
 // Patch sendMessage to support IPTV and Virtual Co-Watch broadcast when in virtual rooms
@@ -6392,8 +6410,9 @@ function _mediaSend(event, payload) {
 
 function _mediaOpenChannel(name, presence) {
   if (_mediaChannel) sbClient.removeChannel(_mediaChannel);
-  _mediaChannel = sbClient.channel(name, {
-    config: { broadcast: { self: true }, presence: { key: currentUser?.id || String(Math.random()) } }
+  const roomKey = String(currentRoom?.id || _mediaKind || 'media').replace(/[^a-zA-Z0-9_-]/g, '_');
+  _mediaChannel = sbClient.channel(`${name}:${roomKey}`, {
+    config: { broadcast: { self: false }, presence: { key: currentUser?.id || String(Math.random()) } }
   });
   _mediaChannel.on('broadcast', { event: 'message' }, ({ payload }) => renderIPTVChatMessage(payload));
   return _mediaChannel;
@@ -6593,6 +6612,7 @@ async function initSpotifyRoom() {
   const api = await _spLoadApi();
   if (_mediaKind !== 'sp') return;
   const defaultUri = _spState.uri || 'spotify:playlist:37i9dQZEVXbMDoHDwVN2tF';
+  if (!_spState.uri) _spState = { uri: defaultUri, paused: true, position: 0 };
   if (!_spController) {
     const holder = document.getElementById('sp-embed');
     if (api) {
@@ -6601,6 +6621,7 @@ async function initSpotifyRoom() {
         { uri: defaultUri, width: '100%', height: 352 },
         ctrl => {
           _spController = ctrl;
+          _spLoad(_spState.uri);
           ctrl.addListener('playback_update', e => {
             if (!e || !e.data || !_spAmController() || _spSuppress) return;
             _spState.paused = !!e.data.isPaused;

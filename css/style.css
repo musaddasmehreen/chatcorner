@@ -892,9 +892,17 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--nick);
-  margin-bottom: 0.15rem;
+  margin: 0;
   letter-spacing: 0.02em;
   opacity: 0.95;
+}
+
+.msg-line {
+  line-height: 1.45;
+}
+
+.msg-line .msg-username {
+  display: inline;
 }
 
 .msg-row.self .msg-username {
