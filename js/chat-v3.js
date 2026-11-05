@@ -2423,12 +2423,12 @@ function canDeleteMessageForUserId(userId) {
   return userId === currentUser.id || canDeleteAnyMessage();
 }
 
-function buildDeleteButtonHtml(userId) {
+function buildDeleteButtonHtml(userId, label = '🗑️') {
   if (!canDeleteMessageForUserId(userId)) return '';
   const title = userId === currentUser?.id
     ? 'Delete permanently for everyone'
     : 'Delete this message as admin/moderator';
-  return `<button type="button" class="msg-local-delete" title="${escHtml(title)}">🗑️</button>`;
+  return `<button type="button" class="msg-local-delete" title="${escHtml(title)}">${label}</button>`;
 }
 
 function buildReportButtonHtml(msg) {
@@ -2590,7 +2590,7 @@ function buildImageMessageNode(msg) {
   const avatarInner = isMe && currentProfile?.avatar_url
     ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
     : initial;
-  const deleteButton = buildDeleteButtonHtml(msg.user_id);
+  const deleteButton = buildDeleteButtonHtml(msg.user_id, '🗑️ Delete');
   const imageMarkup = imageSrc
     ? `
       <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="eager" decoding="async" fetchpriority="high"/>
@@ -2602,7 +2602,7 @@ function buildImageMessageNode(msg) {
   div.innerHTML = `
     <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
-      ${deleteButton}
+      ${deleteButton ? `<div class="image-delete-row">${deleteButton}</div>` : ''}
       <div class="msg-line"><span class="msg-text">${imageMarkup}</span></div>
     </div>`;
 

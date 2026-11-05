@@ -901,9 +901,16 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
 
 .msg-row.image-message .msg-local-delete {
   display: inline-flex !important;
-  top: -1.35rem;
-  right: 0;
+  position: static;
   z-index: 2;
+}
+
+.msg-row.image-message .image-delete-row {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-bottom: 0.2rem;
+  line-height: 1;
 }
 
 .msg-row.image-message .msg-text {
