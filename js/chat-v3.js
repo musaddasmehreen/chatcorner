@@ -2164,7 +2164,11 @@ function renderUserList() {
 /* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
 function scrollToBottom() {
   const el = document.getElementById('messages');
-  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
+  requestAnimationFrame(() => {
+    if (el.isConnected) el.scrollTop = el.scrollHeight;
+  });
 }
 
 let _messageScrollFrame = 0;
@@ -2173,7 +2177,10 @@ function scheduleMessageScroll() {
   _messageScrollFrame = requestAnimationFrame(() => {
     const el = document.getElementById('messages');
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      if (el.isConnected) el.scrollTop = el.scrollHeight;
+    });
   });
 }
 
@@ -6258,7 +6265,12 @@ window.toggleGlobalChatMute = toggleGlobalChatMute;
 (function initAutoScroll() {
   const NEAR_PX = 150;
   const nearBottom = (el) => el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_PX;
-  const toBottom = (el) => el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+  const toBottom = (el) => {
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      if (el.isConnected) el.scrollTop = el.scrollHeight;
+    });
+  };
   const isList = (el) => el && el.nodeType === 1 && (el.id === 'messages' || el.classList.contains('pm-messages'));
   const stuck = new WeakMap();
 
