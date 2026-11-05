@@ -887,6 +887,28 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   border-color: rgba(var(--accent-rgb),0.15);
 }
 
+.msg-row.image-message .msg-bubble {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.msg-row.image-message .avatar,
+.msg-row.image-message .msg-local-delete {
+  display: none !important;
+}
+
+.msg-row.image-message .msg-text {
+  display: block;
+  line-height: 0;
+}
+
+.msg-row.image-message .msg-image-link,
+.msg-row.image-message .msg-image-error {
+  display: none;
+}
+
 /* Nick — clearly readable */
 .msg-username {
   font-size: 0.72rem;

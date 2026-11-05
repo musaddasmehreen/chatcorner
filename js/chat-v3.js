@@ -2585,7 +2585,7 @@ function sanitizeAudioSource(msg) {
 function buildImageMessageNode(msg) {
   const isMe  = msg.user_id === currentUser?.id;
   const div   = document.createElement('div');
-  div.className = 'msg-row' + (isMe ? ' self' : '');
+  div.className = 'msg-row image-message' + (isMe ? ' self' : '');
   const imageSrc = sanitizeImageSource(msg);
   setMessageRowData(div, msg, imageSrc || msg?.content || '');
 
@@ -2607,8 +2607,7 @@ function buildImageMessageNode(msg) {
     <div class="avatar" style="background:${color}">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
-      <div class="msg-line"><span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text">${imageMarkup}</span></div>
-      <div class="msg-time">${formatTime(msg.created_at)}</div>
+      <div class="msg-line"><span class="msg-text">${imageMarkup}</span></div>
     </div>`;
 
   const image = div.querySelector('.msg-inline-image');
