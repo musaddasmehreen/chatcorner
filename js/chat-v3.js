@@ -1787,35 +1787,31 @@ async function sendMessage() {
   const finalContent = isSendingImage ? safeImageUrl : safeText;
 
   // ── Clear input immediately for instant UX feel ──
-  if (!isSendingImage) {
-    input.value = '';
-    autoResizeTextarea(input);
-    const counter = document.getElementById('msg-char-counter');
-    if (counter) counter.textContent = '0/500';
-  }
+  input.value = '';
+  autoResizeTextarea(input);
+  const counter = document.getElementById('msg-char-counter');
+  if (counter) counter.textContent = '0/500';
 
   // ── OPTIMISTIC UI: append message node instantly before DB confirms ──
   let optimisticNode = null;
   const tempId = `opt-${++_optimisticCounter}`;
-  if (!isSendingImage) {
-    const fakeMsg = {
-      id: tempId,
-      room_id: currentRoom.id,
-      user_id: currentUser.id,
-      username: currentProfile.username,
-      content: finalContent,
-      type: 'text',
-      created_at: new Date().toISOString()
-    };
-    optimisticNode = buildMessageNode(fakeMsg);
-    if (optimisticNode) {
-      optimisticNode.classList.add('msg-row--pending');
-      optimisticNode.dataset.tempId = tempId;
-      document.getElementById('messages').appendChild(optimisticNode);
-      scrollToBottom();
-      pruneMessageDom();
-      _optimisticPending.set(tempId, { content: finalContent, userId: currentUser.id, ts: Date.now(), node: optimisticNode });
-    }
+  const fakeMsg = {
+    id: tempId,
+    room_id: currentRoom.id,
+    user_id: currentUser.id,
+    username: currentProfile.username,
+    content: finalContent,
+    type: isSendingImage ? 'image' : 'text',
+    created_at: new Date().toISOString()
+  };
+  optimisticNode = buildMessageNode(fakeMsg);
+  if (optimisticNode) {
+    optimisticNode.classList.add('msg-row--pending');
+    optimisticNode.dataset.tempId = tempId;
+    document.getElementById('messages').appendChild(optimisticNode);
+    scrollToBottom();
+    pruneMessageDom();
+    _optimisticPending.set(tempId, { content: finalContent, userId: currentUser.id, ts: Date.now(), node: optimisticNode });
   }
 
   const { data: insertedMsgs, error } = await sbClient.from('messages').insert({
@@ -2597,7 +2593,7 @@ function buildImageMessageNode(msg) {
   const deleteButton = buildDeleteButtonHtml(msg.user_id);
   const imageMarkup = imageSrc
     ? `
-      <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image"/>
+      <img class="msg-inline-image" src="${escHtml(imageSrc)}" alt="Shared image" loading="eager" decoding="async" fetchpriority="high"/>
       <div class="msg-image-error hidden">⚠️ Image could not be loaded.</div>
       <a class="msg-image-link" href="${escHtml(imageSrc)}" target="_blank" rel="noopener noreferrer">Open image</a>
     `
