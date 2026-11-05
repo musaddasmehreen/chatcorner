@@ -894,8 +894,7 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   padding: 0;
 }
 
-.msg-row.image-message .avatar,
-.msg-row.image-message .msg-local-delete {
+.msg-row.image-message .avatar {
   display: none !important;
 }
 
