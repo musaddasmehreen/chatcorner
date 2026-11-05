@@ -5739,7 +5739,7 @@ function enterIPTVRoom() {
   // Subscribe to realtime broadcast channel for IPTV chat (no DB writes, broadcast only)
   if (_iptvChannelChannel) sbClient.removeChannel(_iptvChannelChannel);
   _iptvChannelChannel = sbClient.channel('iptv-chat-room', {
-    config: { broadcast: { self: true } }
+    config: { broadcast: { self: false } }
   });
   _iptvChannelChannel.on('broadcast', { event: 'message' }, ({ payload }) => {
     renderIPTVChatMessage(payload);
