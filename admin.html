@@ -25,7 +25,11 @@
     // Comprehensive security validation BEFORE rendering
     (async function securityGate() {
       // Check session validity first
-      if (!window.adminSecurityManager || !window.adminSecurityManager.validateAdminSession()) {
+      const localAdminSessionValid = Boolean(
+        window.adminSecurityManager &&
+        window.adminSecurityManager.validateAdminSession()
+      );
+      if (!window.adminSecurityManager) {
         document.documentElement.style.display = 'none';
         window.location.replace('adminup.html?denied=1');
         return;
@@ -59,6 +63,13 @@
         document.documentElement.style.display = 'none';
         window.location.replace('adminup.html?denied=1');
         return;
+      }
+
+      // Re-create the short-lived browser session if a privacy extension or
+      // navigation cleared sessionStorage while Supabase auth remained valid.
+      if (!localAdminSessionValid) {
+        const fp = await window.securityManager.generateDeviceFingerprint();
+        window.adminSecurityManager.createAdminSession(session.user.id, fp.hash);
       }
 
       // Log admin access
