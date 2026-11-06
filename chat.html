@@ -1,21 +1,21 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ChatCorner – Real-Time Chat & Rooms</title>
+  <title>ChatCorner â€“ Real-Time Chat & Rooms</title>
   <meta name="description" content="ChatCorner - Join public chatrooms, connect with users, make voice calls, send voice notes, and share media in real-time."/>
   
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website"/>
-  <meta property="og:title" content="ChatCorner – Real-Time Chat & Rooms"/>
+  <meta property="og:title" content="ChatCorner â€“ Real-Time Chat & Rooms"/>
   <meta property="og:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
   <meta property="og:image" content="https://chatcorner.qzz.io/og-image.svg"/>
   <meta property="og:url" content="https://chatcorner.qzz.io/"/>
   
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image"/>
-  <meta name="twitter:title" content="ChatCorner – Real-Time Chat & Rooms"/>
+  <meta name="twitter:title" content="ChatCorner â€“ Real-Time Chat & Rooms"/>
   <meta name="twitter:description" content="Connect, chat, send voice notes, and make live voice calls instantly on ChatCorner."/>
   <meta name="twitter:image" content="https://chatcorner.qzz.io/og-image.svg"/>
 
@@ -86,14 +86,14 @@
     window.addEventListener('error', function(e) {
       var div = document.createElement('div');
       div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
-      // Use textContent only — never innerHTML with user/runtime data
-      div.textContent = '🚨 Runtime Error: ' + (e.message || '') + ' at ' + (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '');
+      // Use textContent only â€” never innerHTML with user/runtime data
+      div.textContent = 'ðŸš¨ Runtime Error: ' + (e.message || '') + ' at ' + (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '');
       document.body && document.body.appendChild(div);
     });
     window.addEventListener('unhandledrejection', function(e) {
       var div = document.createElement('div');
       div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#f59e0b;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
-      div.textContent = '🚨 Promise Rejection: ' + (e.reason ? (e.reason.message || String(e.reason)) : 'Unknown reason');
+      div.textContent = 'ðŸš¨ Promise Rejection: ' + (e.reason ? (e.reason.message || String(e.reason)) : 'Unknown reason');
       document.body && document.body.appendChild(div);
     });
   </script>
@@ -101,28 +101,28 @@
 <body class="chat-page">
 
   <!-- SEO: Visually hidden h1 for search engines and screen readers -->
-  <h1 class="sr-only">ChatCorner – Real-Time Chat Rooms with Voice Calls and Private Messages</h1>
+  <h1 class="sr-only">ChatCorner â€“ Real-Time Chat Rooms with Voice Calls and Private Messages</h1>
 
-  <!-- ── Connection Error Banner ────────────────────────────────────────────── -->
+  <!-- â”€â”€ Connection Error Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="connection-error-banner" class="connection-error-banner hidden" role="alert">
-    <span class="banner-text">⚠️ Connection lost or room limit reached. Reconnecting...</span>
-    <button class="banner-close" onclick="this.parentElement.classList.add('hidden')" title="Dismiss" aria-label="Dismiss">✕</button>
+    <span class="banner-text">âš ï¸ Connection lost or room limit reached. Reconnecting...</span>
+    <button class="banner-close" onclick="this.parentElement.classList.add('hidden')" title="Dismiss" aria-label="Dismiss">âœ•</button>
   </div>
 
-  <!-- ── VPN Block Overlay ───────────────────────────────────────────────────── -->
+  <!-- â”€â”€ VPN Block Overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="vpn-overlay" class="vpn-overlay hidden" role="alertdialog" aria-modal="true" aria-label="VPN Detected">
     <div class="vpn-modal">
-      <div class="vpn-modal-icon">🛡️</div>
+      <div class="vpn-modal-icon">ðŸ›¡ï¸</div>
       <h2>VPN Detected</h2>
       <p>Please disable your VPN to enter the chatroom.</p>
-      <button class="btn-primary" onclick="location.reload()">I've Disabled My VPN — Retry</button>
+      <button class="btn-primary" onclick="location.reload()">I've Disabled My VPN â€” Retry</button>
     </div>
   </div>
 
-  <!-- ── Avatar Upload Modal ─────────────────────────────────────────────────── -->
+  <!-- â”€â”€ Avatar Upload Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="avatar-upload-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Update Avatar">
     <div class="avatar-upload-box">
-      <h2>🖼️ Update Avatar</h2>
+      <h2>ðŸ–¼ï¸ Update Avatar</h2>
       <div class="avatar-upload-preview">
         <img id="avatar-preview" alt="Avatar preview" class="hidden" width="100" height="100"/>
         <span class="avatar-upload-hint" id="avatar-upload-hint">Select an image to preview your avatar.</span>
@@ -137,10 +137,10 @@
     </div>
   </div>
 
-  <!-- ── Room Password Prompt Modal ────────────────────────────────────────── -->
+  <!-- â”€â”€ Room Password Prompt Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="room-password-prompt-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Enter Password">
     <div class="avatar-upload-box">
-      <h2>🔒 Password Protected Room</h2>
+      <h2>ðŸ”’ Password Protected Room</h2>
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">This room is locked. Enter the password to enter.</p>
       <input type="password" id="room-access-password" placeholder="Enter room password..." aria-label="Room access password" style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
       <div id="room-password-error" class="avatar-upload-error hidden" role="alert" style="color:#ef4444;margin-bottom:12px;">Incorrect password. Please try again.</div>
@@ -151,10 +151,10 @@
     </div>
   </div>
 
-  <!-- ── Room Lock Setting Modal ──────────────────────────────────────────────── -->
+  <!-- â”€â”€ Room Lock Setting Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="room-lock-setup-modal" class="avatar-upload-modal hidden" role="dialog" aria-modal="true" aria-label="Lock Settings">
     <div class="avatar-upload-box">
-      <h2 id="lock-modal-title">🔒 Room Lock Settings</h2>
+      <h2 id="lock-modal-title">ðŸ”’ Room Lock Settings</h2>
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">Set a password to lock this room. Leave blank to unlock.</p>
       <input type="password" id="room-lock-password" placeholder="Set password (leave blank to unlock)..." aria-label="Set room lock password" style="width:100%;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);margin-bottom:12px;" />
       <div class="avatar-upload-actions">
@@ -164,34 +164,34 @@
     </div>
   </div>
 
-  <!-- ── Room Context Menu ────────────────────────────────────────────────────── -->
+  <!-- â”€â”€ Room Context Menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="room-context-menu" class="room-context-menu hidden" style="position: absolute; z-index: 10000;">
     <ul class="context-menu-list">
-      <li id="menu-item-lock" onclick="handleMenuLockToggle()">🔒 Lock/Unlock Room</li>
-      <li id="menu-item-restrict" onclick="handleMenuRestrictUser()">🚫 Restrict User Entry</li>
+      <li id="menu-item-lock" onclick="handleMenuLockToggle()">ðŸ”’ Lock/Unlock Room</li>
+      <li id="menu-item-restrict" onclick="handleMenuRestrictUser()">ðŸš« Restrict User Entry</li>
     </ul>
   </div>
 
-  <!-- ── Permissions Banner ──────────────────────────────────────────────────── -->
+  <!-- â”€â”€ Permissions Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="permissions-backdrop" class="sidebar-backdrop" style="display:none; z-index:998; background:rgba(0,0,0,0.6)" aria-hidden="true"></div>
   <div id="permissions-banner" class="perms-banner" style="display:none">
     <div class="perms-left">
-      <span class="perms-title">🔐 Allow Permissions</span>
+      <span class="perms-title">ðŸ” Allow Permissions</span>
       <span class="perms-sub">ChatCorner needs access to work properly</span>
     </div>
     <div class="perms-indicators">
       <span class="perm-item" title="Notifications">
-        🔔 Notifications <span id="perm-notif" class="perm-dot perm-prompt"></span>
+        ðŸ”” Notifications <span id="perm-notif" class="perm-dot perm-prompt"></span>
       </span>
       <span class="perm-item" title="Microphone">
-        🎤️ Microphone <span id="perm-mic" class="perm-dot perm-prompt"></span>
+        ðŸŽ¤ï¸ Microphone <span id="perm-mic" class="perm-dot perm-prompt"></span>
       </span>
       <span class="perm-item" title="Camera">
-        📷 Camera <span id="perm-cam" class="perm-dot perm-prompt"></span>
+        ðŸ“· Camera <span id="perm-cam" class="perm-dot perm-prompt"></span>
       </span>
     </div>
     <div class="perms-actions">
-      <button class="btn-allow btn-primary" onclick="requestAllPermissions()">✅ Allow All</button>
+      <button class="btn-allow btn-primary" onclick="requestAllPermissions()">âœ… Allow All</button>
       <button class="btn-allow-skip" onclick="dismissPermissions()">Skip</button>
     </div>
   </div>
@@ -201,28 +201,28 @@
     <!-- TOPBAR -->
     <header class="topbar" role="banner">
       <div class="rooms-menu" id="rooms-menu">
-        <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms">☰</button>
+        <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms">â˜°</button>
         <div class="rooms-popup" id="rooms-popup" role="menu" hidden>
-          <div class="rooms-popup-title">🏠 Rooms <button type="button" class="rooms-popup-close" aria-label="Close rooms" onclick="document.getElementById('btn-rooms-menu').click()">✕</button></div>
+          <div class="rooms-popup-title">ðŸ  Rooms <button type="button" class="rooms-popup-close" aria-label="Close rooms" onclick="document.getElementById('btn-rooms-menu').click()">âœ•</button></div>
           <ul class="room-list" id="room-list"></ul>
         </div>
       </div>
 
       <div class="topbar-logo-area">
-        <strong class="topbar-logo">💬 ChatCorner</strong>
+        <strong class="topbar-logo">ðŸ’¬ ChatCorner</strong>
         <div class="theme-bar" id="theme-bar">
           <button class="theme-dot" data-theme="nebula" style="background:linear-gradient(135deg,#8b6ded,#38c8e8)" onclick="setTheme('nebula')" title="Nebula"></button>
-          <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember 🔥"></button>
-          <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic ❄️"></button>
+          <button class="theme-dot" data-theme="ember" style="background:linear-gradient(135deg,#e8921a,#f5c842)" onclick="setTheme('ember')" title="Ember ðŸ”¥"></button>
+          <button class="theme-dot" data-theme="arctic" style="background:linear-gradient(135deg,#2a7de1,#eaf2ff)" onclick="setTheme('arctic')" title="Arctic â„ï¸"></button>
           <button class="theme-dot" data-theme="matrix" style="background:linear-gradient(135deg,#3dd668,#7af09a)" onclick="setTheme('matrix')" title="Matrix"></button>
-          <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose 🌸"></button>
+          <button class="theme-dot" data-theme="rose" style="background:linear-gradient(135deg,#e0628a,#fbc6d3)" onclick="setTheme('rose')" title="Rose ðŸŒ¸"></button>
         </div>
       </div>
       <div class="topbar-room">
         <span id="current-room-name">Select a Room</span>
-        <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">🔙 Return to Rooms</button>
+        <button id="btn-iptv-return" class="btn-iptv-return hidden" onclick="exitIPTVRoomAndShowRooms()">ðŸ”™ Return to Rooms</button>
         <span class="ludo-zoom" id="ludo-zoom" title="Game size">
-          <button onclick="ludoZoom(-0.1)" aria-label="Smaller">−</button>
+          <button onclick="ludoZoom(-0.1)" aria-label="Smaller">âˆ’</button>
           <span id="ludo-zoom-label">100%</span>
           <button onclick="ludoZoom(0.1)" aria-label="Larger">+</button>
           <button onclick="ludoZoom(0)" aria-label="Fit to screen">Fit</button>
@@ -237,13 +237,13 @@
           <button class="topbar-clear-btn hidden" id="btn-clear-all" onclick="clearAllRoomMessages()" title="Delete all messages in this room (Admins/Mods)">Clear For All</button>
         </div>
         <span id="user-badge" class="user-badge" aria-label="Current user"></span>
-        <button class="topbar-btn" id="btn-edit-avatar" onclick="showProfileModal(currentUser.id, 'profile')" style="display:none" aria-label="Update avatar">🖼️</button>
+        <button class="topbar-btn" id="btn-edit-avatar" onclick="showProfileModal(currentUser.id, 'profile')" style="display:none" aria-label="Update avatar">ðŸ–¼ï¸</button>
         <button class="topbar-btn" onclick="logout()" aria-label="Log out">Logout</button>
       </div>
 
       <!-- Mobile: Users sidebar toggle -->
       <button class="topbar-mobile-toggle" id="btn-toggle-right-sidebar" onclick="toggleRightSidebar()" aria-label="Toggle users list" title="Users">
-        👥
+        ðŸ‘¥
       </button>
     </header>
 
@@ -266,18 +266,18 @@
           <div class="iptv-sidebar">
             <div class="iptv-category-select-wrapper">
               <select id="iptv-category-select" onchange="changeIPTVCategoryOrCountry(this.value)" aria-label="Select IPTV category or country">
-                <option value="country:pk">🇵🇰 Pakistan Channels</option>
-                <option value="country:in">🇮🇳 India Channels</option>
-                <option value="country:us">🇺🇸 United States Channels</option>
-                <option value="country:uk">🇬🇧 United Kingdom Channels</option>
-                <option value="country:ca">🇨🇦 Canada Channels</option>
-                <option value="cat:news">📰 News Channels</option>
-                <option value="cat:sports">⚽ Sports Channels</option>
-                <option value="cat:movies">🍿 Movies Channels</option>
-                <option value="cat:music">🎵 Music Channels</option>
-                <option value="cat:documentary">🧪 Documentaries</option>
-                <option value="cat:kids">🧸 Kids Channels</option>
-                <option value="cat:general">🌍 General Channels</option>
+                <option value="country:pk">ðŸ‡µðŸ‡° Pakistan Channels</option>
+                <option value="country:in">ðŸ‡®ðŸ‡³ India Channels</option>
+                <option value="country:us">ðŸ‡ºðŸ‡¸ United States Channels</option>
+                <option value="country:uk">ðŸ‡¬ðŸ‡§ United Kingdom Channels</option>
+                <option value="country:ca">ðŸ‡¨ðŸ‡¦ Canada Channels</option>
+                <option value="cat:news">ðŸ“° News Channels</option>
+                <option value="cat:sports">âš½ Sports Channels</option>
+                <option value="cat:movies">ðŸ¿ Movies Channels</option>
+                <option value="cat:music">ðŸŽµ Music Channels</option>
+                <option value="cat:documentary">ðŸ§ª Documentaries</option>
+                <option value="cat:kids">ðŸ§¸ Kids Channels</option>
+                <option value="cat:general">ðŸŒ General Channels</option>
               </select>
             </div>
             <div class="iptv-search-bar">
@@ -304,7 +304,7 @@
             <div id="yt-player"></div>
             <div id="yt-guard" class="media-guard hidden"></div>
           </div>
-          <div class="media-footer"><span id="yt-status"></span><button id="yt-sync-btn" class="hidden" onclick="ytSyncNow()">🔊 Tap to sync</button></div>
+          <div class="media-footer"><span id="yt-status"></span><button id="yt-sync-btn" class="hidden" onclick="ytSyncNow()">ðŸ”Š Tap to sync</button></div>
         </div>
 
         <!-- Spotify room -->
@@ -320,13 +320,13 @@
           <div class="media-footer">
             <span id="sp-status"></span>
             <button id="sp-claim-btn" class="hidden" onclick="spClaimControl()">Take control</button>
-            <button id="sp-sync-btn" class="hidden" onclick="spSyncNow()">▶ Sync</button>
+            <button id="sp-sync-btn" class="hidden" onclick="spSyncNow()">â–¶ Sync</button>
           </div>
         </div>
 
         <!-- Ludo game container -->
         <div id="ludo-container" class="ludo-container hidden">
-          <button id="btn-ludo-return" class="btn-ludo-return hidden" onclick="exitLudoRoom()">🔙 Return to Chat</button>
+          <button id="btn-ludo-return" class="btn-ludo-return hidden" onclick="exitLudoRoom()">ðŸ”™ Return to Chat</button>
           <iframe id="ludo-iframe"
             src=""
             frameborder="0"
@@ -348,14 +348,14 @@
 
         <!-- Load older messages button -->
         <button id="btn-load-older" class="btn-load-older hidden" onclick="loadOlderMessages()" aria-label="Load older messages">
-          ⬆ Load older messages
+          â¬† Load older messages
         </button>
 
         <!-- Messages -->
         <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
 
         <!-- Scroll to bottom button -->
-        <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom" aria-label="Scroll to bottom">↓ New messages</button>
+        <button id="btn-scroll-bottom" class="btn-scroll-bottom hidden" onclick="scrollToBottom()" title="Scroll to bottom" aria-label="Scroll to bottom">â†“ New messages</button>
 
         <!-- Minimized cams bar -->
         <div class="mini-cams-bar" id="minimized-cams-bar"></div>
@@ -363,7 +363,7 @@
 
       <!-- RIGHT SIDEBAR -->
       <aside class="sidebar sidebar-right" id="sidebar-right">
-        <div class="sidebar-section-label">👥 USERS IN ROOM</div>
+        <div class="sidebar-section-label">ðŸ‘¥ USERS IN ROOM</div>
         <ul class="user-list" id="user-list"></ul>
       </aside>
 
@@ -373,19 +373,19 @@
     <div class="audio-bar" id="audio-bar">
       <!-- Voice controls -->
       <div class="voice-controls" id="voice-controls">
-        <span class="audio-icon">🎤</span>
+        <span class="audio-icon">ðŸŽ¤</span>
         <span id="audio-status" class="audio-status-text">Voice: Off</span>
         <canvas class="voice-visualizer hidden" id="voice-visualizer" width="60" height="24"></canvas>
         <div class="peers-list" id="peers-list"></div>
         <button class="btn-join-voice hidden" id="btn-join-voice" onclick="joinVoice()">Join Voice</button>
-        <button class="btn-mute hidden" id="btn-mute" onclick="toggleMute()">🔇 Mute</button>
-        <button class="btn-toggle-camera hidden" id="btn-toggle-camera" onclick="toggleCamera()">📷 Camera Off</button>
-        <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
+        <button class="btn-mute hidden" id="btn-mute" onclick="toggleMute()">ðŸ”‡ Mute</button>
+        <button class="btn-toggle-camera hidden" id="btn-toggle-camera" onclick="toggleCamera()">ðŸ“· Camera Off</button>
+        <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">ðŸ”‡ Leave</button>
         <label id="stealth-mode-label" for="stealth-mode-checkbox" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
-          <input type="checkbox" id="stealth-mode-checkbox" onchange="toggleStealthMode(this.checked)" style="cursor:pointer;" /> 🕵️ Stealth
+          <input type="checkbox" id="stealth-mode-checkbox" onchange="toggleStealthMode(this.checked)" style="cursor:pointer;" /> ðŸ•µï¸ Stealth
         </label>
         <label id="owner-global-mute-label" for="owner-global-mute-checkbox" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(239,68,68,0.1);padding:4px 8px;border-radius:4px;border:1px solid #ef4444;">
-          <input type="checkbox" id="owner-global-mute-checkbox" onchange="toggleGlobalChatMute(this.checked)" style="cursor:pointer;" /> 🚫 Mute Chat
+          <input type="checkbox" id="owner-global-mute-checkbox" onchange="toggleGlobalChatMute(this.checked)" style="cursor:pointer;" /> ðŸš« Mute Chat
         </label>
       </div>
 
@@ -394,11 +394,11 @@
 
       <!-- Radio controls -->
       <div class="radio-controls" id="radio-controls">
-        <button class="radio-toggle-btn" id="btn-radio-toggle" onclick="toggleRadioControls()" title="Toggle Online Radio" aria-label="Toggle radio">📻 Radio</button>
+        <button class="radio-toggle-btn" id="btn-radio-toggle" onclick="toggleRadioControls()" title="Toggle Online Radio" aria-label="Toggle radio">ðŸ“» Radio</button>
         
         <!-- Volume Control -->
         <div class="radio-volume-container hidden" id="radio-volume-container">
-          <button class="volume-btn" id="btn-radio-mute" onclick="toggleRadioMute()" title="Mute/Unmute" aria-label="Mute radio">🔊</button>
+          <button class="volume-btn" id="btn-radio-mute" onclick="toggleRadioMute()" title="Mute/Unmute" aria-label="Mute radio">ðŸ”Š</button>
           <input type="range" id="radio-volume-slider" min="0" max="100" value="80" class="radio-volume-slider" title="Radio Volume" aria-label="Radio volume" oninput="onRadioVolumeChange(this.value)"/>
           <span class="volume-val" id="radio-volume-val">80%</span>
         </div>
@@ -406,23 +406,23 @@
         <div class="radio-selectors hidden" id="radio-selectors">
           <select id="radio-country-select" class="radio-select" onchange="onRadioCountryChange(this.value)" aria-label="Select radio country">
             <option value="">-- Country --</option>
-            <option value="PK">Pakistan 🇵🇰</option>
-            <option value="IN">India 🇮🇳</option>
-            <option value="GB">United Kingdom 🇬🇧</option>
-            <option value="CA">Canada 🇨🇦</option>
-            <option value="US">United States 🇺🇸</option>
-            <option value="AE">United Arab Emirates 🇦🇪</option>
-            <option value="AU">Australia 🇦🇺</option>
+            <option value="PK">Pakistan ðŸ‡µðŸ‡°</option>
+            <option value="IN">India ðŸ‡®ðŸ‡³</option>
+            <option value="GB">United Kingdom ðŸ‡¬ðŸ‡§</option>
+            <option value="CA">Canada ðŸ‡¨ðŸ‡¦</option>
+            <option value="US">United States ðŸ‡ºðŸ‡¸</option>
+            <option value="AE">United Arab Emirates ðŸ‡¦ðŸ‡ª</option>
+            <option value="AU">Australia ðŸ‡¦ðŸ‡º</option>
           </select>
           
           <select id="radio-category-select" class="radio-select" onchange="onRadioCategoryChange(this.value)" disabled aria-label="Select radio category">
             <option value="">-- Category --</option>
             <option value="all">All Categories</option>
-            <option value="music">🎵 Music & Hits</option>
-            <option value="punjabi">🌾 Punjabi Hits</option>
-            <option value="news">📰 News & Talk</option>
-            <option value="sports">⚽ Sports Live</option>
-            <option value="devotional">🕌 Devotional / Sufi</option>
+            <option value="music">ðŸŽµ Music & Hits</option>
+            <option value="punjabi">ðŸŒ¾ Punjabi Hits</option>
+            <option value="news">ðŸ“° News & Talk</option>
+            <option value="sports">âš½ Sports Live</option>
+            <option value="devotional">ðŸ•Œ Devotional / Sufi</option>
           </select>
           
           <select id="radio-channel-select" class="radio-select" onchange="onRadioChannelChange(this.value)" disabled aria-label="Select radio channel">
@@ -438,7 +438,7 @@
             <span></span>
             <span></span>
           </div>
-          <button class="btn-stop-radio" id="btn-stop-radio" onclick="stopRadioPlayer()" aria-label="Stop radio">⏹️ Stop</button>
+          <button class="btn-stop-radio" id="btn-stop-radio" onclick="stopRadioPlayer()" aria-label="Stop radio">â¹ï¸ Stop</button>
         </div>
       </div>
     </div>
@@ -450,11 +450,11 @@
         <div class="input-strip-left">
           <div id="emoji-picker" class="emoji-picker hidden" role="dialog" aria-label="Emoji Picker"></div>
           <div id="room-image-url-popover" class="room-image-url-popover hidden">
-            <input id="room-image-url-input" type="url" placeholder="Paste image URL…" aria-label="Paste image URL" autocomplete="off"/>
-            <button class="btn-sm" id="btn-room-image-url-clear" title="Clear" aria-label="Clear">✕</button>
+            <input id="room-image-url-input" type="url" placeholder="Paste image URLâ€¦" aria-label="Paste image URL" autocomplete="off"/>
+            <button class="btn-sm" id="btn-room-image-url-clear" title="Clear" aria-label="Clear">âœ•</button>
           </div>
           <div id="voice-note-preview-popover" class="voice-preview-popover hidden">
-            <button id="btn-voice-note-play" class="btn-sm" style="background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">▶ Play</button>
+            <button id="btn-voice-note-play" class="btn-sm" style="background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;">â–¶ Play</button>
             <span style="font-size:0.75rem;color:var(--text);margin:0 8px;">Preview Ready</span>
             <audio id="voice-note-preview-audio" class="hidden"></audio>
             <button id="btn-voice-note-send" class="btn-sm" style="background:#10b981;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;margin-right:4px;">Send</button>
@@ -462,18 +462,18 @@
           </div>
           
           <!-- Hamburger extras button (visible on mobile, positioned on the left side) -->
-          <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options" aria-label="More input options">☰</button>
+          <button class="input-btn mobile-only" id="btn-input-extras" onclick="toggleInputExtrasMenu(event)" title="More options" aria-label="More input options">â˜°</button>
 
           <div id="input-buttons-group" class="input-buttons-group">
-            <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">😊</button>
-            <button class="input-btn" id="btn-image-url" onclick="closeInputExtras()" title="Share image or GIF" aria-label="Share image or GIF">🖼️</button>
-            <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote();closeInputExtras()" title="Send a voice note" aria-label="Record and send voice note">🎙️</button>
-            <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick();closeInputExtras()" title="Join Voice Chat" aria-label="Join voice chat">🔊</button>
+            <button class="input-btn" id="btn-emoji" onclick="toggleEmojiPicker(event)" title="Emoji" aria-label="Open emoji picker">ðŸ˜Š</button>
+            <button class="input-btn" id="btn-image-url" onclick="closeInputExtras()" title="Share image or GIF" aria-label="Share image or GIF">ðŸ–¼ï¸</button>
+            <button class="input-btn" id="btn-voice-note" onclick="sendVoiceNote();closeInputExtras()" title="Send a voice note" aria-label="Record and send voice note">ðŸŽ™ï¸</button>
+            <button class="input-btn" id="btn-join-voice-quick" onclick="joinVoiceQuick();closeInputExtras()" title="Join Voice Chat" aria-label="Join voice chat">ðŸ”Š</button>
           </div>
           <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
         </div>
         <div class="input-strip-center">
-          <textarea id="msg-input" class="msg-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
+          <textarea id="msg-input" class="msg-input" placeholder="Type a messageâ€¦ (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
           <span id="msg-char-counter" class="msg-char-counter" aria-live="polite" aria-label="Character count">0/500</span>
           <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
         </div>
@@ -482,20 +482,20 @@
       <!-- RECORDING INPUT STATE -->
       <div id="input-strip-recording" style="display: none; width: 100%; align-items: center; justify-content: space-between; padding: 4px 12px; height: 100%;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="blinking-dot" id="voice-rec-blinking-dot" style="color: #ef4444; font-size: 14px; animation: blinker 1s linear infinite;">🔴</span>
+          <span class="blinking-dot" id="voice-rec-blinking-dot" style="color: #ef4444; font-size: 14px; animation: blinker 1s linear infinite;">ðŸ”´</span>
           <span id="voice-rec-timer-display" style="font-family: monospace; font-size: 14px; color: var(--text); font-weight: bold;">00:00</span>
-          <span id="voice-rec-status-text" style="font-size: 0.8rem; color: var(--muted); margin-left: 8px;">Recording… tap 📤 to send</span>
+          <span id="voice-rec-status-text" style="font-size: 0.8rem; color: var(--muted); margin-left: 8px;">Recordingâ€¦ tap ðŸ“¤ to send</span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
-          <button class="input-btn" id="btn-voice-rec-discard" title="Discard" aria-label="Discard recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">🗑️</button>
-          <button class="input-btn" id="btn-voice-rec-send" title="Send" aria-label="Send recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">📤</button>
+          <button class="input-btn" id="btn-voice-rec-discard" title="Discard" aria-label="Discard recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">ðŸ—‘ï¸</button>
+          <button class="input-btn" id="btn-voice-rec-send" title="Send" aria-label="Send recording" style="font-size: 1.25rem; background: transparent; border: none; cursor: pointer;">ðŸ“¤</button>
         </div>
       </div>
     </div>
 
     <!-- Guest notice -->
     <div id="guest-notice-bar" class="guest-bar" style="display:none">
-      👤 Guest mode — <a href="login.html">sign in or register</a> for a persistent account
+      ðŸ‘¤ Guest mode â€” <a href="login.html">sign in or register</a> for a persistent account
     </div>
 
   </div><!-- end .page-shell -->
@@ -504,8 +504,8 @@
   <div id="pm-root" class="pm-root"></div>
   <div id="floating-camera-window" class="floating-camera hidden" aria-live="polite">
     <div id="floating-camera-header" class="floating-camera-header">
-      <span id="floating-camera-title">📷 Camera</span>
-      <button id="floating-camera-close" class="floating-camera-close" type="button" aria-label="Close camera">✕</button>
+      <span id="floating-camera-title">ðŸ“· Camera</span>
+      <button id="floating-camera-close" class="floating-camera-close" type="button" aria-label="Close camera">âœ•</button>
     </div>
     <video id="floating-camera-video" autoplay playsinline></video>
   </div>
@@ -513,8 +513,8 @@
   <!-- Mobile Download App Modal -->
   <div id="download-app-modal" class="download-modal hidden" role="dialog" aria-modal="true" aria-label="Download Android App">
     <div class="download-modal-content">
-      <button class="download-modal-close" onclick="closeDownloadModal()" title="Dismiss" aria-label="Close download modal">✕</button>
-      <div class="download-modal-icon">📱</div>
+      <button class="download-modal-close" onclick="closeDownloadModal()" title="Dismiss" aria-label="Close download modal">âœ•</button>
+      <div class="download-modal-icon">ðŸ“±</div>
       <h2>Download ChatCorner Android App</h2>
       <p>Download our official and secure Android app. Please use the software which will be available in new update.</p>
       <a href="https://github.com/musaddasmehreen/chatcorner/raw/main/chatcorner.apk" class="download-modal-btn" download rel="noopener">Download for Android</a>
@@ -536,6 +536,7 @@
   <script src="js/audio-v3.js?v=1.5" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
   <script src="js/resizable-layout.js?v=1.7" defer></script>
+  <script src="js/virtual-room-users.js?v=1.0" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -659,19 +660,19 @@
         }
       });
 
-      // Feature 2 — Rooms sidebar pin/unpin logic
+      // Feature 2 â€” Rooms sidebar pin/unpin logic
       (function initRoomsPin() {
         const isPinned = localStorage.getItem('cc-rooms-pinned') !== 'false'; // default: pinned
         if (!isPinned) document.body.classList.add('rooms-unpinned');
 
         const pinBtn = document.getElementById('btn-pin-rooms');
         if (pinBtn) {
-          pinBtn.textContent = isPinned ? '📌 Pinned' : '📌 Pin';
+          pinBtn.textContent = isPinned ? 'ðŸ“Œ Pinned' : 'ðŸ“Œ Pin';
           pinBtn.addEventListener('click', (ev) => {
             ev.stopPropagation();
             const nowUnpinned = document.body.classList.toggle('rooms-unpinned');
             localStorage.setItem('cc-rooms-pinned', String(!nowUnpinned));
-            pinBtn.textContent = nowUnpinned ? '📌 Pin' : '📌 Pinned';
+            pinBtn.textContent = nowUnpinned ? 'ðŸ“Œ Pin' : 'ðŸ“Œ Pinned';
           });
         }
       })();
@@ -679,3 +680,4 @@
   </script>
 </body>
 </html>
+
