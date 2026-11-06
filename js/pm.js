@@ -787,7 +787,7 @@ function appendPmTextMessage(userId, msg, isMe) {
   row.className = 'pm-msg' + (isMe ? ' self' : '');
   if (msg.id) row.dataset.msgId = msg.id;
   const receiptHtml = isMe && msg.id ? `<span class="pm-receipt-status pm-receipt-${msg.id}">✓</span>` : '';
-  const formattedText = window.parseYouTubeEmbedHtml ? window.parseYouTubeEmbedHtml(escHtml(msg.text || '')) : escHtml(msg.text || '');
+  const formattedText = window.formatMessageText ? window.formatMessageText(msg.text || '') : (window.parseYouTubeEmbedHtml ? window.parseYouTubeEmbedHtml(escHtml(msg.text || '')) : escHtml(msg.text || ''));
   row.innerHTML = `
     <div class="pm-msg-bubble">${formattedText}</div>
     <div class="pm-msg-time">${formatTime(msg.createdAt)} ${receiptHtml}</div>

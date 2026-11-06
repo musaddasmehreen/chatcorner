@@ -7,19 +7,54 @@ const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arcti
 const GUEST_VOICE_LIMIT = 2;
 const EMOJI_GROUPS = [
   {
-    label: 'Icons',
-    items: ['🌸','😊','🚗','💨','💃','✨','😱','🔊','👋','🤸','⛓️','🏍️','🔥','💏','☂️','🔫','😴','🐱','🎀','🐰','🧺']
+    label: '💫 Moving & Emotional',
+    items: [
+      { emoji: '😍', title: 'Love Pulse', live: 'live-pulse' },
+      { emoji: '😂', title: 'Laughing Tears', live: 'live-wiggle' },
+      { emoji: '🥳', title: 'Party Celebrate', live: 'live-spin' },
+      { emoji: '😭', title: 'Crying Tears', live: 'live-sway' },
+      { emoji: '😡', title: 'Angry Rage', live: 'live-shake' },
+      { emoji: '😊', title: 'Happy Bounce', live: 'live-bounce' },
+      { emoji: '💖', title: 'Heartbeat Pulse', live: 'live-heartbeat' },
+      { emoji: '🥺', title: 'Pleading Eyes', live: 'live-float' },
+      { emoji: '🔥', title: 'Fire Flame', live: 'live-fire' },
+      { emoji: '😘', title: 'Kiss Pop', live: 'live-pop' },
+      { emoji: '😴', title: 'Sleeping Float', live: 'live-float' },
+      { emoji: '😎', title: 'Cool Shades', live: 'live-bounce' },
+      { emoji: '✨', title: 'Sparkles Pulse', live: 'live-pulse' },
+      { emoji: '👻', title: 'Ghost Dance', live: 'live-wiggle' },
+      { emoji: '🫂', title: 'Warm Hug', live: 'live-heartbeat' },
+      { emoji: '🥰', title: 'Blush Love', live: 'live-pulse' },
+      { emoji: '🤣', title: 'Rolling Laugh', live: 'live-spin' },
+      { emoji: '🫠', title: 'Melting Sway', live: 'live-sway' },
+      { emoji: '😮', title: 'Wow Pop', live: 'live-pop' },
+      { emoji: '⭐', title: 'Star Twinkle', live: 'live-spin' },
+      { emoji: '🐾', title: 'Cute Paws', live: 'live-bounce' }
+    ]
   },
   {
-    label: 'Live',
+    label: '🎀 Smart & Cute',
     items: [
-      { emoji: '😊', title: 'Happy', live: 'live-bounce' },
-      { emoji: '😍', title: 'Love', live: 'live-pulse' },
-      { emoji: '😂', title: 'Laugh', live: 'live-wiggle' },
-      { emoji: '😮', title: 'Wow', live: 'live-pop' },
-      { emoji: '🥳', title: 'Party', live: 'live-spin' },
-      { emoji: '😢', title: 'Sad', live: 'live-sway' },
-      { emoji: '😡', title: 'Angry', live: 'live-shake' }
+      '🐱', '🐰', '🧸', '🐼', '🐻', '🦊', '🐶', '🐹', '🐣', '🦄', '🐨', '🐧', '🐥', '🐬', '🦋',
+      '🥺', '🥰', '😻', '😽', '😚', '🤭', '🫣', '🫶', '💖', '🤍', '💌',
+      '🌸', '🎀', '🍓', '🍩', '🧁', '🍭', '🍡', '🍧', '🍯', '🧋', '🌷', '🫧', '💫', '🪞', '🪄'
+    ]
+  },
+  {
+    label: '🌟 Super Animated Icons',
+    items: [
+      { emoji: '[super-kitty]', title: 'Kitty Bow' },
+      { emoji: '[super-bunny]', title: 'Bunny Basket' },
+      { emoji: '[super-dance]', title: 'Dancing Silhouette' },
+      { emoji: '[super-wreath]', title: 'Spinning Wreath' },
+      { emoji: '[super-welcome]', title: 'Welcome Banner' },
+      { emoji: '[super-kissing]', title: 'Umbrella Kiss' },
+      { emoji: '[super-car]', title: 'Driving Car' },
+      { emoji: '[super-swing]', title: 'Gymnast Swing' },
+      { emoji: '[super-motorcycle]', title: 'Flaming Bike' },
+      { emoji: '[super-shooting]', title: 'Laser Gun' },
+      { emoji: '[super-sleeping]', title: 'Floating Zzz' },
+      { emoji: '[super-screamer]', title: 'Screamer' }
     ]
   },
   {
@@ -35,22 +70,90 @@ const EMOJI_GROUPS = [
     items: ['👍','👎','👏','🙌','🫡','🙏','🤝','👋','✌️','🤞','👌','💪','🫶','👀']
   },
   {
-    label: 'New & Trending',
-    items: ['🫩','🫆','🪾','🫜','🪉','🫟','🪏','🪈','🫨','🩷','🩵','🩶','🫷','🫸','🫎','🪽','🐦‍🔥','🫚','🫛','🪭','🪮','🪇','🫠','🫥','🫡','🫣','🫢']
-  },
-  {
-    label: 'Fun',
+    label: 'Fun & Aesthetic',
     items: ['🔥','✨','🌈','⭐','⚡','🎉','🎊','🎈','🎵','🎶','💯','💥','🌸','🍕','☕','🎮']
-  },
-  {
-    label: 'Animals & Nature',
-    items: ['🐶','🐱','🦊','🐻','🐼','🐨','🐯','🦁','🐸','🐵','🦄','🐝','🦋','🐢','🐬','🦈','🌻','🌹','🌙','🌍']
-  },
-  {
-    label: 'Food & Objects',
-    items: ['🍎','🍉','🍓','🍔','🍟','🍿','🍩','🍪','🎂','🍵','⚽','🏆','🎁','🎧','📱','💡','🚀','💻','📸','🎬']
   }
 ];
+
+const MOVING_EMOJI_ANIMATIONS = {
+  '😍': 'live-pulse',
+  '😂': 'live-wiggle',
+  '🥳': 'live-spin',
+  '😭': 'live-sway',
+  '😡': 'live-shake',
+  '😊': 'live-bounce',
+  '💖': 'live-heartbeat',
+  '🥺': 'live-float',
+  '🔥': 'live-fire',
+  '😘': 'live-pop',
+  '😴': 'live-float',
+  '😎': 'live-bounce',
+  '✨': 'live-pulse',
+  '👻': 'live-wiggle',
+  '🫂': 'live-heartbeat',
+  '🥰': 'live-pulse',
+  '🤣': 'live-spin',
+  '🫠': 'live-sway',
+  '😮': 'live-pop',
+  '⭐': 'live-spin',
+  '🐾': 'live-bounce'
+};
+
+const MOVING_SHORTCODES = {
+  ':love:': '😍',
+  ':laugh:': '😂',
+  ':party:': '🥳',
+  ':cry:': '😭',
+  ':angry:': '😡',
+  ':bounce:': '😊',
+  ':heartbeat:': '💖',
+  ':plead:': '🥺',
+  ':fire:': '🔥',
+  ':kiss:': '😘',
+  ':sleep:': '😴',
+  ':cool:': '😎',
+  ':sparkles:': '✨',
+  ':ghost:': '👻',
+  ':hug:': '🫂',
+  ':blush:': '🥰',
+  ':rofl:': '🤣',
+  ':melt:': '🫠',
+  ':wow:': '😮',
+  ':star:': '⭐',
+  ':paws:': '🐾'
+};
+
+function parseMovingEmojisHtml(text) {
+  if (typeof text !== 'string') return text;
+  let result = text;
+  Object.keys(MOVING_SHORTCODES).forEach(code => {
+    result = result.split(code).join(MOVING_SHORTCODES[code]);
+  });
+  const parts = result.split(/(<[^>]+>)/g);
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i] && !parts[i].startsWith('<')) {
+      Object.keys(MOVING_EMOJI_ANIMATIONS).forEach(em => {
+        if (parts[i].includes(em)) {
+          parts[i] = parts[i].split(em).join('<span class="moving-emoji ' + MOVING_EMOJI_ANIMATIONS[em] + '">' + em + '</span>');
+        }
+      });
+    }
+  }
+  return parts.join('');
+}
+window.parseMovingEmojisHtml = parseMovingEmojisHtml;
+
+function formatMessageContent(rawContent) {
+  if (!rawContent) return '';
+  let str = escHtml(String(rawContent));
+  if (window.parseYouTubeEmbedHtml) {
+    str = window.parseYouTubeEmbedHtml(str);
+  }
+  str = parseSuperEmojisHtml(str);
+  str = parseMovingEmojisHtml(str);
+  return str;
+}
+window.formatMessageText = formatMessageContent;
 
 function parseSuperEmojisHtml(text) {
   if (typeof text !== 'string') return text;
@@ -1964,7 +2067,7 @@ function buildMessageNode(msg) {
     <div class="msg-bubble">
       ${deleteButton}
       ${reportButton}
-      <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text" style="${msgStyle}">${window.parseYouTubeEmbedHtml ? window.parseYouTubeEmbedHtml(escHtml(msg.content)) : escHtml(msg.content)}</span></div>
+      <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text" style="${msgStyle}">${window.formatMessageText ? window.formatMessageText(msg.content) : escHtml(msg.content)}</span></div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>`;
 
@@ -5839,7 +5942,7 @@ function renderIPTVChatMessage(payload) {
   div.className = 'message';
   const username = payload.username || 'Anonymous';
   const text = String(payload.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}: </span><span class="msg-text">${text}</span>`;
+  div.innerHTML = `<span class="msg-user">${username.replace(/</g,'&lt;')}: </span><span class="msg-text">${window.formatMessageText ? window.formatMessageText(payload.text) : text}</span>`;
   container.appendChild(div);
   scheduleMessageScroll();
 }

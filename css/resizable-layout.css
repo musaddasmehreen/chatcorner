@@ -2134,3 +2134,47 @@
   padding: 16px;
   text-align: center;
 }
+
+
+/* Moving Emotional Emojis */
+.moving-emoji {
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+  font-size: 1.45rem;
+  margin: 0 2px;
+  will-change: transform;
+}
+.emoji-btn.live-heartbeat,
+.moving-emoji.live-heartbeat { animation: emojiHeartbeat 1.25s ease-in-out infinite; }
+.emoji-btn.live-float,
+.moving-emoji.live-float { animation: emojiFloat 2s ease-in-out infinite; }
+.emoji-btn.live-fire,
+.moving-emoji.live-fire { animation: emojiFire 1s ease-in-out infinite; }
+.emoji-btn.live-kawaii,
+.moving-emoji.live-kawaii { animation: emojiKawaii 1.6s ease-in-out infinite; }
+
+@keyframes emojiHeartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.25); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.2); }
+  70% { transform: scale(1); }
+}
+
+@keyframes emojiFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes emojiFire {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.1) rotate(-4deg); }
+  75% { transform: scale(1.05) rotate(4deg); }
+}
+
+@keyframes emojiKawaii {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  40% { transform: translateY(-5px) scale(0.94, 1.1); }
+  60% { transform: translateY(0) scale(1.08, 0.92); }
+}
