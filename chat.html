@@ -65,7 +65,7 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v20';
+    const CURRENT_VERSION = 'v21';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -264,12 +264,6 @@
         <!-- IPTV player and channel explorer -->
         <div id="iptv-container" class="iptv-container hidden">
           <div class="iptv-sidebar">
-            <button type="button" class="vr-users-btn vr-users-btn-iptv" onclick="toggleVirtualRoomUsers()" title="Users in IPTV room" aria-label="Users in IPTV room">
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-badge vr-badge-iptv">0</span>
-            </button>
             <div class="iptv-category-select-wrapper">
               <select id="iptv-category-select" onchange="changeIPTVCategoryOrCountry(this.value)" aria-label="Select IPTV category or country">
                 <option value="country:pk">🇵🇰 Pakistan Channels</option>
@@ -302,18 +296,9 @@
 
         <!-- YouTube room -->
         <div id="yt-container" class="media-container hidden">
-          <div class="media-top-bar" id="yt-top-bar">
-            <button type="button" class="vr-users-btn" onclick="toggleVirtualRoomUsers()" title="Users in YouTube room" aria-label="Users in YouTube room">
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-badge vr-badge-yt">0</span>
-            </button>
-            <div id="yt-admin-bar" class="media-bar hidden">
+          <div id="yt-admin-bar" class="media-bar hidden">
             <input type="text" id="yt-url-input" placeholder="Paste YouTube link (admin only)" onkeydown="if(event.key==='Enter')ytLoadVideo()"/>
             <button onclick="ytLoadVideo()">Play for all</button>
-            </div>
-            <span class="vr-room-indicator" id="yt-viewer-indicator">YouTube Room</span>
           </div>
           <div class="media-stage">
             <div id="yt-player"></div>
@@ -324,18 +309,9 @@
 
         <!-- Spotify room -->
         <div id="sp-container" class="media-container hidden">
-          <div class="media-top-bar" id="sp-top-bar">
-            <button type="button" class="vr-users-btn" onclick="toggleVirtualRoomUsers()" title="Users in Spotify room" aria-label="Users in Spotify room">
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-badge vr-badge-sp">0</span>
-            </button>
-            <div id="sp-control-bar" class="media-bar hidden">
+          <div id="sp-control-bar" class="media-bar hidden">
             <input type="text" id="sp-url-input" placeholder="Paste Spotify track/album/playlist link" onkeydown="if(event.key==='Enter')spLoadUri()"/>
             <button onclick="spLoadUri()">Play for all</button>
-            </div>
-            <span class="vr-room-indicator" id="sp-viewer-indicator">Spotify Room</span>
           </div>
           <div class="media-stage media-stage-sp">
             <div id="sp-embed"></div>
@@ -350,15 +326,7 @@
 
         <!-- Ludo game container -->
         <div id="ludo-container" class="ludo-container hidden">
-          <div class="ludo-top-bar" id="ludo-top-bar">
-            <button type="button" class="vr-users-btn" onclick="toggleVirtualRoomUsers()" title="Users in Ludo room" aria-label="Users in Ludo room">
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-line"></span>
-              <span class="vr-badge vr-badge-ludo">0</span>
-            </button>
-            <button id="btn-ludo-return" class="btn-ludo-return hidden" onclick="exitLudoRoom()">🔙 Return to Chat</button>
-          </div>
+          <button id="btn-ludo-return" class="btn-ludo-return hidden" onclick="exitLudoRoom()">🔙 Return to Chat</button>
           <iframe id="ludo-iframe"
             src=""
             frameborder="0"

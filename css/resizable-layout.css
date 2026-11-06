@@ -1958,108 +1958,87 @@
   .page-shell.media-room .media-container:not(.hidden) { height: 40vh !important; flex: none !important; }
 }
 
-
-/* Virtual Room Top Bars & Users Drawer */
-.media-top-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  min-height: 48px;
-}
-.media-top-bar .media-bar {
-  display: flex;
-  flex: 1;
-  gap: 6px;
-  padding: 0;
-  background: transparent;
-  border-bottom: none;
-}
-.media-top-bar .media-bar.hidden {
-  display: none !important;
-}
-.vr-room-indicator {
-  font-size: 0.84rem;
-  color: var(--text-muted, #aaa);
-  font-weight: 500;
-  margin-left: 4px;
-}
-.media-top-bar:has(.media-bar:not(.hidden)) .vr-room-indicator {
-  display: none !important;
-}
-
-.ludo-top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
+/* =====================================================================
+ * Virtual Room Smart Floating Hamburger & Online Users Drawer (over chatbox)
+ * ===================================================================== */
 .vr-users-btn {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 50;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
   padding: 0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--border, #34304f);
-  color: var(--text, #eee);
+  border-radius: 6px;
+  background: rgba(14, 15, 32, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  position: relative;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
+  opacity: 0.5;
+  transition: opacity 0.2s ease, background 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
 }
-.vr-users-btn:hover {
-  background: var(--accent, #8b6ded);
+.vr-users-btn:hover,
+.vr-users-btn:focus-visible {
+  opacity: 1 !important;
+  background: rgba(139, 109, 237, 0.9);
   border-color: var(--accent, #8b6ded);
-  color: #fff;
+  transform: scale(1.06);
 }
 .vr-users-btn .vr-line {
   display: block;
-  width: 17px;
-  height: 2px;
-  border-radius: 2px;
-  background-color: currentColor;
+  width: 14px;
+  height: 1.5px;
+  border-radius: 1px;
+  background-color: #fff;
 }
 .vr-users-btn .vr-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: 9px;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
   background: #22c55e;
   color: #07130b;
-  font: bold 10px/17px sans-serif;
+  font: bold 9px/14px sans-serif;
   text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
+/* Ensure chat wrapper is positioned relative so floating button sits over it */
+.page-shell.iptv-active .iptv-chat-wrapper,
+.page-shell.media-room .iptv-chat-wrapper {
+  position: relative !important;
+}
+
+/* User Menu Drawer - opens on the very left side over the chatbox */
 .vr-users-drawer {
   position: fixed;
   top: 50px;
   bottom: 0;
-  right: 0;
-  width: 280px;
+  left: 0;
+  right: auto;
+  width: 320px;
   max-width: 85vw;
-  background: var(--surface, #14152a);
-  border-left: 1px solid var(--border, #34304f);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  background: rgba(19, 20, 40, 0.98);
+  border-right: 1px solid var(--border, #34304f);
+  border-left: none;
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.55);
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
+  transform: translateX(-100%);
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
 }
 .vr-users-drawer.open {
   transform: translateX(0);

@@ -1,7 +1,7 @@
 /**
  * Virtual Room Online Users Drawer
- * Provides a hamburger toggle button and slide-in panel showing active users in
- * YouTube, Spotify, IPTV, and Ludo virtual rooms.
+ * Floats a smart, compact 50% opacity hamburger button at the top-left of the chatbox.
+ * Opens the online users drawer on the left side over the chatbox.
  */
 (function() {
   'use strict';
@@ -160,7 +160,42 @@
       });
   }
 
-  window.toggleVirtualRoomUsers = function() {
+  function ensureButton() {
+    const vr = getActiveVirtualRoom();
+    let btn = document.getElementById('vr-users-btn');
+    if (!vr) {
+      if (btn) btn.style.display = 'none';
+      return;
+    }
+
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'vr-users-btn';
+      btn.type = 'button';
+      btn.className = 'vr-users-btn';
+      btn.setAttribute('aria-label', 'Users in this room');
+      btn.title = 'Users in this room';
+      btn.onclick = window.toggleVirtualRoomUsers;
+      btn.innerHTML =
+        '<span class="vr-line"></span>' +
+        '<span class="vr-line"></span>' +
+        '<span class="vr-line"></span>' +
+        '<span class="vr-badge" id="vr-users-badge">0</span>';
+    }
+    btn.style.display = 'flex';
+
+    // Target: inside .iptv-chat-wrapper (the left chatbox) or .chat-main
+    const chatbox = document.querySelector('.iptv-chat-wrapper') ||
+                    (vr.type === 'ludo' ? document.getElementById('ludo-container') : null) ||
+                    document.querySelector('.chat-main');
+
+    if (chatbox && btn.parentElement !== chatbox) {
+      chatbox.prepend(btn);
+    }
+  }
+
+  window.toggleVirtualRoomUsers = function(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
     const drawer = document.getElementById('vr-users-drawer');
     if (!drawer) return;
     const isOpen = drawer.classList.contains('open');
@@ -186,6 +221,7 @@
   };
 
   function checkRoomState() {
+    ensureButton();
     const vr = getActiveVirtualRoom();
     if (!vr) {
       if (activeRoomKey || activeChannel) {
@@ -203,7 +239,7 @@
   function init() {
     checkRoomState();
     if (!pollInterval) {
-      pollInterval = setInterval(checkRoomState, 600);
+      pollInterval = setInterval(checkRoomState, 500);
     }
 
     document.addEventListener('keydown', function(e) {
@@ -213,7 +249,7 @@
     document.addEventListener('click', function(e) {
       const drawer = document.getElementById('vr-users-drawer');
       if (!drawer || !drawer.classList.contains('open')) return;
-      if (e.target.closest('.vr-users-btn') || e.target.closest('#vr-users-drawer')) return;
+      if (e.target.closest('#vr-users-btn') || e.target.closest('#vr-users-drawer')) return;
       window.closeVirtualRoomUsers();
     });
 
