@@ -1,8 +1,16 @@
+/**
+ * ChatCorner Live Voice & Video Chat (v3)
+ * Full WebRTC mesh with Perfect Negotiation & deterministic initiator.
+ * Prevents glare/offer collision, queues ICE candidates, unlocks browser autoplay,
+ * and ensures all room participants can speak and hear seamlessly.
+ */
+
 let localStream = null;
 let peers = {};
 let peerStreams = {};
 let peerAudioEls = {};
 let peerMuted = {};
+let iceQueues = {};
 let audioChannel = null;
 let isMuted = false;
 let inVoice = false;
@@ -16,7 +24,7 @@ let visualizerFrame = null;
 let floatingCameraPeerId = null;
 
 const VISUALIZER_BARS = 28;
-const MAX_VOICE_SPEAKERS = 2;
+const MAX_VOICE_SPEAKERS = 12;
 let isListenerMode = false;
 let listenerQueue = [];
 let voiceJoinAt = null;
@@ -27,55 +35,112 @@ window.addEventListener('DOMContentLoaded', () => {
   clearAllVisualizers();
 });
 
+function getVoiceUserId() {
+  const u = window.currentUser;
+  const p = window.currentProfile;
+  if (u && u.id) return String(u.id);
+  if (p && p.id) return String(p.id);
+  let stored = null;
+  try { stored = sessionStorage.getItem('cc_voice_uid'); } catch (_) {}
+  if (!stored) {
+    stored = 'v_' + Math.random().toString(36).slice(2, 9);
+    try { sessionStorage.setItem('cc_voice_uid', stored); } catch (_) {}
+  }
+  return stored;
+}
+
+function getVoiceUsername() {
+  const p = window.currentProfile;
+  const u = window.currentUser;
+  return String(
+    (p && p.username) ||
+    (u && u.user_metadata && u.user_metadata.username) ||
+    (u && u.email && u.email.split('@')[0]) ||
+    'User'
+  ).trim().slice(0, 40);
+}
+
+function getUsernameById(userId) {
+  if (typeof onlineUsers !== 'undefined' && onlineUsers[userId]) {
+    return onlineUsers[userId].username || onlineUsers[userId].nick || 'User';
+  }
+  return 'User';
+}
+
 async function joinVoice() {
   if (typeof stopRadioPlayer === 'function') {
     stopRadioPlayer();
   }
   if (!currentRoom?.is_audio_enabled || inVoice) return;
 
-  // Guests join in listen-only mode (Feature 5)
-  if (!currentUser || !currentProfile?.is_registered) {
-    await joinVoiceListenOnly();
-    return;
+  const myId = getVoiceUserId();
+  const myName = getVoiceUsername();
+
+  // Resume or start AudioContext on user gesture to satisfy browser autoplay
+  ensureAudioContext();
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
   }
 
+  // Request microphone permission
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      },
+      video: false
+    });
     isCameraOn = false;
+    isListenerMode = false;
   } catch (e) {
-    // Fallback: if mic denied, join as listener
-    await joinVoiceListenOnly();
-    return;
+    console.warn('[Voice] Microphone unavailable or denied, joining in listener mode:', e);
+    localStream = null;
+    isListenerMode = true;
   }
 
   inVoice = true;
   isMuted = false;
-  isListenerMode = false;
   listenerQueue = [];
   isPromotingSpeaker = false;
   voiceJoinAt = Date.now();
-  participantLevels[currentUser.id] = 0;
+  participantLevels[myId] = 0;
 
   document.getElementById('btn-join-voice')?.classList.add('hidden');
   document.getElementById('btn-leave-voice')?.classList.remove('hidden');
-  document.getElementById('btn-mute')?.classList.remove('hidden');
-  document.getElementById('btn-toggle-camera')?.classList.remove('hidden');
+
+  const btnMute = document.getElementById('btn-mute');
+  if (btnMute) {
+    if (isListenerMode) {
+      btnMute.classList.add('hidden');
+    } else {
+      btnMute.classList.remove('hidden');
+      btnMute.textContent = '🔇 Mute';
+    }
+  }
+
+  const btnCam = document.getElementById('btn-toggle-camera');
+  if (btnCam) btnCam.classList.toggle('hidden', isListenerMode);
+
   document.getElementById('voice-visualizer')?.classList.remove('hidden');
   updateVoiceStatus();
-  const btnMute = document.getElementById('btn-mute');
-  if (btnMute) btnMute.textContent = '🔇 Mute';
 
   updateVideoButtons();
   updateLocalPreview();
-  attachAnalyserForStream(currentUser.id, localStream);
+  if (localStream) {
+    attachAnalyserForStream(myId, localStream);
+  }
   startVisualizerLoop();
 
   if (typeof setLocalCameraState === 'function') {
     await setLocalCameraState(isCameraOn);
   }
 
-  audioChannel = sbClient.channel('voice:' + currentRoom.id, {
-    config: { presence: { key: currentUser.id } }
+  // All participants subscribe to the SAME room voice channel
+  const channelName = 'voice:' + (currentRoom.id || 'main');
+  audioChannel = sbClient.channel(channelName, {
+    config: { presence: { key: myId } }
   });
 
   audioChannel
@@ -90,6 +155,7 @@ async function joinVoice() {
     })
     .on('presence', { event: 'sync' }, () => {
       syncVoiceRoleState();
+      connectMissingPeers();
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -99,98 +165,321 @@ async function joinVoice() {
           type: 'broadcast',
           event: 'join',
           payload: {
-            from: currentUser.id,
-            username: currentProfile.username,
-            cameraOn: isCameraOn
+            from: myId,
+            username: myName,
+            cameraOn: isCameraOn,
+            listenOnly: isListenerMode
           }
         });
         await broadcastCameraState();
-        // Feature 1 fix: new joiner calls all existing speakers so they can hear them too
-        const state = audioChannel.presenceState();
-        const myId = currentUser.id;
-        Object.values(state).forEach(arr => arr.forEach(u => {
-          if (u.userId && u.userId !== myId && u.role === 'speaker' && !peers[u.userId]) {
-            handlePeerJoinAsInitiator(u.userId, u.username || u.userId);
-          }
-        }));
+        connectMissingPeers();
       }
     });
 }
 
-// Feature 5 — Listen-only mode: joins voice channel without mic, receives all audio
+// Fallback listen-only function
 async function joinVoiceListenOnly() {
-  if (inVoice || !currentRoom?.is_audio_enabled) return;
-
-  inVoice = true;
-  isListenerMode = true;
-  localStream = null;
-
-  document.getElementById('btn-join-voice')?.classList.add('hidden');
-  document.getElementById('btn-leave-voice')?.classList.remove('hidden');
-  document.getElementById('btn-mute')?.classList.add('hidden'); // no mic to mute
-  document.getElementById('btn-toggle-camera')?.classList.add('hidden');
-
-  const statusEl = document.getElementById('audio-status');
-  if (statusEl) { statusEl.textContent = '🎧 Voice: Listening'; statusEl.classList.add('listener-mode'); }
-
-  audioChannel = sbClient.channel('voice:listen-' + currentRoom.id + '-' + (currentUser?.id || Math.random().toString(36).slice(2)));
-
-  audioChannel
-    .on('broadcast', { event: 'offer' }, ({ payload }) => handleOffer(payload))
-    .on('broadcast', { event: 'answer' }, ({ payload }) => handleAnswer(payload))
-    .on('broadcast', { event: 'ice' }, ({ payload }) => handleIce(payload))
-    .on('broadcast', { event: 'camera-state' }, ({ payload }) => handleCameraState(payload))
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        // Ask all existing speakers to send us their stream by broadcasting a listen-request
-        await audioChannel.send({
-          type: 'broadcast',
-          event: 'join',
-          payload: {
-            from: currentUser?.id || 'guest-' + Math.random().toString(36).slice(2),
-            username: currentProfile?.username || 'Guest',
-            cameraOn: false,
-            listenOnly: true
-          }
-        });
-      }
-    });
+  await joinVoice();
 }
 
-// Feature 1 fix: initiator-side connection (new joiner calls existing speakers)
-async function handlePeerJoinAsInitiator(from, username) {
-  if (peers[from]) return;
-  addPeerTag(from, username);
-  const pc = createPeerConnection(from, username);
-  peers[from] = pc;
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  await audioChannel.send({
-    type: 'broadcast',
-    event: 'offer',
-    payload: { from: currentUser.id, to: from, sdp: offer, username: currentProfile.username, cameraOn: isCameraOn }
+/**
+ * Deterministic Initiator:
+ * To avoid race conditions and simultaneous offers (glare), only the peer
+ * with the higher ID initiates the WebRTC offer when two peers need connection.
+ */
+function connectMissingPeers() {
+  if (!inVoice || !audioChannel) return;
+  const myId = getVoiceUserId();
+  const state = audioChannel.presenceState();
+  Object.values(state).forEach(entries => {
+    (entries || []).forEach(u => {
+      if (u.userId && u.userId !== myId && !peers[u.userId]) {
+        if (myId.localeCompare(u.userId) > 0) {
+          initiateOfferToPeer(u.userId, u.username || 'User');
+        }
+      }
+    });
   });
 }
 
+async function handlePeerJoin({ from, username, cameraOn, listenOnly }) {
+  const myId = getVoiceUserId();
+  if (!from || from === myId || peers[from]) return;
+  if (!inVoice || !audioChannel) return;
+
+  addPeerTag(from, username);
+  if (!listenOnly) {
+    updatePeerCameraIcon(from, !!cameraOn);
+    if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
+  }
+
+  // Only the peer with the higher ID creates the offer
+  if (myId.localeCompare(from) > 0) {
+    await initiateOfferToPeer(from, username);
+  }
+}
+
+async function initiateOfferToPeer(peerId, username) {
+  if (!inVoice || !audioChannel) return;
+  const myId = getVoiceUserId();
+  const myName = getVoiceUsername();
+
+  addPeerTag(peerId, username);
+  const pc = getOrCreatePeerConnection(peerId, username);
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await audioChannel.send({
+      type: 'broadcast',
+      event: 'offer',
+      payload: {
+        from: myId,
+        to: peerId,
+        sdp: offer,
+        username: myName,
+        cameraOn: isCameraOn
+      }
+    });
+  } catch (err) {
+    console.error('[Voice] Error creating offer to', peerId, err);
+  }
+}
+
+async function handleOffer({ from, to, sdp, username, cameraOn }) {
+  const myId = getVoiceUserId();
+  if (to !== myId) return;
+
+  addPeerTag(from, username);
+  updatePeerCameraIcon(from, !!cameraOn);
+  if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
+
+  const pc = getOrCreatePeerConnection(from, username);
+  const isPolite = myId.localeCompare(from) < 0;
+  const isCollision = pc.signalingState !== 'stable';
+
+  if (isCollision) {
+    if (!isPolite) {
+      console.warn('[Voice] Impolite peer ignoring offer collision from', from);
+      return;
+    }
+    console.log('[Voice] Polite peer rolling back local offer for', from);
+    try {
+      await pc.setLocalDescription({ type: 'rollback' });
+    } catch (err) {
+      console.warn('[Voice] Rollback failed:', err);
+    }
+  }
+
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    flushIceCandidates(from, pc);
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    await audioChannel.send({
+      type: 'broadcast',
+      event: 'answer',
+      payload: { from: myId, to: from, sdp: answer }
+    });
+  } catch (err) {
+    console.error('[Voice] Error handling offer from', from, err);
+  }
+}
+
+async function handleAnswer({ from, to, sdp }) {
+  const myId = getVoiceUserId();
+  if (to !== myId || !peers[from]) return;
+
+  const pc = peers[from];
+  try {
+    if (pc.signalingState === 'have-local-offer') {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      flushIceCandidates(from, pc);
+    }
+  } catch (err) {
+    console.error('[Voice] Error handling answer from', from, err);
+  }
+}
+
+async function handleIce({ from, to, candidate }) {
+  const myId = getVoiceUserId();
+  if (to !== myId || !candidate) return;
+
+  const pc = peers[from];
+  if (!pc || !pc.remoteDescription || !pc.remoteDescription.type) {
+    if (!iceQueues[from]) iceQueues[from] = [];
+    iceQueues[from].push(candidate);
+    return;
+  }
+
+  try {
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (err) {
+    console.warn('[Voice] addIceCandidate error:', err);
+  }
+}
+
+function flushIceCandidates(peerId, pc) {
+  const queue = iceQueues[peerId];
+  if (queue && queue.length > 0) {
+    queue.forEach(candidate => {
+      pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+        console.warn('[Voice] Flushed ICE error:', err);
+      });
+    });
+    delete iceQueues[peerId];
+  }
+}
+
+function getOrCreatePeerConnection(peerId, username) {
+  if (peers[peerId] && ['new', 'connecting', 'connected'].includes(peers[peerId].connectionState)) {
+    return peers[peerId];
+  }
+
+  if (peers[peerId]) {
+    try { peers[peerId].close(); } catch (_) {}
+    delete peers[peerId];
+  }
+
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  peers[peerId] = pc;
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      try {
+        pc.addTrack(track, localStream);
+      } catch (err) {
+        console.warn('[Voice] addTrack warning:', err);
+      }
+    });
+  }
+
+  pc.onicecandidate = async ({ candidate }) => {
+    if (!candidate || !audioChannel) return;
+    const myId = getVoiceUserId();
+    await audioChannel.send({
+      type: 'broadcast',
+      event: 'ice',
+      payload: { from: myId, to: peerId, candidate }
+    });
+  };
+
+  pc.ontrack = (event) => {
+    let stream = (event.streams && event.streams[0]) || peerStreams[peerId];
+    if (!stream) {
+      stream = new MediaStream();
+    }
+    if (event.track && !stream.getTracks().includes(event.track)) {
+      stream.addTrack(event.track);
+    }
+    peerStreams[peerId] = stream;
+
+    // Guarantee audio track is unmuted
+    stream.getAudioTracks().forEach(t => { t.enabled = true; });
+
+    const videoEl = ensurePeerTile(peerId, username);
+    if (videoEl && videoEl.srcObject !== stream) {
+      videoEl.srcObject = stream;
+    }
+
+    ensurePeerAudioElement(peerId, stream);
+    attachAnalyserForStream(peerId, stream);
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+      handlePeerLeave({ from: peerId });
+    }
+  };
+
+  return pc;
+}
+
+function ensurePeerAudioElement(peerId, stream) {
+  let audioEl = document.getElementById('audio-peer-' + peerId);
+  if (!audioEl) {
+    audioEl = document.createElement('audio');
+    audioEl.id = 'audio-peer-' + peerId;
+    audioEl.autoplay = true;
+    audioEl.playsInline = true;
+    const container = document.getElementById('audio-elements') || document.body;
+    container.appendChild(audioEl);
+  }
+  if (audioEl.srcObject !== stream) {
+    audioEl.srcObject = stream;
+  }
+  audioEl.volume = peerMuted[peerId] ? 0 : 1;
+  audioEl.muted = false;
+  peerAudioEls[peerId] = audioEl;
+
+  // Unblock autoplay policy
+  const playPromise = audioEl.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(err => {
+      console.warn('[Voice] Autoplay prevented, unlocking on click:', err);
+      const unlockAudio = () => {
+        audioEl.play().catch(() => {});
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+      };
+      document.addEventListener('click', unlockAudio, { once: true });
+      document.addEventListener('touchstart', unlockAudio, { once: true });
+    });
+  }
+}
+
+function handleCameraState({ from, cameraOn }) {
+  const myId = getVoiceUserId();
+  if (!from || from === myId) return;
+  updatePeerCameraIcon(from, !!cameraOn);
+  if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
+  if (!cameraOn) {
+    hidePeerTile(from);
+    if (floatingCameraPeerId === from) closeFloatingCamera();
+  } else if (peerStreams[from]) {
+    ensurePeerTile(from, getUsernameById(from));
+  }
+}
+
+function handlePeerLeave({ from }) {
+  if (!from) return;
+  if (peers[from]) {
+    try { peers[from].close(); } catch (_) {}
+    delete peers[from];
+  }
+  delete iceQueues[from];
+  cleanupPeerMedia(from);
+  document.getElementById('peer-' + from)?.remove();
+  document.getElementById('video-tile-' + from)?.remove();
+  if (typeof setUserCameraState === 'function') setUserCameraState(from, false);
+  if (floatingCameraPeerId === from) closeFloatingCamera();
+}
+
 async function leaveVoice() {
-  const wasListener = isListenerMode;
   const previouslyInVoice = inVoice;
   inVoice = false;
 
+  const myId = getVoiceUserId();
+
   if (previouslyInVoice && audioChannel) {
-    if (!wasListener) {
+    if (!isListenerMode) {
       await audioChannel.send({
         type: 'broadcast',
         event: 'speaker-left',
-        payload: { from: currentUser.id }
-      });
+        payload: { from: myId }
+      }).catch(() => {});
     }
     await audioChannel.send({
       type: 'broadcast',
       event: 'leave',
-      payload: { from: currentUser.id }
-    });
-    sbClient.removeChannel(audioChannel);
+      payload: { from: myId }
+    }).catch(() => {});
+    try {
+      sbClient.removeChannel(audioChannel);
+    } catch (_) {}
     audioChannel = null;
   }
 
@@ -203,12 +492,12 @@ async function leaveVoice() {
       cleanupPeerMedia(peerId);
     });
     peers = {};
+    iceQueues = {};
 
     closeFloatingCamera();
     clearAllVisualizers();
     participantLevels = {};
   }
-
 
   const videoGrid = document.getElementById('video-grid');
   if (videoGrid) {
@@ -228,7 +517,7 @@ async function leaveVoice() {
   document.getElementById('btn-mute')?.classList.add('hidden');
   document.getElementById('btn-toggle-camera')?.classList.add('hidden');
   document.getElementById('voice-visualizer')?.classList.add('hidden');
-  
+
   const statusEl = document.getElementById('audio-status');
   if (statusEl) {
     statusEl.textContent = '🎙️ Voice: Off';
@@ -293,125 +582,6 @@ async function toggleCamera() {
   await broadcastCameraState();
 }
 
-async function handlePeerJoin({ from, username, cameraOn, listenOnly }) {
-  if (!from || from === currentUser?.id || peers[from]) return;
-  if (!inVoice || !audioChannel) return; // only active voice participants handle this
-
-  // If we are a speaker with a localStream, call the new participant so they can hear us
-  if (!isListenerMode && localStream) {
-    addPeerTag(from, username);
-    if (!listenOnly) {
-      updatePeerCameraIcon(from, !!cameraOn);
-      if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
-    }
-
-    const pc = createPeerConnection(from, username);
-    peers[from] = pc;
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    await audioChannel.send({
-      type: 'broadcast',
-      event: 'offer',
-      payload: { from: currentUser.id, to: from, sdp: offer, username: currentProfile.username, cameraOn: isCameraOn }
-    });
-  }
-}
-
-async function handleOffer({ from, to, sdp, username, cameraOn }) {
-  if (to !== currentUser.id) return;
-  addPeerTag(from, username);
-  updatePeerCameraIcon(from, !!cameraOn);
-  if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
-
-  const pc = createPeerConnection(from, username);
-  peers[from] = pc;
-
-  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-
-  await audioChannel.send({
-    type: 'broadcast',
-    event: 'answer',
-    payload: { from: currentUser.id, to: from, sdp: answer }
-  });
-}
-
-async function handleAnswer({ from, to, sdp }) {
-  if (to !== currentUser.id || !peers[from]) return;
-  await peers[from].setRemoteDescription(new RTCSessionDescription(sdp));
-}
-
-async function handleIce({ from, to, candidate }) {
-  if (to !== currentUser.id || !peers[from]) return;
-  try { await peers[from].addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
-}
-
-function handleCameraState({ from, cameraOn }) {
-  if (!from || from === currentUser.id) return;
-  updatePeerCameraIcon(from, !!cameraOn);
-  if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
-  if (!cameraOn) {
-    hidePeerTile(from);
-    if (floatingCameraPeerId === from) closeFloatingCamera();
-  } else if (peerStreams[from]) {
-    ensurePeerTile(from, getUsernameById(from));
-  }
-}
-
-function handlePeerLeave({ from }) {
-  if (!from) return;
-  if (peers[from]) {
-    try { peers[from].close(); } catch (_) {}
-    delete peers[from];
-  }
-  cleanupPeerMedia(from);
-  document.getElementById('peer-' + from)?.remove();
-  document.getElementById('video-tile-' + from)?.remove();
-  if (typeof setUserCameraState === 'function') setUserCameraState(from, false);
-  if (floatingCameraPeerId === from) closeFloatingCamera();
-}
-
-function createPeerConnection(peerId, username) {
-  const pc = new RTCPeerConnection(ICE_SERVERS);
-
-  localStream?.getTracks().forEach(track => {
-    pc.addTrack(track, localStream);
-  });
-
-  pc.onicecandidate = async ({ candidate }) => {
-    if (!candidate || !audioChannel) return;
-    await audioChannel.send({
-      type: 'broadcast',
-      event: 'ice',
-      payload: { from: currentUser.id, to: peerId, candidate }
-    });
-  };
-
-  pc.ontrack = ({ streams }) => {
-    const stream = streams[0];
-    peerStreams[peerId] = stream;
-    const videoEl = ensurePeerTile(peerId, username);
-    if (videoEl && videoEl.srcObject !== stream) {
-      videoEl.srcObject = stream;
-    }
-    ensurePeerAudioElement(peerId, stream);
-    attachAnalyserForStream(peerId, stream);
-
-
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-      handlePeerLeave({ from: peerId });
-    }
-  };
-
-  return pc;
-}
-
 function ensurePeerTile(peerId, username) {
   let tile = document.getElementById('video-tile-' + peerId);
 
@@ -464,21 +634,7 @@ function addPeerTag(peerId, username) {
     openFloatingCamera(peerId, username || getUsernameById(peerId));
   });
 
-  document.getElementById('peers-list').appendChild(tag);
-}
-
-function ensurePeerAudioElement(peerId, stream) {
-  let audioEl = document.getElementById('audio-peer-' + peerId);
-  if (!audioEl) {
-    audioEl = document.createElement('audio');
-    audioEl.id = 'audio-peer-' + peerId;
-    audioEl.autoplay = true;
-    audioEl.playsInline = true;
-    document.getElementById('audio-elements').appendChild(audioEl);
-  }
-  if (audioEl.srcObject !== stream) audioEl.srcObject = stream;
-  audioEl.volume = peerMuted[peerId] ? 0 : 1;
-  peerAudioEls[peerId] = audioEl;
+  document.getElementById('peers-list')?.appendChild(tag);
 }
 
 function togglePeerMute(peerId) {
@@ -539,11 +695,12 @@ function attachVideoTrackToPeers(videoTrack) {
 
 async function broadcastCameraState() {
   if (!audioChannel || !inVoice) return;
+  const myId = getVoiceUserId();
   await audioChannel.send({
     type: 'broadcast',
     event: 'camera-state',
-    payload: { from: currentUser.id, cameraOn: isCameraOn }
-  });
+    payload: { from: myId, cameraOn: isCameraOn }
+  }).catch(() => {});
 }
 
 function getVoicePresenceParticipants() {
@@ -551,26 +708,28 @@ function getVoicePresenceParticipants() {
   const state = audioChannel.presenceState();
   const users = [];
   Object.values(state).forEach((entries) => {
-    entries.forEach((entry) => {
-    users.push({
-      userId: entry.userId,
-      username: entry.username || 'User',
-      role: entry.role === 'listener' ? 'listener' : 'speaker',
-      joinedAt: Number(entry.joinedAt) || 0
-    });
+    (entries || []).forEach((entry) => {
+      users.push({
+        userId: entry.userId,
+        username: entry.username || 'User',
+        role: entry.role === 'listener' ? 'listener' : 'speaker',
+        joinedAt: Number(entry.joinedAt) || 0
+      });
     });
   });
   return users;
 }
 
 async function trackVoicePresence(role) {
-  if (!audioChannel || !currentUser?.id) return;
+  if (!audioChannel) return;
+  const myId = getVoiceUserId();
+  const myName = getVoiceUsername();
   await audioChannel.track({
-    userId: currentUser.id,
-    username: currentProfile?.username || 'User',
+    userId: myId,
+    username: myName,
     role,
     joinedAt: voiceJoinAt || Date.now()
-  });
+  }).catch(() => {});
 }
 
 function updateVoiceStatus(speakerCount = null) {
@@ -584,8 +743,9 @@ function updateVoiceStatus(speakerCount = null) {
     return;
   }
 
+  const myId = getVoiceUserId();
   if (isListenerMode) {
-    const pos = Math.max(1, listenerQueue.findIndex(item => item.userId === currentUser.id) + 1);
+    const pos = Math.max(1, listenerQueue.findIndex(item => item.userId === myId) + 1);
     statusEl.textContent = `👂 Voice: Listening (position ${pos}) • ⏳ Waiting for a slot… (${Math.min(count, MAX_VOICE_SPEAKERS)}/${MAX_VOICE_SPEAKERS} speakers active)`;
     statusEl.classList.add('listener-mode');
     return;
@@ -614,13 +774,14 @@ async function promoteListenerToSpeaker() {
 
 function maybePromoteFromListenerQueue() {
   if (!inVoice || !isListenerMode || !audioChannel) return;
+  const myId = getVoiceUserId();
   const participants = getVoicePresenceParticipants();
   const speakers = participants.filter(p => p.role === 'speaker');
   const listeners = participants
     .filter(p => p.role === 'listener')
     .sort((a, b) => (a.joinedAt - b.joinedAt) || a.userId.localeCompare(b.userId));
   listenerQueue = listeners.map(item => ({ userId: item.userId, username: item.username }));
-  if (speakers.length < MAX_VOICE_SPEAKERS && listeners[0]?.userId === currentUser.id) {
+  if (speakers.length < MAX_VOICE_SPEAKERS && listeners[0]?.userId === myId) {
     promoteListenerToSpeaker();
   }
   updateVoiceStatus(speakers.length);
@@ -628,6 +789,7 @@ function maybePromoteFromListenerQueue() {
 
 function syncVoiceRoleState() {
   if (!inVoice || !audioChannel) return;
+  const myId = getVoiceUserId();
   const participants = getVoicePresenceParticipants();
   const speakers = participants.filter(p => p.role === 'speaker');
   const listeners = participants
@@ -635,7 +797,7 @@ function syncVoiceRoleState() {
     .sort((a, b) => (a.joinedAt - b.joinedAt) || a.userId.localeCompare(b.userId));
   listenerQueue = listeners.map(item => ({ userId: item.userId, username: item.username }));
 
-  const me = participants.find(p => p.userId === currentUser.id);
+  const me = participants.find(p => p.userId === myId);
   if (!me) {
     const shouldListen = speakers.length >= MAX_VOICE_SPEAKERS;
     isListenerMode = shouldListen;
@@ -672,15 +834,19 @@ function attachAnalyserForStream(userId, stream) {
 
   detachAnalyser(userId);
 
-  const source = ctx.createMediaStreamSource(stream);
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 256;
-  analyser.smoothingTimeConstant = 0.75;
-  source.connect(analyser);
+  try {
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.75;
+    source.connect(analyser);
 
-  analyserNodes[userId] = { source, analyser };
-  analyserData[userId] = new Uint8Array(analyser.frequencyBinCount);
-  participantLevels[userId] = 0;
+    analyserNodes[userId] = { source, analyser };
+    analyserData[userId] = new Uint8Array(analyser.frequencyBinCount);
+    participantLevels[userId] = 0;
+  } catch (err) {
+    console.warn('[Voice] attachAnalyser warning:', err);
+  }
 }
 
 function detachAnalyser(userId) {

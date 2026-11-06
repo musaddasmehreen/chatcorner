@@ -2614,7 +2614,7 @@ function updateComposerState() {
       joinVoiceQuickBtn.title = 'Join Voice Chat';
     }
     if (joinVoiceBtn) {
-      joinVoiceBtn.title = '🔒 Register to join voice';
+      joinVoiceBtn.title = 'Join Voice Chat';
     }
     return;
   }
