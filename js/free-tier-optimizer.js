@@ -8,8 +8,7 @@
 // =====================================================================
 // FIX 1: IDLE DISCONNECT (Free up WebSocket connections)
 // =====================================================================
-
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 let idleTimer = null;
 let userIdleStatus = false;
 
@@ -50,9 +49,9 @@ function disconnectPresence() {
 
 function reconnectPresence() {
   if (typeof presenceChannel !== 'undefined' && presenceChannel) {
-    presenceChannel.subscribe(async (status) => {
+    presenceChannel.subscribe(async status => {
       if (status === 'SUBSCRIBED' && typeof presenceBaseData !== 'undefined') {
-        try { await presenceChannel.track(presenceBaseData); } catch(e) {}
+        try { await presenceChannel.track(presenceBaseData); } catch (_) {}
       }
     });
     console.log('[IDLE] User active - reconnected to presence channel');
@@ -61,22 +60,19 @@ function reconnectPresence() {
 }
 
 function updateIdleStatusUI(isIdle) {
-  const userBadge = document.getElementById('user-badge');
-  if (!userBadge) return;
+  const badge = document.getElementById('user-badge');
+  if (!badge) return;
   if (isIdle) {
-    if (!userBadge.textContent.includes('💤')) userBadge.textContent = (userBadge.textContent || 'User') + ' 💤';
+    if (!badge.textContent.includes('💤')) badge.textContent = (badge.textContent || 'User') + ' 💤';
   } else {
-    userBadge.textContent = userBadge.textContent.replace(' 💤', '');
+    badge.textContent = badge.textContent.replace(' 💤', '');
   }
 }
 
 // =====================================================================
-// FIX 2: CAMERA UI OPTIMIZATION (Prevent CPU/GPU Overload)
+// FIX 2: CAMERA UI OPTIMIZATION
 // =====================================================================
-
-// Note: Camera Click-to-View strategy is natively implemented in audio-v3.js
-// This adds an auto-disconnect safety net for inactive calls.
-const CALL_INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const CALL_INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
 let callInactivityTimer = null;
 
 function startCallInactivityTimer() {
@@ -102,22 +98,18 @@ document.addEventListener('keypress', resetCallInactivityTimer);
 // =====================================================================
 // FIX 3: VOICE NOTE COMPRESSION & MESSAGE PURGE
 // =====================================================================
-
 const MESSAGE_RETENTION_HOURS = 24;
 
-/** Compress voice notes to 16kHz before base64 encoding to save DB space. */
 window.compressVoiceNote = async function(audioBlob) {
   try {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
     const offlineContext = new OfflineAudioContext(1, audioBuffer.duration * 16000, 16000);
     const source = offlineContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(offlineContext.destination);
     source.start(0);
-    const compressedBuffer = await offlineContext.startRendering();
-    return bufferToWavBlob(compressedBuffer, 16000);
+    return bufferToWavBlob(await offlineContext.startRendering(), 16000);
   } catch (error) {
     console.warn('[VOICE COMPRESSION ERROR]', error);
     return audioBlob;
@@ -128,8 +120,8 @@ function bufferToWavBlob(audioBuffer, sampleRate) {
   const data = audioBuffer.getChannelData(0);
   const buffer = new ArrayBuffer(44 + data.length * 2);
   const view = new DataView(buffer);
-  const writeString = (offset, string) => {
-    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  const writeString = (offset, value) => {
+    for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
   };
   writeString(0, 'RIFF');
   view.setUint32(4, 36 + data.length * 2, true);
@@ -165,16 +157,15 @@ function scheduleMessagePurge() {
 async function purgeOldMessages() {
   try {
     if (typeof sbClient === 'undefined') return;
-    const cutoffTime = new Date(Date.now() - MESSAGE_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
-    // This frontend purge is a fallback for the Postgres CRON. It requires admin RLS privileges.
-    await sbClient.from('messages').delete().lt('created_at', cutoffTime);
-  } catch (error) {}
+    const cutoff = new Date(Date.now() - MESSAGE_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
+    // Fallback for Postgres CRON; succeeds only where RLS permits deletion.
+    await sbClient.from('messages').delete().lt('created_at', cutoff);
+  } catch (_) {}
 }
 
 // =====================================================================
-// FIX 4: YouTube room state arriving before the IFrame player is ready
+// FIX 4: Queue media state until the YouTube/Spotify embed is ready.
 // =====================================================================
-// This module is loaded after chat-v3.js but before DOMContentLoaded starts rooms.
 if (typeof initYouTubeRoom === 'function') {
   let ytPlayerReady = false;
   let ytPendingState = null;
@@ -186,20 +177,17 @@ if (typeof initYouTubeRoom === 'function') {
       ytPendingState = payload;
       return;
     }
-
-    const targetTime = Math.max(0, (Number(payload.time) || 0) + (
+    const time = Math.max(0, (Number(payload.time) || 0) + (
       payload.playing ? (Date.now() - (Number(payload.ts) || Date.now())) / 1000 : 0
     ));
     const changedVideo = _ytState.videoId !== payload.videoId;
-    _ytState = { videoId: payload.videoId, playing: !!payload.playing, time: targetTime };
-
+    _ytState = { videoId: payload.videoId, playing: !!payload.playing, time };
     if (changedVideo) {
-      if (payload.playing || ytSyncRequested) _ytPlayer.loadVideoById(payload.videoId, targetTime);
-      else _ytPlayer.cueVideoById(payload.videoId, targetTime);
-    } else if (Math.abs((_ytPlayer.getCurrentTime() || 0) - targetTime) > 2) {
-      _ytPlayer.seekTo(targetTime, true);
+      if (payload.playing || ytSyncRequested) _ytPlayer.loadVideoById(payload.videoId, time);
+      else _ytPlayer.cueVideoById(payload.videoId, time);
+    } else if (Math.abs((_ytPlayer.getCurrentTime() || 0) - time) > 2) {
+      _ytPlayer.seekTo(time, true);
     }
-
     if (payload.playing || ytSyncRequested) {
       _ytPlayer.unMute();
       _ytPlayer.playVideo();
@@ -216,14 +204,14 @@ if (typeof initYouTubeRoom === 'function') {
     document.getElementById('yt-sync-btn')?.classList.toggle('hidden', admin);
     _mediaToast(admin ? 'You control playback.' : 'Only admins control playback.');
 
-    const ch = _mediaOpenChannel('yt-chat-room');
-    ch.on('broadcast', { event: 'yt-state' }, ({ payload }) => {
+    const channel = _mediaOpenChannel('yt-chat-room');
+    channel.on('broadcast', { event: 'yt-state' }, ({ payload }) => {
       if (!_mediaIsAdmin()) _ytApply(payload);
     });
-    ch.on('broadcast', { event: 'yt-request' }, () => {
+    channel.on('broadcast', { event: 'yt-request' }, () => {
       if (_mediaIsAdmin()) _ytBroadcast();
     });
-    ch.subscribe(status => {
+    channel.subscribe(status => {
       _mediaMarkChannelReady(status);
       if (status === 'SUBSCRIBED') _mediaSend('yt-request', {});
     });
@@ -247,7 +235,6 @@ if (typeof initYouTubeRoom === 'function') {
         }
       });
     } else {
-      // A player can persist when the user leaves and re-enters the virtual room.
       try {
         _ytPlayer.getPlayerState();
         ytPlayerReady = true;
@@ -260,12 +247,11 @@ if (typeof initYouTubeRoom === 'function') {
         ytPlayerReady = false;
       }
     }
-
     if (!_ytState.videoId && _virtualRoomConfig.virtual_youtube_default) {
-      const defaultVideoId = _ytParseId(_virtualRoomConfig.virtual_youtube_default);
-      if (defaultVideoId) {
-        _ytState = { videoId: defaultVideoId, playing: false, time: 0 };
-        if (ytPlayerReady) _ytPlayer.cueVideoById(defaultVideoId, 0);
+      const defaultId = _ytParseId(_virtualRoomConfig.virtual_youtube_default);
+      if (defaultId) {
+        _ytState = { videoId: defaultId, playing: false, time: 0 };
+        if (ytPlayerReady) _ytPlayer.cueVideoById(defaultId, 0);
       }
     }
     clearInterval(_mediaTimer);
@@ -274,16 +260,10 @@ if (typeof initYouTubeRoom === 'function') {
 
   window.ytSyncNow = function() {
     ytSyncRequested = true;
-    // The host's response is authoritative for both video ID and position.
     _mediaSend('yt-request', {});
   };
 }
 
-// =====================================================================
-// FIX 5: Spotify state can arrive before the IFrame controller is ready.
-// Queue the latest host snapshot until the controller is created, and defer
-// seek/play/pause until a newly loaded URI has had time to initialize.
-// =====================================================================
 if (typeof initSpotifyRoom === 'function') {
   let spPendingState = null;
   let spApplyTimer = null;
@@ -297,7 +277,6 @@ if (typeof initSpotifyRoom === 'function') {
     const shouldPlay = !payload.paused || spSyncRequested;
     _spSuppress = true;
     clearTimeout(spSuppressTimer);
-
     if (shouldPlay) {
       _spController.seek(Math.floor(position));
       if (typeof _spController.resume === 'function') _spController.resume();
@@ -311,29 +290,26 @@ if (typeof initSpotifyRoom === 'function') {
 
   _spApply = function(payload) {
     if (!payload?.uri) return;
-    const state = {
+    const next = {
       uri: payload.uri,
       paused: !!payload.paused,
       position: Number(payload.position) || 0,
       ts: Number(payload.ts) || Date.now()
     };
-    _spState = { uri: state.uri, paused: state.paused, position: state.position };
-
+    _spState = { uri: next.uri, paused: next.paused, position: next.position };
     if (!_spController) {
-      spPendingState = state;
-      // If the IFrame API failed, update the static embed to the host's track.
-      if (spApiUnavailable) _spRenderFallback(state.uri);
+      spPendingState = next;
+      if (spApiUnavailable) _spRenderFallback(next.uri);
       return;
     }
-
-    const uriChanged = _spController._ccCurrentUri !== state.uri;
-    _spController._ccCurrentUri = state.uri;
+    const uriChanged = _spController._ccCurrentUri !== next.uri;
+    _spController._ccCurrentUri = next.uri;
     clearTimeout(spApplyTimer);
     if (uriChanged) {
-      spPendingState = state;
+      spPendingState = next;
       _spSuppress = true;
       clearTimeout(spSuppressTimer);
-      _spController.loadUri(state.uri);
+      _spController.loadUri(next.uri);
       spApplyTimer = setTimeout(() => {
         const latest = spPendingState;
         spPendingState = null;
@@ -341,19 +317,19 @@ if (typeof initSpotifyRoom === 'function') {
       }, 900);
       return;
     }
-    applySpotifyPlayback(state);
+    applySpotifyPlayback(next);
   };
 
   initSpotifyRoom = async function() {
-    const ch = _mediaOpenChannel('sp-chat-room');
-    ch.on('presence', { event: 'sync' }, _spRefreshUi);
-    ch.on('broadcast', { event: 'sp-state' }, ({ payload }) => {
+    const channel = _mediaOpenChannel('sp-chat-room');
+    channel.on('presence', { event: 'sync' }, _spRefreshUi);
+    channel.on('broadcast', { event: 'sp-state' }, ({ payload }) => {
       if (!_spAmController()) _spApply(payload);
     });
-    ch.on('broadcast', { event: 'sp-request' }, () => {
+    channel.on('broadcast', { event: 'sp-request' }, () => {
       if (_spAmController()) _spBroadcast();
     });
-    ch.subscribe(async status => {
+    channel.subscribe(async status => {
       _mediaMarkChannelReady(status);
       if (status === 'SUBSCRIBED') {
         await _spTrack();
@@ -366,7 +342,6 @@ if (typeof initSpotifyRoom === 'function') {
     if (_mediaKind !== 'sp') return;
     const defaultUri = _spState.uri || _spParseUri(_virtualRoomConfig.virtual_spotify_default) || 'spotify:playlist:37i9dQZEVXbMDoHDwVN2tF';
     if (!_spState.uri) _spState = { uri: defaultUri, paused: true, position: 0 };
-
     if (_spController) return;
     const holder = document.getElementById('sp-embed');
     if (!api) {
@@ -375,7 +350,6 @@ if (typeof initSpotifyRoom === 'function') {
       _mediaToast('Spotify playback sync is unavailable in this browser session.');
       return;
     }
-
     spApiUnavailable = false;
     holder.innerHTML = '<div id="sp-embed-inner"></div>';
     api.createController(document.getElementById('sp-embed-inner'),
@@ -396,10 +370,10 @@ if (typeof initSpotifyRoom === 'function') {
           spPendingState = null;
           applySpotifyPlayback(initial);
         }
-        ctrl.addListener('playback_update', e => {
-          if (!e?.data || !_spAmController() || _spSuppress) return;
-          _spState.paused = !!e.data.isPaused;
-          _spState.position = Math.floor((e.data.position || 0) / 1000);
+        ctrl.addListener('playback_update', event => {
+          if (!event?.data || !_spAmController() || _spSuppress) return;
+          _spState.paused = !!event.data.isPaused;
+          _spState.position = Math.floor((event.data.position || 0) / 1000);
           _spBroadcast();
         });
       });
@@ -410,7 +384,6 @@ if (typeof initSpotifyRoom === 'function') {
         _mediaToast('Spotify playback sync is unavailable in this browser session.');
       }
     }, 6000);
-
     clearInterval(_mediaTimer);
     _mediaTimer = setInterval(() => { if (_spAmController() && _spState.uri) _spBroadcast(); }, 5000);
   };
@@ -424,13 +397,24 @@ if (typeof initSpotifyRoom === 'function') {
   };
 }
 
+// Load online-user drawer after chat-v3 has initialized the shared room state.
+function loadVirtualRoomUsersPanel() {
+  if (document.getElementById('cc-virtual-users-script')) return;
+  const script = document.createElement('script');
+  script.id = 'cc-virtual-users-script';
+  script.src = 'js/virtual-room-users.js?v=1';
+  script.async = true;
+  script.onerror = () => console.error('[VIRTUAL USERS] Could not load the online-users panel.');
+  document.head.appendChild(script);
+}
+
 // =====================================================================
 // INITIALIZATION
 // =====================================================================
-
 function initializeFreeTierOptimizations() {
   initIdleDisconnectSystem();
   scheduleMessagePurge();
+  loadVirtualRoomUsersPanel();
 }
 
 if (document.readyState === 'loading') {
