@@ -203,6 +203,88 @@ async function purgeOldMessages() {
 }
 
 // =====================================================================
+// FIX 4: YouTube room state arriving before the IFrame player is ready
+// =====================================================================
+// chat-v3.js loads before this deferred script and starts room initialization
+// on DOMContentLoaded, so these replacements are installed before users enter.
+if (typeof _ytLoadApi === 'function' && typeof _ytApply === 'function') {
+  let _ytPlayerReady = false;
+  let _ytPendingState = null;
+  let _ytSyncRequested = false;
+  const _originalYtLoadApi = _ytLoadApi;
+  const _originalYtApply = _ytApply;
+
+  _ytLoadApi = async function() {
+    await _originalYtLoadApi();
+    const OriginalPlayer = window.YT?.Player;
+    if (!OriginalPlayer || OriginalPlayer._ccReadyWrapped) return;
+
+    function ReadyAwareYouTubePlayer(element, options = {}) {
+      const originalEvents = options.events || {};
+      const wrappedOptions = {
+        ...options,
+        events: {
+          ...originalEvents,
+          onReady(event) {
+            _ytPlayerReady = true;
+            if (typeof originalEvents.onReady === 'function') originalEvents.onReady(event);
+            const pending = _ytPendingState;
+            _ytPendingState = null;
+            if (pending) _ytApply(pending);
+          }
+        }
+      };
+      return new OriginalPlayer(element, wrappedOptions);
+    }
+    ReadyAwareYouTubePlayer.prototype = OriginalPlayer.prototype;
+    ReadyAwareYouTubePlayer._ccReadyWrapped = true;
+    window.YT.Player = ReadyAwareYouTubePlayer;
+  };
+
+  _ytApply = function(payload) {
+    if (!payload?.videoId) return;
+    if (!_ytPlayerReady || !_ytPlayer?.loadVideoById) {
+      // Keep the newest host snapshot instead of losing it during player startup.
+      _ytPendingState = payload;
+      return;
+    }
+
+    const targetTime = Math.max(0, (Number(payload.time) || 0) + (
+      payload.playing
+        ? (Date.now() - (Number(payload.ts) || Date.now())) / 1000
+        : 0
+    ));
+    const changedVideo = _ytState.videoId !== payload.videoId;
+    _ytState = { videoId: payload.videoId, playing: !!payload.playing, time: targetTime };
+
+    if (changedVideo) {
+      if (payload.playing || _ytSyncRequested) {
+        _ytPlayer.loadVideoById(payload.videoId, targetTime);
+      } else {
+        _ytPlayer.cueVideoById(payload.videoId, targetTime);
+      }
+    } else if (Math.abs((_ytPlayer.getCurrentTime() || 0) - targetTime) > 2) {
+      _ytPlayer.seekTo(targetTime, true);
+    }
+
+    if (payload.playing || _ytSyncRequested) {
+      _ytPlayer.unMute();
+      _ytPlayer.playVideo();
+      _ytSyncRequested = false;
+    } else if (_ytPlayer.getPlayerState() === 1) {
+      _ytPlayer.pauseVideo();
+    }
+  };
+
+  window.ytSyncNow = function() {
+    _ytSyncRequested = true;
+    if (_ytState.videoId) _ytApply(_ytState);
+    // The host replies with its authoritative video ID and playback position.
+    _mediaSend('yt-request', {});
+  };
+}
+
+// =====================================================================
 // INITIALIZATION
 // =====================================================================
 
