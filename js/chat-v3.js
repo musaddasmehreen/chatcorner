@@ -4280,6 +4280,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
         : 'Unknown';
       const roleLabel = getRoleLabel(profile);
       const roleBadge = getRoleBadgeHtml(profile);
+      const isVip = !!(profile.is_vip || profile.is_admin || profile.is_mod || profile.is_owner);
       
       const avatarHtml = profile.avatar_url
         ? `<img src="${escHtml(profile.avatar_url)}" alt=""/>`
