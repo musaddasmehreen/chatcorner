@@ -49,11 +49,11 @@
       // Verify admin status
       const { data: profile } = await sbClient
         .from('profiles')
-        .select('is_admin,username,email')
+        .select('is_admin,is_owner,is_mod,username,email')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (!profile?.is_admin) {
+      if (!(profile?.is_admin || profile?.is_owner || profile?.is_mod)) {
         await sbClient.auth.signOut();
         window.adminSecurityManager.endAdminSession('ADMIN_FLAG_REVOKED');
         document.documentElement.style.display = 'none';

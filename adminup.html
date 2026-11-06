@@ -197,11 +197,11 @@
 
       const { data: profile } = await sbClient
         .from('profiles')
-        .select('id,is_admin')
+        .select('id,is_admin,is_owner,is_mod')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (profile?.is_admin) {
+      if (profile?.is_admin || profile?.is_owner || profile?.is_mod) {
         const isSessionValid = window.adminSecurityManager.validateAdminSession();
         if (isSessionValid) {
           window.location.href = 'admin.html';
@@ -240,7 +240,7 @@
         // Lookup user by username
         const { data: profile, error: lookupErr } = await sbClient
           .from('profiles')
-          .select('id,email,is_admin,has_2fa_enabled,two_fa_secret')
+          .select('id,email,is_admin,is_owner,is_mod,has_2fa_enabled,two_fa_secret')
           .eq('username', username)
           .maybeSingle();
 
@@ -277,11 +277,11 @@
         // Verify admin status
         const { data: freshProfile, error: profileErr } = await sbClient
           .from('profiles')
-          .select('id,is_admin')
+          .select('id,is_admin,is_owner,is_mod')
           .eq('id', data.user.id)
           .maybeSingle();
 
-        if (profileErr || !freshProfile?.is_admin) {
+        if (profileErr || !(freshProfile?.is_admin || freshProfile?.is_owner || freshProfile?.is_mod)) {
           await sbClient.auth.signOut();
           window.adminSecurityManager.recordLoginAttempt(username, false, { reason: 'NOT_ADMIN' });
           window.securityManager.logSecurityEvent('UNAUTHORIZED_ADMIN_ACCESS_ATTEMPT', { username });

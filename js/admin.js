@@ -90,7 +90,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 function isAdminContextReady() {
-  return authInitialized && Boolean(adminUser?.id) && Boolean(adminProfile?.is_admin);
+  return authInitialized && Boolean(adminUser?.id) && Boolean(adminProfile?.is_admin || adminProfile?.is_owner || adminProfile?.is_mod);
 }
 
 function resetAdminContext() {
@@ -184,7 +184,7 @@ async function checkAdminAuth() {
       'Admin profile verification'
     );
 
-    if (error || !profile?.is_admin) {
+    if (error || !(profile?.is_admin || profile?.is_owner || profile?.is_mod)) {
       await sbClient.auth.signOut();
       resetAdminContext();
       window.location.href = 'adminup.html?denied=1';
