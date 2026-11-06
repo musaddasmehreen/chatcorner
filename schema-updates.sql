@@ -132,6 +132,34 @@ DROP POLICY IF EXISTS "Allow public read to app_settings" ON public.app_settings
 CREATE POLICY "Allow public read to app_settings" ON public.app_settings
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Staff insert app_settings" ON public.app_settings;
+CREATE POLICY "Staff insert app_settings" ON public.app_settings
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid()
+              AND (is_admin = true OR is_owner = true OR is_mod = true)
+        )
+    );
+
+DROP POLICY IF EXISTS "Staff update app_settings" ON public.app_settings;
+CREATE POLICY "Staff update app_settings" ON public.app_settings
+    FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid()
+              AND (is_admin = true OR is_owner = true OR is_mod = true)
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid()
+              AND (is_admin = true OR is_owner = true OR is_mod = true)
+        )
+    );
+
 -- Setup RLS policies for private_messages
 DROP POLICY IF EXISTS "Allow users to read their own PMs" ON public.private_messages;
 CREATE POLICY "Allow users to read their own PMs" ON public.private_messages

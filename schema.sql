@@ -117,6 +117,32 @@ ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public read to app_settings" ON public.app_settings
     FOR SELECT USING (true);
 
+CREATE POLICY "Staff insert app_settings" ON public.app_settings
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid()
+              AND (is_admin = true OR is_owner = true OR is_mod = true)
+        )
+    );
+
+CREATE POLICY "Staff update app_settings" ON public.app_settings
+    FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid()
+              AND (is_admin = true OR is_owner = true OR is_mod = true)
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid()
+              AND (is_admin = true OR is_owner = true OR is_mod = true)
+        )
+    );
+
 
 -- 6. TABLE: broadcasts
 CREATE TABLE IF NOT EXISTS public.broadcasts (
