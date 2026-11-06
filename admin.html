@@ -99,6 +99,7 @@
         <button class="nav-btn" data-panel="users" data-admin-action="manage-users" title="Manage users, ban/unban and admin roles">👥 User Manager</button>
         <button class="nav-btn" data-panel="banned" data-admin-action="manage-bans" title="Review and manage banned users">🚫 Banned Users</button>
         <button class="nav-btn" data-panel="broadcast" data-admin-action="send-broadcast" title="Send system messages globally or per room">📣 Broadcast</button>
+        <button class="nav-btn" data-panel="virtual-rooms" data-admin-action="manage-virtual-rooms" title="Configure IPTV, YouTube, Spotify and Ludo">🎮 Virtual Rooms</button>
         <button class="nav-btn" data-panel="settings" data-admin-action="edit-settings" title="Control app behavior and limits">⚙️ Settings</button>
         <button class="nav-btn" data-panel="analytics" data-admin-action="view-analytics" title="See engagement trends and activity">📈 Analytics</button>
       </nav>
@@ -281,6 +282,48 @@
         <div class="card">
           <h3>Broadcast History (Last 10)</h3>
           <ul id="broadcast-history" class="history-list"></ul>
+        </div>
+      </section>
+
+      <section id="panel-virtual-rooms" class="panel">
+        <div class="panel-head">
+          <h2>🎮 Virtual Rooms</h2>
+          <p>Enable rooms and set their default content. Changes apply to new room visits.</p>
+        </div>
+        <div class="card settings-grid">
+          <h3>📺 IPTV</h3>
+          <label class="switch-row"><span>Show IPTV room</span><input id="vr-iptv-enabled" type="checkbox" /></label>
+          <label for="vr-iptv-category">Default source</label>
+          <select id="vr-iptv-category">
+            <option value="country:pk">Pakistan</option>
+            <option value="country:in">India</option>
+            <option value="country:us">United States</option>
+            <option value="country:uk">United Kingdom</option>
+            <option value="country:ca">Canada</option>
+            <option value="cat:news">News</option>
+            <option value="cat:sports">Sports</option>
+            <option value="cat:music">Music</option>
+            <option value="cat:kids">Kids</option>
+          </select>
+          <label for="vr-iptv-source">Custom M3U URL (optional)</label>
+          <input id="vr-iptv-source" type="url" placeholder="https://example.com/streams.m3u" />
+
+          <h3>▶️ YouTube</h3>
+          <label class="switch-row"><span>Show YouTube room</span><input id="vr-yt-enabled" type="checkbox" /></label>
+          <label for="vr-yt-default">Default video or playlist URL (optional)</label>
+          <input id="vr-yt-default" type="url" placeholder="https://www.youtube.com/watch?v=..." />
+
+          <h3>🎧 Spotify</h3>
+          <label class="switch-row"><span>Show Spotify room</span><input id="vr-sp-enabled" type="checkbox" /></label>
+          <label for="vr-sp-default">Default track, album or playlist (optional)</label>
+          <input id="vr-sp-default" type="text" placeholder="https://open.spotify.com/playlist/..." />
+
+          <h3>🎲 Ludo</h3>
+          <label class="switch-row"><span>Show Ludo room</span><input id="vr-ludo-enabled" type="checkbox" /></label>
+          <label for="vr-ludo-room">Default room key (optional)</label>
+          <input id="vr-ludo-room" type="text" maxlength="32" placeholder="chatcorner" />
+
+          <button class="btn" id="save-virtual-rooms" data-admin-action="save-virtual-rooms">Save Virtual Room Settings</button>
         </div>
       </section>
 

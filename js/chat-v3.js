@@ -69,7 +69,6 @@ function parseSuperEmojisHtml(text) {
     '[super-kitty]': `<div class="super-emoji-container se-kitty" style="font-size:2.2rem;">🐱🎀</div>`,
     '[super-bunny]': `<div class="super-emoji-container se-bunny" style="font-size:2.2rem;">🐰🧺</div>`
   };
-
   let result = text;
   Object.keys(superEmojisMap).forEach(code => {
     result = result.split(code).join(superEmojisMap[code]);
@@ -1287,6 +1286,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 let _roomCountInterval = null;
 
 async function loadRooms(preloadedRooms = null) {
+  await loadVirtualRoomConfig();
   try {
     let rooms = preloadedRooms;
     if (!rooms || !rooms.length) {
@@ -1319,16 +1319,19 @@ async function loadRooms(preloadedRooms = null) {
 
     // Inject virtual IPTV room at end of sidebar list
     if (textList) {
-      const iptvLi = document.createElement('li');
-      iptvLi.textContent = '📺 IPTV';
-      iptvLi.title = 'IPTV – Live TV Channels';
-      iptvLi.dataset.roomId = 'iptv-virtual';
-      iptvLi.classList.add('iptv-room-item');
-      iptvLi.onclick = () => enterIPTVRoom();
-      textList.appendChild(iptvLi);
+      if (_virtualRoomConfig.virtual_iptv_enabled) {
+        const iptvLi = document.createElement('li');
+        iptvLi.textContent = '📺 IPTV';
+        iptvLi.title = 'IPTV – Live TV Channels';
+        iptvLi.dataset.roomId = 'iptv-virtual';
+        iptvLi.classList.add('iptv-room-item');
+        iptvLi.onclick = () => enterIPTVRoom();
+        textList.appendChild(iptvLi);
+      }
 
-      [['sp-virtual', '🎧 Spotify', 'Spotify – Listen together'],
-       ['yt-virtual', '▶️ YouTube', 'YouTube – Watch together']].forEach(([id, label, title]) => {
+      [['sp-virtual', '🎧 Spotify', 'Spotify – Listen together', 'virtual_spotify_enabled'],
+       ['yt-virtual', '▶️ YouTube', 'YouTube – Watch together', 'virtual_youtube_enabled']].forEach(([id, label, title, enabledKey]) => {
+        if (!_virtualRoomConfig[enabledKey]) return;
         const li = document.createElement('li');
         li.textContent = label;
         li.title = title;
@@ -1340,7 +1343,7 @@ async function loadRooms(preloadedRooms = null) {
     }
 
     // Inject virtual Ludo room at end of sidebar list
-    if (textList) {
+    if (textList && _virtualRoomConfig.virtual_ludo_enabled) {
       const ludoLi = document.createElement('li');
       ludoLi.textContent = '🎲 Ludo Room';
       ludoLi.title = 'Ludo – Play Ludo Game';
@@ -5465,6 +5468,33 @@ const IPTV_SOURCES = {
   'cat:general':     'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
 };
 
+const VIRTUAL_ROOM_DEFAULTS = {
+  virtual_iptv_enabled: true,
+  virtual_iptv_category: 'country:pk',
+  virtual_iptv_source: '',
+  virtual_youtube_enabled: true,
+  virtual_youtube_default: '',
+  virtual_spotify_enabled: true,
+  virtual_spotify_default: '',
+  virtual_ludo_enabled: true,
+  virtual_ludo_room: ''
+};
+let _virtualRoomConfig = { ...VIRTUAL_ROOM_DEFAULTS };
+
+async function loadVirtualRoomConfig() {
+  try {
+    const keys = Object.keys(VIRTUAL_ROOM_DEFAULTS);
+    const { data, error } = await sbClient.from('app_settings').select('key,value').in('key', keys);
+    if (error) return;
+    (data || []).forEach(row => {
+      if (row.key.endsWith('_enabled')) _virtualRoomConfig[row.key] = row.value === 'true';
+      else if (Object.prototype.hasOwnProperty.call(_virtualRoomConfig, row.key)) _virtualRoomConfig[row.key] = row.value || VIRTUAL_ROOM_DEFAULTS[row.key];
+    });
+  } catch (error) {
+    console.warn('Virtual room settings unavailable; using defaults.', error);
+  }
+}
+
 // Category filter keywords for category-type sources
 const IPTV_CAT_KEYWORDS = {
   'cat:news':        ['news'],
@@ -5565,7 +5595,7 @@ async function verifyNextBatch() {
 }
 
 async function loadIPTVChannels(key) {
-  const url = IPTV_SOURCES[key] || IPTV_SOURCES['country:pk'];
+  const url = _virtualRoomConfig.virtual_iptv_source || IPTV_SOURCES[key] || IPTV_SOURCES['country:pk'];
   const listEl = document.getElementById('iptv-channel-list');
   if (listEl) listEl.innerHTML = '<li style="padding:12px;color:var(--muted)">⏳ Loading channels...</li>';
   try {
@@ -5752,7 +5782,8 @@ function enterIPTVRoom() {
 
   // Load default channels (Pakistan)
   const catSelect = document.getElementById('iptv-category-select');
-  const defaultVal = catSelect ? catSelect.value : 'country:pk';
+  const defaultVal = _virtualRoomConfig.virtual_iptv_category || (catSelect ? catSelect.value : 'country:pk');
+  if (catSelect && IPTV_SOURCES[defaultVal]) catSelect.value = defaultVal;
   loadIPTVChannels(defaultVal);
 }
 
@@ -6198,6 +6229,7 @@ const _ludoAutoRoomKey = (() => {
 let _ludoAutoEntered = false;
 
 function getDefaultLudoRoomKey() {
+  if (_virtualRoomConfig.virtual_ludo_room) return sanitizeLudoRoomKey(_virtualRoomConfig.virtual_ludo_room);
   const roomId = currentRoom && !currentRoom._virtual ? sanitizeLudoRoomKey(currentRoom.id) : '';
   return roomId ? `room-${roomId}` : 'global';
 }
@@ -6514,6 +6546,13 @@ async function initYouTubeRoom() {
       events: { onStateChange: _ytOnState }
     });
   }
+  if (!_ytState.videoId && _virtualRoomConfig.virtual_youtube_default) {
+    const defaultVideoId = _ytParseId(_virtualRoomConfig.virtual_youtube_default);
+    if (defaultVideoId) {
+      _ytState.videoId = defaultVideoId;
+      _ytPlayer.cueVideoById(defaultVideoId, 0);
+    }
+  }
   clearInterval(_mediaTimer);
   _mediaTimer = setInterval(() => { if (_mediaIsAdmin() && _ytState.videoId) _ytBroadcast(); }, 4000);
 }
@@ -6666,7 +6705,7 @@ async function initSpotifyRoom() {
 
   const api = await _spLoadApi();
   if (_mediaKind !== 'sp') return;
-  const defaultUri = _spState.uri || 'spotify:playlist:37i9dQZEVXbMDoHDwVN2tF';
+  const defaultUri = _spState.uri || _spParseUri(_virtualRoomConfig.virtual_spotify_default) || 'spotify:playlist:37i9dQZEVXbMDoHDwVN2tF';
   if (!_spState.uri) _spState = { uri: defaultUri, paused: true, position: 0 };
   if (!_spController) {
     const holder = document.getElementById('sp-embed');

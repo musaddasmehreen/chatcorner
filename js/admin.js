@@ -76,6 +76,17 @@ const settingsDefaults = {
   max_message_length: '500',
   welcome_message: 'Welcome to ChatCorner!'
 };
+const virtualRoomDefaults = {
+  virtual_iptv_enabled: 'true',
+  virtual_iptv_category: 'country:pk',
+  virtual_iptv_source: '',
+  virtual_youtube_enabled: 'true',
+  virtual_youtube_default: '',
+  virtual_spotify_enabled: 'true',
+  virtual_spotify_default: '',
+  virtual_ludo_enabled: 'true',
+  virtual_ludo_room: ''
+};
 
 window.addEventListener('DOMContentLoaded', async () => {
   bindUI();
@@ -161,6 +172,7 @@ function bindUI() {
   document.getElementById('send-broadcast').addEventListener('click', sendBroadcast);
 
   document.getElementById('save-settings').addEventListener('click', saveSettings);
+  document.getElementById('save-virtual-rooms').addEventListener('click', saveVirtualRoomSettings);
 }
 
 async function checkAdminAuth() {
@@ -218,6 +230,7 @@ async function initDashboard() {
       loadBannedUsers(),
       loadBroadcastHistory(),
       loadSettings(),
+      loadVirtualRoomSettings(),
       loadAnalytics()
     ]);
 
@@ -1071,6 +1084,45 @@ async function loadSettings() {
   document.getElementById('set-allow-register').checked = settingsMap.allow_registrations === 'true';
   document.getElementById('set-max-message').value = Number(settingsMap.max_message_length || 500);
   document.getElementById('set-welcome').value = settingsMap.welcome_message || '';
+}
+
+async function loadVirtualRoomSettings() {
+  if (!ensureAdminContext()) return;
+  const keys = Object.keys(virtualRoomDefaults);
+  const { data, error } = await sbClient.from('app_settings').select('key,value').in('key', keys);
+  const values = { ...virtualRoomDefaults };
+  if (!error) (data || []).forEach(row => { values[row.key] = row.value; });
+  document.getElementById('vr-iptv-enabled').checked = values.virtual_iptv_enabled === 'true';
+  document.getElementById('vr-iptv-category').value = values.virtual_iptv_category || virtualRoomDefaults.virtual_iptv_category;
+  document.getElementById('vr-iptv-source').value = values.virtual_iptv_source || '';
+  document.getElementById('vr-yt-enabled').checked = values.virtual_youtube_enabled === 'true';
+  document.getElementById('vr-yt-default').value = values.virtual_youtube_default || '';
+  document.getElementById('vr-sp-enabled').checked = values.virtual_spotify_enabled === 'true';
+  document.getElementById('vr-sp-default').value = values.virtual_spotify_default || '';
+  document.getElementById('vr-ludo-enabled').checked = values.virtual_ludo_enabled === 'true';
+  document.getElementById('vr-ludo-room').value = values.virtual_ludo_room || '';
+}
+
+async function saveVirtualRoomSettings() {
+  const source = document.getElementById('vr-iptv-source').value.trim();
+  if (source && !/^https?:\/\/\S+$/i.test(source)) return toast('Custom IPTV source must be a valid HTTP(S) URL.', 'error');
+  const ludoRoom = document.getElementById('vr-ludo-room').value.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+  const rows = [
+    ['virtual_iptv_enabled', document.getElementById('vr-iptv-enabled').checked],
+    ['virtual_iptv_category', document.getElementById('vr-iptv-category').value],
+    ['virtual_iptv_source', source],
+    ['virtual_youtube_enabled', document.getElementById('vr-yt-enabled').checked],
+    ['virtual_youtube_default', document.getElementById('vr-yt-default').value.trim()],
+    ['virtual_spotify_enabled', document.getElementById('vr-sp-enabled').checked],
+    ['virtual_spotify_default', document.getElementById('vr-sp-default').value.trim()],
+    ['virtual_ludo_enabled', document.getElementById('vr-ludo-enabled').checked],
+    ['virtual_ludo_room', ludoRoom]
+  ].map(([key, value]) => ({ key, value: String(value), updated_at: new Date().toISOString() }));
+  showLoading(true);
+  const { error } = await sbClient.from('app_settings').upsert(rows, { onConflict: 'key' });
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('Virtual room settings saved successfully.');
 }
 
 async function saveSettings() {
