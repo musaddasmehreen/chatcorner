@@ -1957,3 +1957,201 @@
 @media (max-width: 1024px) {
   .page-shell.media-room .media-container:not(.hidden) { height: 40vh !important; flex: none !important; }
 }
+
+
+/* Virtual Room Top Bars & Users Drawer */
+.media-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  min-height: 48px;
+}
+.media-top-bar .media-bar {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+}
+.media-top-bar .media-bar.hidden {
+  display: none !important;
+}
+.vr-room-indicator {
+  font-size: 0.84rem;
+  color: var(--text-muted, #aaa);
+  font-weight: 500;
+  margin-left: 4px;
+}
+.media-top-bar:has(.media-bar:not(.hidden)) .vr-room-indicator {
+  display: none !important;
+}
+
+.ludo-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.vr-users-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border, #34304f);
+  color: var(--text, #eee);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  position: relative;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.vr-users-btn:hover {
+  background: var(--accent, #8b6ded);
+  border-color: var(--accent, #8b6ded);
+  color: #fff;
+}
+.vr-users-btn .vr-line {
+  display: block;
+  width: 17px;
+  height: 2px;
+  border-radius: 2px;
+  background-color: currentColor;
+}
+.vr-users-btn .vr-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #22c55e;
+  color: #07130b;
+  font: bold 10px/17px sans-serif;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.vr-users-drawer {
+  position: fixed;
+  top: 50px;
+  bottom: 0;
+  right: 0;
+  width: 280px;
+  max-width: 85vw;
+  background: var(--surface, #14152a);
+  border-left: 1px solid var(--border, #34304f);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.vr-users-drawer.open {
+  transform: translateX(0);
+}
+.vr-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border, #34304f);
+  background: rgba(255, 255, 255, 0.02);
+}
+.vr-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text, #eee);
+}
+.vr-drawer-badge {
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  font-weight: 700;
+}
+.vr-drawer-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #aaa);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.vr-drawer-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #eee);
+}
+.vr-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+.vr-users-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vr-users-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.88rem;
+  color: var(--text, #eee);
+}
+.vr-users-list li.vr-user-self {
+  border-color: rgba(139, 109, 237, 0.35);
+  background: rgba(139, 109, 237, 0.1);
+}
+.vr-user-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+  flex-shrink: 0;
+}
+.vr-user-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vr-user-you {
+  font-size: 0.72rem;
+  color: var(--accent, #8b6ded);
+  font-weight: 600;
+}
+.vr-user-empty {
+  color: var(--text-muted, #888);
+  font-style: italic;
+  padding: 16px;
+  text-align: center;
+}
