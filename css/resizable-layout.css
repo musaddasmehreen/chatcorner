@@ -2178,3 +2178,6 @@
   40% { transform: translateY(-5px) scale(0.94, 1.1); }
   60% { transform: translateY(0) scale(1.08, 0.92); }
 }
+
+
+.vr-users-btn.vr-users-btn-inline { position: static !important; opacity: 0.85; margin-right: 8px; flex-shrink: 0; }

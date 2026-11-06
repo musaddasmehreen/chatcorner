@@ -1,7 +1,8 @@
 /**
  * Virtual Room Online Users Drawer
- * Floats a smart, compact 50% opacity hamburger button at the top-left of the chatbox.
- * Opens the online users drawer on the left side over the chatbox.
+ * Floats a smart, compact 50% opacity hamburger button at top-left of the chatbox,
+ * and also places a hamburger button beside the media control bars.
+ * Opens the online users drawer showing active users across YouTube, Spotify, IPTV, and Ludo.
  */
 (function() {
   'use strict';
@@ -11,25 +12,47 @@
   let activeRoomKey = null;
   let roomUsersMap = new Map();
   let pollInterval = null;
+  let _localGuestId = null;
+
+  function getLudoKey() {
+    try {
+      const iframe = document.getElementById('ludo-iframe');
+      const src = iframe && iframe.getAttribute('src');
+      if (src) {
+        const parsed = new URL(src, window.location.href).searchParams.get('room');
+        if (parsed) return parsed.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'global';
+      }
+    } catch (_) {}
+    return 'global';
+  }
 
   function getActiveVirtualRoom() {
+    // 1. Direct container visibility check (always reliable in DOM)
+    const yt = document.getElementById('yt-container');
+    if (yt && !yt.classList.contains('hidden') && yt.style.display !== 'none') {
+      return { type: 'yt', key: 'global' };
+    }
+    const sp = document.getElementById('sp-container');
+    if (sp && !sp.classList.contains('hidden') && sp.style.display !== 'none') {
+      return { type: 'sp', key: 'global' };
+    }
+    const iptv = document.getElementById('iptv-container');
+    if (iptv && !iptv.classList.contains('hidden') && iptv.style.display !== 'none') {
+      return { type: 'iptv', key: 'global' };
+    }
+    const ludo = document.getElementById('ludo-container');
+    if (ludo && !ludo.classList.contains('hidden') && ludo.style.display !== 'none') {
+      return { type: 'ludo', key: getLudoKey() };
+    }
+
+    // 2. Fallback to currentRoom state
     const room = window.currentRoom;
-    if (!room || !room._virtual) return null;
-    const id = String(room.id || '');
-    if (id === 'iptv-virtual') return { type: 'iptv', key: 'global' };
-    if (id === 'yt-virtual') return { type: 'yt', key: 'global' };
-    if (id === 'sp-virtual') return { type: 'sp', key: 'global' };
-    if (id === 'ludo-virtual') {
-      let key = 'global';
-      try {
-        const iframe = document.getElementById('ludo-iframe');
-        const src = iframe && iframe.getAttribute('src');
-        if (src) {
-          const parsed = new URL(src, window.location.href).searchParams.get('room');
-          if (parsed) key = parsed.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'global';
-        }
-      } catch (_) {}
-      return { type: 'ludo', key: key };
+    if (room && room._virtual) {
+      const id = String(room.id || '');
+      if (id === 'iptv-virtual') return { type: 'iptv', key: 'global' };
+      if (id === 'yt-virtual') return { type: 'yt', key: 'global' };
+      if (id === 'sp-virtual') return { type: 'sp', key: 'global' };
+      if (id === 'ludo-virtual') return { type: 'ludo', key: getLudoKey() };
     }
     return null;
   }
@@ -41,7 +64,18 @@
   }
 
   function getMyUserId() {
-    return String((window.currentUser && window.currentUser.id) || (window.currentProfile && window.currentProfile.id) || 'guest_' + Math.random().toString(36).slice(2, 8));
+    if (window.currentUser && window.currentUser.id) return String(window.currentUser.id);
+    if (window.currentProfile && window.currentProfile.id) return String(window.currentProfile.id);
+    if (!_localGuestId) {
+      try {
+        _localGuestId = sessionStorage.getItem('cc_vr_guest_id');
+      } catch (_) {}
+      if (!_localGuestId) {
+        _localGuestId = 'guest_' + Math.random().toString(36).slice(2, 8);
+        try { sessionStorage.setItem('cc_vr_guest_id', _localGuestId); } catch (_) {}
+      }
+    }
+    return _localGuestId;
   }
 
   function updateBadgeCounts(count) {
@@ -160,27 +194,37 @@
       });
   }
 
+  function createUsersButton(id) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'vr-users-btn';
+    btn.id = id;
+    btn.setAttribute('aria-label', 'Users in this room');
+    btn.title = 'Users in this room';
+    btn.onclick = window.toggleVirtualRoomUsers;
+    btn.innerHTML =
+      '<span class="vr-line"></span>' +
+      '<span class="vr-line"></span>' +
+      '<span class="vr-line"></span>' +
+      '<span class="vr-badge">' + (roomUsersMap.size || 0) + '</span>';
+    return btn;
+  }
+
   function ensureButton() {
     const vr = getActiveVirtualRoom();
-    let btn = document.getElementById('vr-users-btn');
+    const floatingBtn = document.getElementById('vr-users-btn');
+    const barBtn = document.getElementById('vr-users-btn-bar');
+
     if (!vr) {
-      if (btn) btn.style.display = 'none';
+      if (floatingBtn) floatingBtn.style.display = 'none';
+      if (barBtn) barBtn.style.display = 'none';
       return;
     }
 
+    // 1. Ensure floating button over chatbox
+    let btn = floatingBtn;
     if (!btn) {
-      btn = document.createElement('button');
-      btn.id = 'vr-users-btn';
-      btn.type = 'button';
-      btn.className = 'vr-users-btn';
-      btn.setAttribute('aria-label', 'Users in this room');
-      btn.title = 'Users in this room';
-      btn.onclick = window.toggleVirtualRoomUsers;
-      btn.innerHTML =
-        '<span class="vr-line"></span>' +
-        '<span class="vr-line"></span>' +
-        '<span class="vr-line"></span>' +
-        '<span class="vr-badge" id="vr-users-badge">0</span>';
+      btn = createUsersButton('vr-users-btn');
     }
     btn.style.display = 'flex';
 
@@ -191,6 +235,37 @@
 
     if (chatbox && btn.parentElement !== chatbox) {
       chatbox.prepend(btn);
+    }
+
+    // 2. Also ensure button in media control bar (YouTube / Spotify bar beside input)
+    if (vr.type === 'yt') {
+      const ytBar = document.getElementById('yt-admin-bar');
+      if (ytBar) {
+        let bBtn = document.getElementById('vr-users-btn-bar');
+        if (!bBtn) {
+          bBtn = createUsersButton('vr-users-btn-bar');
+        }
+        bBtn.style.display = 'flex';
+        bBtn.classList.add('vr-users-btn-inline');
+        if (bBtn.parentElement !== ytBar) {
+          ytBar.prepend(bBtn);
+        }
+      }
+    } else if (vr.type === 'sp') {
+      const spBar = document.getElementById('sp-control-bar');
+      if (spBar) {
+        let bBtn = document.getElementById('vr-users-btn-bar');
+        if (!bBtn) {
+          bBtn = createUsersButton('vr-users-btn-bar');
+        }
+        bBtn.style.display = 'flex';
+        bBtn.classList.add('vr-users-btn-inline');
+        if (bBtn.parentElement !== spBar) {
+          spBar.prepend(bBtn);
+        }
+      }
+    } else {
+      if (barBtn) barBtn.style.display = 'none';
     }
   }
 
@@ -239,7 +314,7 @@
   function init() {
     checkRoomState();
     if (!pollInterval) {
-      pollInterval = setInterval(checkRoomState, 500);
+      pollInterval = setInterval(checkRoomState, 400);
     }
 
     document.addEventListener('keydown', function(e) {
@@ -249,7 +324,7 @@
     document.addEventListener('click', function(e) {
       const drawer = document.getElementById('vr-users-drawer');
       if (!drawer || !drawer.classList.contains('open')) return;
-      if (e.target.closest('#vr-users-btn') || e.target.closest('#vr-users-drawer')) return;
+      if (e.target.closest('.vr-users-btn') || e.target.closest('#vr-users-drawer')) return;
       window.closeVirtualRoomUsers();
     });
 
