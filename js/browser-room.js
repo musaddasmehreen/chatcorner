@@ -31,6 +31,7 @@ window.BrowserRoom = (function() {
   let _screenStream = null;
   let _isScreenSharing = false;
   let _screenPeers = {}; // viewerId -> RTCPeerConnection
+  let _iceQueues = {};   // peerId -> RTCIceCandidateInit[]
 
   // Realtime throttle timers
   let _lastScrollBroadcast = 0;
@@ -465,6 +466,7 @@ window.BrowserRoom = (function() {
         .on('broadcast', { event: 'pin-update' }, ({ payload }) => handleRemotePinUpdate(payload))
         .on('broadcast', { event: 'sync-request' }, () => handleSyncRequest())
         .on('broadcast', { event: 'sync-state' }, ({ payload }) => handleSyncState(payload))
+        .on('broadcast', { event: 'stream-request' }, ({ payload }) => handleStreamRequest(payload))
         .on('broadcast', { event: 'stream-offer' }, ({ payload }) => handleStreamOffer(payload))
         .on('broadcast', { event: 'stream-answer' }, ({ payload }) => handleStreamAnswer(payload))
         .on('broadcast', { event: 'stream-ice' }, ({ payload }) => handleStreamIce(payload))
@@ -784,14 +786,30 @@ window.BrowserRoom = (function() {
         controllerName: _controllerName,
         isLocked: _isLocked,
         pin: _roomPin,
-        isScreenSharing: _isScreenSharing
+        isScreenSharing: _isScreenSharing,
+        hostId: getMyUserId(),
+        hostName: getMyDisplayName()
+      });
+    }
+    // If actively streaming, re-announce stream state so new participants immediately get the feed
+    if (_isScreenSharing && _screenStream) {
+      broadcastEvent('stream-state', {
+        active: true,
+        hostId: getMyUserId(),
+        hostName: getMyDisplayName()
       });
     }
   }
 
   function handleSyncState(p) {
     if (!p) return;
-    if (p.url && !isController()) {
+    if (p.isScreenSharing && p.hostId && p.hostId !== getMyUserId()) {
+      handleStreamState({
+        active: true,
+        hostId: p.hostId,
+        hostName: p.hostName
+      });
+    } else if (p.url && !isController() && !_isScreenSharing) {
       navigate(p.url, false);
     }
     if (p.controllerId) _controllerId = p.controllerId;
@@ -1038,9 +1056,76 @@ window.BrowserRoom = (function() {
     if (modal && modal.classList.contains('visible')) {
       openPassWheelModal();
     }
+    // If actively streaming, broadcast stream-state so newcomers immediately request the feed
+    if (_isScreenSharing && _screenStream) {
+      broadcastEvent('stream-state', {
+        active: true,
+        hostId: getMyUserId(),
+        hostName: getMyDisplayName()
+      });
+    }
   }
 
   /* ══ Live WebRTC Screen / Tab Streaming (Watch Party) ══════════════ */
+
+  function getIceConfig() {
+    if (typeof ICE_SERVERS !== 'undefined' && ICE_SERVERS) return ICE_SERVERS;
+    if (window.ICE_SERVERS) return window.ICE_SERVERS;
+    return {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' }
+      ]
+    };
+  }
+
+  function showStreamUnmuteBanner() {
+    let banner = document.getElementById('browser-unmute-banner');
+    if (!banner) {
+      banner = document.createElement('button');
+      banner.id = 'browser-unmute-banner';
+      banner.type = 'button';
+      banner.className = 'browser-unmute-banner';
+      banner.innerHTML = '🔊 Tap to Unmute Stream Audio';
+      banner.onclick = () => {
+        const v = document.getElementById('browser-stream-video');
+        if (v) {
+          v.muted = false;
+          v.play().catch(() => {});
+        }
+        banner.remove();
+      };
+      const stage = document.getElementById('browser-stage');
+      if (stage) stage.appendChild(banner);
+    }
+  }
+
+  function queueOrAddIceCandidate(peerId, candidate) {
+    const pc = _screenPeers[peerId];
+    if (pc && pc.remoteDescription && pc.signalingState !== 'closed') {
+      pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+        console.warn('[BrowserRoom] Error adding ICE candidate:', err);
+      });
+    } else {
+      if (!_iceQueues[peerId]) _iceQueues[peerId] = [];
+      _iceQueues[peerId].push(candidate);
+    }
+  }
+
+  async function flushIceQueue(peerId) {
+    const pc = _screenPeers[peerId];
+    if (!pc || !pc.remoteDescription) return;
+    const queue = _iceQueues[peerId] || [];
+    _iceQueues[peerId] = [];
+    for (const cand of queue) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {
+        console.warn('[BrowserRoom] Error adding queued ICE candidate:', e);
+      }
+    }
+  }
 
   async function toggleScreenShare() {
     if (!isController()) return;
@@ -1077,6 +1162,7 @@ window.BrowserRoom = (function() {
     if (videoEl) {
       videoEl.srcObject = _screenStream;
       videoEl.muted = true;
+      videoEl.controls = false;
       videoEl.classList.remove('hidden');
       videoEl.play().catch(() => {});
     }
@@ -1091,9 +1177,11 @@ window.BrowserRoom = (function() {
     });
 
     // Handle user clicking native "Stop sharing" bar
-    _screenStream.getVideoTracks()[0].onended = () => {
-      stopScreenShare(true);
-    };
+    if (_screenStream.getVideoTracks()[0]) {
+      _screenStream.getVideoTracks()[0].onended = () => {
+        stopScreenShare(true);
+      };
+    }
 
     updateStatusText('🖥️ Live streaming screen/tab to all participants');
   }
@@ -1111,6 +1199,10 @@ window.BrowserRoom = (function() {
       try { pc.close(); } catch (_) {}
     });
     _screenPeers = {};
+    _iceQueues = {};
+
+    const banner = document.getElementById('browser-unmute-banner');
+    if (banner) banner.remove();
 
     const videoEl = document.getElementById('browser-stream-video');
     const iframeWrapper = document.getElementById('browser-iframe-wrapper');
@@ -1141,9 +1233,21 @@ window.BrowserRoom = (function() {
 
       // If viewer, request connection from stream host
       if (!_isScreenSharing) {
-        broadcastEvent('stream-request', { viewerId: getMyUserId() });
+        broadcastEvent('stream-request', {
+          viewerId: getMyUserId(),
+          hostId: p.hostId
+        });
       }
     } else {
+      const banner = document.getElementById('browser-unmute-banner');
+      if (banner) banner.remove();
+
+      Object.values(_screenPeers).forEach(pc => {
+        try { pc.close(); } catch (_) {}
+      });
+      _screenPeers = {};
+      _iceQueues = {};
+
       if (videoEl) {
         videoEl.srcObject = null;
         videoEl.classList.add('hidden');
@@ -1153,44 +1257,153 @@ window.BrowserRoom = (function() {
     }
   }
 
+  // Host: receives viewer stream-request, creates RTCPeerConnection, adds tracks, sends stream-offer
+  async function handleStreamRequest(p) {
+    if (!_isScreenSharing || !_screenStream || !p || !p.viewerId) return;
+    const viewerId = p.viewerId;
+    if (viewerId === getMyUserId()) return;
+    if (p.hostId && p.hostId !== getMyUserId()) return;
+
+    console.log('[BrowserRoom] Host initiating stream connection for viewer:', viewerId);
+
+    if (_screenPeers[viewerId]) {
+      try { _screenPeers[viewerId].close(); } catch (_) {}
+      delete _screenPeers[viewerId];
+    }
+    _iceQueues[viewerId] = [];
+
+    const pc = new RTCPeerConnection(getIceConfig());
+    _screenPeers[viewerId] = pc;
+
+    _screenStream.getTracks().forEach(track => {
+      try {
+        pc.addTrack(track, _screenStream);
+      } catch (err) {
+        console.warn('[BrowserRoom] Error adding track to peer:', err);
+      }
+    });
+
+    pc.onicecandidate = ({ candidate }) => {
+      if (!candidate) return;
+      broadcastEvent('stream-ice', {
+        from: getMyUserId(),
+        to: viewerId,
+        candidate
+      });
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        try { pc.close(); } catch (_) {}
+        delete _screenPeers[viewerId];
+        delete _iceQueues[viewerId];
+      }
+    };
+
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      broadcastEvent('stream-offer', {
+        from: getMyUserId(),
+        to: viewerId,
+        sdp: offer
+      });
+    } catch (err) {
+      console.error('[BrowserRoom] Error creating stream offer for viewer:', viewerId, err);
+    }
+  }
+
+  // Viewer: receives stream-offer from host, creates answer, sets ontrack to display video
   async function handleStreamOffer(p) {
-    if (p.to !== getMyUserId() || !p.sdp) return;
-    const iceServers = window.ICE_SERVERS || { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-    const pc = new RTCPeerConnection(iceServers);
-    _screenPeers[p.from] = pc;
+    if (!p || p.to !== getMyUserId() || !p.sdp || !p.from) return;
+    const hostId = p.from;
+    console.log('[BrowserRoom] Viewer handling stream-offer from host:', hostId);
+
+    if (_screenPeers[hostId]) {
+      try { _screenPeers[hostId].close(); } catch (_) {}
+      delete _screenPeers[hostId];
+    }
+    _iceQueues[hostId] = [];
+
+    const pc = new RTCPeerConnection(getIceConfig());
+    _screenPeers[hostId] = pc;
 
     pc.ontrack = (event) => {
+      console.log('[BrowserRoom] Viewer received media track:', event.track.kind);
       const stream = (event.streams && event.streams[0]) || new MediaStream([event.track]);
       const videoEl = document.getElementById('browser-stream-video');
+      const iframeWrapper = document.getElementById('browser-iframe-wrapper');
+
+      if (iframeWrapper) iframeWrapper.classList.add('hidden');
       if (videoEl) {
+        videoEl.classList.remove('hidden');
         videoEl.srcObject = stream;
+        videoEl.controls = true;
         videoEl.muted = false;
-        videoEl.play().catch(() => {});
+
+        const pPlay = videoEl.play();
+        if (pPlay !== undefined) {
+          pPlay.catch(err => {
+            console.warn('[BrowserRoom] Autoplay with audio was restricted, trying muted:', err);
+            videoEl.muted = true;
+            videoEl.play().catch(e => console.warn('[BrowserRoom] Video play error:', e));
+            showStreamUnmuteBanner();
+          });
+        }
       }
     };
 
     pc.onicecandidate = ({ candidate }) => {
       if (!candidate) return;
-      broadcastEvent('stream-ice', { from: getMyUserId(), to: p.from, candidate });
+      broadcastEvent('stream-ice', {
+        from: getMyUserId(),
+        to: hostId,
+        candidate
+      });
     };
 
-    await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        console.warn('[BrowserRoom] Viewer stream connection state:', pc.connectionState);
+      }
+    };
 
-    broadcastEvent('stream-answer', { from: getMyUserId(), to: p.from, sdp: answer });
-  }
-
-  async function handleStreamAnswer(p) {
-    if (p.to !== getMyUserId() || !p.sdp || !_screenPeers[p.from]) return;
-    await _screenPeers[p.from].setRemoteDescription(new RTCSessionDescription(p.sdp));
-  }
-
-  async function handleStreamIce(p) {
-    if (p.to !== getMyUserId() || !p.candidate || !_screenPeers[p.from]) return;
     try {
-      await _screenPeers[p.from].addIceCandidate(new RTCIceCandidate(p.candidate));
-    } catch (_) {}
+      await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
+      await flushIceQueue(hostId);
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      broadcastEvent('stream-answer', {
+        from: getMyUserId(),
+        to: hostId,
+        sdp: answer
+      });
+    } catch (err) {
+      console.error('[BrowserRoom] Error processing stream offer:', err);
+    }
+  }
+
+  // Host: receives stream-answer from viewer, completes WebRTC handshake
+  async function handleStreamAnswer(p) {
+    if (!p || p.to !== getMyUserId() || !p.sdp || !p.from) return;
+    const viewerId = p.from;
+    const pc = _screenPeers[viewerId];
+    if (!pc || pc.signalingState === 'closed') return;
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(p.sdp));
+      await flushIceQueue(viewerId);
+    } catch (err) {
+      console.warn('[BrowserRoom] Error setting remote description from answer:', err);
+    }
+  }
+
+  // Both: handle ICE candidates
+  async function handleStreamIce(p) {
+    if (!p || p.to !== getMyUserId() || !p.candidate || !p.from) return;
+    queueOrAddIceCandidate(p.from, p.candidate);
   }
 
   function escapeHtml(str) {

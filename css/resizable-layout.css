@@ -3173,3 +3173,30 @@
   color: #fff !important;
   box-shadow: 0 0 10px rgba(168, 85, 247, 0.4) !important;
 }
+
+/* Unmute prompt for stream viewers when autoplay audio is restricted */
+.browser-unmute-banner {
+  position: absolute !important;
+  top: 14px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 45 !important;
+  background: linear-gradient(135deg, #ec4899, #8b5cf6) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+  padding: 8px 18px !important;
+  border-radius: 20px !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.browser-unmute-banner:hover {
+  transform: translateX(-50%) scale(1.04) !important;
+  box-shadow: 0 6px 20px rgba(236, 72, 153, 0.6) !important;
+}
