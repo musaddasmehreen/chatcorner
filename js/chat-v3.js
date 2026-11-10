@@ -1433,7 +1433,8 @@ async function loadRooms(preloadedRooms = null) {
       }
 
       [['sp-virtual', '🎧 Spotify', 'Spotify – Listen together', 'virtual_spotify_enabled'],
-       ['yt-virtual', '▶️ YouTube', 'YouTube – Watch together', 'virtual_youtube_enabled']].forEach(([id, label, title, enabledKey]) => {
+       ['yt-virtual', '▶️ YouTube', 'YouTube – Watch together', 'virtual_youtube_enabled'],
+       ['browser-virtual', '🌐 Browser', 'Browser – Collaborative Browsing', 'virtual_browser_enabled']].forEach(([id, label, title, enabledKey]) => {
         if (!_virtualRoomConfig[enabledKey]) return;
         const li = document.createElement('li');
         li.textContent = label;
@@ -6291,6 +6292,7 @@ function cleanupVirtualRooms() {
   // Reset virtual flags
   if (typeof exitIPTVRoom === 'function') exitIPTVRoom();
   if (typeof exitMediaRoom === 'function') exitMediaRoom();
+  if (window.BrowserRoom && typeof window.BrowserRoom.exit === 'function') window.BrowserRoom.exit();
 
   // Cleanup layout classes on shell
   const shell = document.querySelector('.page-shell');
@@ -6556,7 +6558,7 @@ function exitMediaRoom() {
   clearInterval(_mediaTimer);
   _mediaTimer = null;
 
-  ['sp-container', 'yt-container'].forEach(i => document.getElementById(i)?.classList.add('hidden'));
+  ['sp-container', 'yt-container', 'browser-container'].forEach(i => document.getElementById(i)?.classList.add('hidden'));
   const shell = document.querySelector('.page-shell');
   if (shell) shell.classList.remove('iptv-active', 'media-room');
   document.getElementById('btn-iptv-return')?.classList.add('hidden');
@@ -6886,3 +6888,6 @@ window.spSyncNow = function() {
 
 window.enterMediaRoom = enterMediaRoom;
 window.exitMediaRoom = exitMediaRoom;
+
+
+window.enterBrowserRoom = function() { if (window.BrowserRoom) window.BrowserRoom.enter(); };

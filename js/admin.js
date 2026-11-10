@@ -1101,6 +1101,10 @@ async function loadVirtualRoomSettings() {
   document.getElementById('vr-sp-default').value = values.virtual_spotify_default || '';
   document.getElementById('vr-ludo-enabled').checked = values.virtual_ludo_enabled === 'true';
   document.getElementById('vr-ludo-room').value = values.virtual_ludo_room || '';
+  if (document.getElementById('vr-browser-enabled')) document.getElementById('vr-browser-enabled').checked = values.virtual_browser_enabled === 'true';
+  if (document.getElementById('vr-browser-default')) document.getElementById('vr-browser-default').value = values.virtual_browser_default || '';
+  if (document.getElementById('vr-browser-pin')) document.getElementById('vr-browser-pin').value = values.virtual_browser_pin || '1234';
+  if (document.getElementById('vr-browser-locked')) document.getElementById('vr-browser-locked').checked = values.virtual_browser_locked === 'true';
 }
 
 async function saveVirtualRoomSettings() {

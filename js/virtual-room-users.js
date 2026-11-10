@@ -28,6 +28,10 @@
 
   function getActiveVirtualRoom() {
     // 1. Direct container visibility check (always reliable in DOM)
+    const browser = document.getElementById('browser-container');
+    if (browser && !browser.classList.contains('hidden') && browser.style.display !== 'none') {
+      return { type: 'browser', key: 'global' };
+    }
     const yt = document.getElementById('yt-container');
     if (yt && !yt.classList.contains('hidden') && yt.style.display !== 'none') {
       return { type: 'yt', key: 'global' };
@@ -50,6 +54,7 @@
     if (room && room._virtual) {
       const id = String(room.id || '');
       if (id === 'iptv-virtual') return { type: 'iptv', key: 'global' };
+      if (id === 'browser-virtual') return { type: 'browser', key: 'global' };
       if (id === 'yt-virtual') return { type: 'yt', key: 'global' };
       if (id === 'sp-virtual') return { type: 'sp', key: 'global' };
       if (id === 'ludo-virtual') return { type: 'ludo', key: getLudoKey() };
@@ -238,7 +243,20 @@
     }
 
     // 2. Also ensure button in media control bar (YouTube / Spotify bar beside input)
-    if (vr.type === 'yt') {
+    if (vr.type === 'browser') {
+      const browserBar = document.getElementById('browser-nav-bar');
+      if (browserBar) {
+        let bBtn = document.getElementById('vr-users-btn-bar');
+        if (!bBtn) {
+          bBtn = createUsersButton('vr-users-btn-bar');
+        }
+        bBtn.style.display = 'flex';
+        bBtn.classList.add('vr-users-btn-inline');
+        if (bBtn.parentElement !== browserBar) {
+          browserBar.prepend(bBtn);
+        }
+      }
+    } else if (vr.type === 'yt') {
       const ytBar = document.getElementById('yt-admin-bar');
       if (ytBar) {
         let bBtn = document.getElementById('vr-users-btn-bar');

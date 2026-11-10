@@ -323,6 +323,15 @@
           <label for="vr-ludo-room">Default room key (optional)</label>
           <input id="vr-ludo-room" type="text" maxlength="32" placeholder="chatcorner" />
 
+          
+          <h3>🌐 Browser Room</h3>
+          <label class="switch-row"><span>Show Browser room</span><input id="vr-browser-enabled" type="checkbox" /></label>
+          <label for="vr-browser-default">Default URL</label>
+          <input id="vr-browser-default" type="text" placeholder="https://en.wikipedia.org/wiki/Main_Page" />
+          <label for="vr-browser-pin">Dynamic 4-Digit PIN</label>
+          <input id="vr-browser-pin" type="text" maxlength="4" placeholder="1234" />
+          <label class="switch-row"><span>Require PIN for Non-Admins</span><input id="vr-browser-locked" type="checkbox" /></label>
+
           <button class="btn" id="save-virtual-rooms" data-admin-action="save-virtual-rooms">Save Virtual Room Settings</button>
         </div>
       </section>

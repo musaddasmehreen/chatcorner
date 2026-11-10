@@ -65,7 +65,7 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v24';
+    const CURRENT_VERSION = 'v25';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -339,6 +339,71 @@
 
 
 
+        
+        <!-- Browser room (Collaborative Browsing & Streaming) -->
+        <div id="browser-container" class="media-container browser-container hidden">
+          <!-- Top Navigation Bar -->
+          <div id="browser-nav-bar" class="media-bar browser-bar">
+            <div class="browser-nav-group">
+              <button type="button" class="browser-nav-btn" id="browser-btn-back" onclick="BrowserRoom.goBack()" title="Back">◀</button>
+              <button type="button" class="browser-nav-btn" id="browser-btn-forward" onclick="BrowserRoom.goForward()" title="Forward">▶</button>
+              <button type="button" class="browser-nav-btn" id="browser-btn-reload" onclick="BrowserRoom.reload()" title="Reload">🔄</button>
+              <button type="button" class="browser-nav-btn" id="browser-btn-home" onclick="BrowserRoom.goHome()" title="Home">🏠</button>
+            </div>
+            <div class="browser-url-bar">
+              <span class="browser-url-icon">🔒</span>
+              <input type="text" id="browser-url-input" placeholder="Enter URL or search (e.g. https://en.wikipedia.org)..." onkeydown="if(event.key==='Enter')BrowserRoom.navigateInput()"/>
+              <button type="button" class="browser-btn-go" onclick="BrowserRoom.navigateInput()">Go</button>
+            </div>
+            <div class="browser-actions-group">
+              <button type="button" id="browser-btn-stream" class="browser-btn-stream" onclick="BrowserRoom.toggleScreenShare()" title="Live stream a browser tab or screen for watch party">
+                🖥️ <span id="browser-stream-label">Stream Tab</span>
+              </button>
+              <div id="browser-controller-pill" class="browser-controller-pill">
+                <span class="controller-icon">🎮</span>
+                <span id="browser-controller-name">Host</span>
+              </div>
+              <button type="button" id="browser-btn-pass-wheel" class="browser-btn-wheel" onclick="BrowserRoom.openPassWheelModal()" title="Pass interactive control to a participant">
+                🤝 Pass Wheel
+              </button>
+              <button type="button" id="browser-btn-revoke-wheel" class="browser-btn-revoke hidden" onclick="BrowserRoom.revokeWheel()" title="Immediately take back control">
+                ⛔ Take Wheel
+              </button>
+              <button type="button" id="browser-btn-pin-mgr" class="browser-btn-pin hidden" onclick="BrowserRoom.openPinManagerModal()" title="Admin PIN Control">
+                🔐 <span id="browser-admin-pin-text">PIN: 1234</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Stage / Viewport -->
+          <div class="media-stage browser-stage" id="browser-stage">
+            <!-- WebRTC Live Stream Video (for Watch Party / OTT / Tab Stream) -->
+            <video id="browser-stream-video" class="browser-stream-video hidden" autoplay playsinline></video>
+
+            <!-- Interactive Iframe Viewport -->
+            <div id="browser-iframe-wrapper" class="browser-iframe-wrapper">
+              <iframe id="browser-iframe" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-downloads" allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
+              <div id="browser-guard" class="browser-guard hidden" title="View-only mode. Controller has interactive control."></div>
+              <div id="browser-synced-cursor" class="browser-synced-cursor hidden">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 2L19 13.5L12 15L9 22L4 2Z" fill="#8b6ded" stroke="#ffffff" stroke-width="1.5"/></svg>
+                <span id="browser-cursor-label" class="browser-cursor-label">Host</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer / Status Bar -->
+          <div class="media-footer browser-footer">
+            <span id="browser-status">🌐 Collaborative Browser Ready</span>
+            <div class="browser-presets">
+              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://en.wikipedia.org/wiki/Main_Page')">Wikipedia</button>
+              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://news.ycombinator.com')">Hacker News</button>
+              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://archive.org')">Archive.org</button>
+              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://html5test.co')">HTML5 Test</button>
+            </div>
+            <button type="button" id="browser-btn-sync" class="browser-sync-btn" onclick="BrowserRoom.requestSync()">🔄 Sync View</button>
+          </div>
+        </div>
+
         <!-- Video elements for voice room -->
         <div id="video-grid" class="video-grid hidden"></div>
         <video id="local-video" class="local-video hidden" autoplay playsinline muted></video>
@@ -537,6 +602,7 @@
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
   <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script src="js/virtual-room-users.js?v=3.1" defer></script>
+  <script src="js/browser-room.js?v=1.0" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -678,6 +744,82 @@
       })();
     })();
   </script>
+
+  
+  <!-- Browser Room PIN Lock Modal (for non-admins) -->
+  <div id="browser-pin-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="browser-pin-title">
+    <div class="modal-box browser-pin-box">
+      <div class="modal-header">
+        <h3 id="browser-pin-title">🔒 Browser Room Locked</h3>
+        <button type="button" class="modal-close" onclick="BrowserRoom.closePinModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="pin-desc">This room is protected by a 4-digit passcode. Enter the active PIN to join the collaborative session.</p>
+        <div class="pin-inputs-container" id="browser-pin-inputs">
+          <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="browser-pin-d1" autocomplete="off"/>
+          <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="browser-pin-d2" autocomplete="off"/>
+          <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="browser-pin-d3" autocomplete="off"/>
+          <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="browser-pin-d4" autocomplete="off"/>
+        </div>
+        <div id="browser-pin-error" class="pin-error-msg hidden">Incorrect 4-digit PIN. Please try again.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="BrowserRoom.closePinModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="BrowserRoom.submitPin()">Unlock & Enter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Browser Room Admin PIN Manager Modal -->
+  <div id="browser-pin-mgr-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="browser-pin-mgr-title">
+    <div class="modal-box browser-pin-mgr-box">
+      <div class="modal-header">
+        <h3 id="browser-pin-mgr-title">🔐 Browser Access Control (Admin)</h3>
+        <button type="button" class="modal-close" onclick="BrowserRoom.closePinManagerModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="pin-mgr-status-card">
+          <div class="pin-mgr-label">Current Active 4-Digit PIN:</div>
+          <div class="pin-mgr-display">
+            <span id="browser-mgr-pin-value">1234</span>
+            <button type="button" class="btn-copy-pin" onclick="BrowserRoom.copyPin()" title="Copy PIN">📋 Copy</button>
+          </div>
+        </div>
+        <div class="pin-mgr-controls">
+          <label class="switch-row">
+            <span>Require 4-Digit PIN for Non-Admins</span>
+            <input type="checkbox" id="browser-mgr-lock-toggle" onchange="BrowserRoom.togglePinLock(this.checked)"/>
+          </label>
+          <button type="button" class="btn btn-secondary" onclick="BrowserRoom.regeneratePin()">🎲 Generate New 4-Digit PIN</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="BrowserRoom.closePinManagerModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Browser Room Pass the Wheel Modal -->
+  <div id="browser-pass-wheel-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="browser-wheel-title">
+    <div class="modal-box browser-wheel-box">
+      <div class="modal-header">
+        <h3 id="browser-wheel-title">🤝 Pass the Wheel</h3>
+        <button type="button" class="modal-close" onclick="BrowserRoom.closePassWheelModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="wheel-desc">Select a user to grant interactive browsing control. Admins can revoke control at any time.</p>
+        <div class="wheel-current-user">
+          Current Controller: <strong id="browser-wheel-current-name">Admin</strong>
+        </div>
+        <ul id="browser-wheel-user-list" class="wheel-user-list">
+          <!-- Populated dynamically with active participants in Browser room -->
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="BrowserRoom.closePassWheelModal()">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Virtual Room Online Users Drawer -->
   <aside id="vr-users-drawer" class="vr-users-drawer" aria-label="Online users in this room" aria-hidden="true">
