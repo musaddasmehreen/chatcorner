@@ -57,7 +57,7 @@
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.8"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.1" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=3.5" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=3.6" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -65,7 +65,7 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v29';
+    const CURRENT_VERSION = 'v30';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -340,27 +340,34 @@
 
 
         
-                        <!-- Browser room (Collaborative Browsing & Streaming - Max Viewport) -->
+                                <!-- Browser room (Collaborative Browsing & Streaming - Max Viewport & Zero History) -->
         <div id="browser-container" class="media-container browser-container hidden">
           <!-- Floating Restore Chat Button (Visible only when chat is minimized) -->
           <button type="button" id="browser-btn-restore-chat" class="browser-btn-restore-chat hidden" onclick="BrowserRoom.toggleChatMinimize()" title="Show Chatbox">
             💬 Show Chat
           </button>
 
-          <!-- Single Compact Top Navigation & Control Bar -->
+          <!-- Single Compact Top Navigation & Control Bar (No History Bar) -->
           <div id="browser-nav-bar" class="media-bar browser-bar compact-browser-bar">
             <div class="browser-nav-group">
-              <button type="button" class="browser-nav-btn" id="browser-btn-back" onclick="BrowserRoom.goBack()" title="Back">◀</button>
-              <button type="button" class="browser-nav-btn" id="browser-btn-forward" onclick="BrowserRoom.goForward()" title="Forward">▶</button>
-              <button type="button" class="browser-nav-btn" id="browser-btn-reload" onclick="BrowserRoom.reload()" title="Reload">🔄</button>
+              <button type="button" class="browser-nav-btn" id="browser-btn-reload" onclick="BrowserRoom.reload()" title="Reload page">🔄</button>
+              <button type="button" class="browser-nav-btn" id="browser-btn-home" onclick="BrowserRoom.goHome()" title="Home">🏠</button>
             </div>
+
+            <!-- Zero-History Private URL Bar -->
             <div class="browser-url-bar compact-url-bar">
-              <span class="browser-url-icon" title="Secure connection">🔒</span>
-              <input type="text" id="browser-url-input" placeholder="Search or enter URL..." onkeydown="if(event.key==='Enter')BrowserRoom.navigateInput()"/>
+              <span class="browser-url-icon" title="Private & Zero History">🔒</span>
+              <input type="text" id="browser-url-input" placeholder="Search or enter URL privately..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" onkeydown="if(event.key==='Enter')BrowserRoom.navigateInput()"/>
+              <button type="button" class="browser-btn-clear" onclick="BrowserRoom.clearUrlBar()" title="Clear address bar">✕</button>
               <button type="button" class="browser-btn-go" onclick="BrowserRoom.navigateInput()">Go</button>
             </div>
+
+            <!-- Action controls -->
             <div class="browser-actions-group">
-              <button type="button" id="browser-btn-stream" class="browser-btn-stream" onclick="BrowserRoom.toggleScreenShare()" title="Watch Party: Stream tab or screen with audio">
+              <button type="button" id="browser-btn-independent" class="browser-btn-independent" onclick="BrowserRoom.openIndependent()" title="Open in 100% independent window: zero blocks, no CSP, no errors!">
+                🚀 Independent
+              </button>
+              <button type="button" id="browser-btn-stream" class="browser-btn-stream" onclick="BrowserRoom.toggleScreenShare()" title="Watch Party: Stream any tab/window with live audio">
                 🖥️ <span id="browser-stream-label">Stream</span>
               </button>
               <button type="button" id="browser-btn-fullscreen" class="browser-btn-fullscreen" onclick="BrowserRoom.toggleFullscreen()" title="Pop out / Fullscreen">
@@ -378,8 +385,7 @@
               <button type="button" id="browser-btn-pin-mgr" class="browser-btn-pin hidden" onclick="BrowserRoom.openPinManagerModal()" title="Admin PIN Control">
                 🔐 <span id="browser-admin-pin-text">PIN</span>
               </button>
-              <button type="button" class="browser-btn-proxy active" id="browser-btn-proxy" onclick="BrowserRoom.toggleProxy()" title="Proxy unblocks CSP & X-Frame-Options">⚡ Proxy</button>
-              <button type="button" class="browser-nav-btn" id="browser-btn-external" onclick="BrowserRoom.openExternal()" title="Open current URL in external tab">↗️</button>
+              <button type="button" class="browser-btn-proxy" id="browser-btn-proxy" onclick="BrowserRoom.toggleProxy()" title="Toggle proxy unblocker">⚡ Proxy</button>
             </div>
           </div>
 
@@ -591,14 +597,14 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=6.6" defer></script>
+  <script src="js/chat-v3.js?v=6.7" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
   <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script src="js/virtual-room-users.js?v=3.1" defer></script>
-  <script src="js/browser-room.js?v=1.4" defer></script>
+  <script src="js/browser-room.js?v=1.5" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {

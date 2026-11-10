@@ -22,13 +22,11 @@ window.BrowserRoom = (function() {
   let _channel = null;
   let _roomPin = DEFAULT_PIN;
   let _isLocked = false;
-  let _useProxy = true;
+  let _useProxy = false;
   let _currentUrl = DEFAULT_URL;
   let _controllerId = null;
   let _controllerName = 'Host';
-  let _historyStack = [DEFAULT_URL];
-  let _historyIndex = 0;
-
+    
   // Screen sharing state
   let _screenStream = null;
   let _isScreenSharing = false;
@@ -572,12 +570,7 @@ window.BrowserRoom = (function() {
         controllerName: getMyDisplayName(),
         ts: Date.now()
       });
-      // Add to history
-      if (_historyStack[_historyIndex] !== finalUrl) {
-        _historyStack = _historyStack.slice(0, _historyIndex + 1);
-        _historyStack.push(finalUrl);
-        _historyIndex = _historyStack.length - 1;
-      }
+// Zero-history mode: No search or URL history saved
     }
 
     updateStatusText(`Loaded: ${finalUrl}`);
@@ -1227,6 +1220,34 @@ window.BrowserRoom = (function() {
     }
   });
 
+  
+  // ── Independent Web Window (Zero Restrictions, No CSP, No Cloudflare 1016) ──
+  function openIndependent(customUrl) {
+    const target = customUrl || _currentUrl || DEFAULT_URL;
+    if (!target || target === 'about:blank') return;
+
+    // Launch independent floating application window
+    const w = 1200;
+    const h = 850;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+
+    window.open(
+      target,
+      'ChatCornerIndependentBrowser',
+      `width=${w},height=${h},top=${top},left=${left},menubar=no,toolbar=no,location=yes,status=no,resizable=yes,scrollbars=yes`
+    );
+  }
+
+  // ── Clear URL input bar (Zero History Guarantee) ──
+  function clearUrlBar() {
+    const input = document.getElementById('browser-url-input');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+  }
+
   // Public API
   return {
     enter,
@@ -1235,6 +1256,8 @@ window.BrowserRoom = (function() {
     getIframeUrl,
     toggleChatMinimize,
     toggleFullscreen,
+    openIndependent,
+    clearUrlBar,
     openExternal: function() {
       if (_currentUrl && _currentUrl !== 'about:blank') {
         window.open(_currentUrl, '_blank', 'noopener,noreferrer');
