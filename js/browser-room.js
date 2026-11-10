@@ -357,7 +357,9 @@ window.BrowserRoom = (function() {
     document.title = '🌐 Browser – ChatCorner';
 
     const shell = document.querySelector('.page-shell');
-    if (shell) shell.classList.add('iptv-active', 'media-room');
+    if (shell) {
+      shell.classList.add('iptv-active', 'media-room', 'browser-active');
+    }
 
     if (typeof window.switchMobileTab === 'function') {
       window.switchMobileTab('chat');
@@ -1167,12 +1169,72 @@ window.BrowserRoom = (function() {
     navigate(_currentUrl, true);
   }
 
+  
+  let _isChatCollapsed = false;
+
+  function toggleChatMinimize() {
+    _isChatCollapsed = !_isChatCollapsed;
+    const shell = document.querySelector('.page-shell');
+    const restoreBtn = document.getElementById('browser-btn-restore-chat');
+    const toggleBtn = document.getElementById('browser-btn-toggle-chat');
+    const toggleLabel = document.getElementById('browser-chat-toggle-label');
+
+    if (shell) {
+      shell.classList.toggle('browser-chat-collapsed', _isChatCollapsed);
+    }
+
+    if (restoreBtn) {
+      restoreBtn.classList.toggle('hidden', !_isChatCollapsed);
+    }
+
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('active', _isChatCollapsed);
+    }
+
+    if (toggleLabel) {
+      toggleLabel.textContent = _isChatCollapsed ? 'Show Chat' : 'Hide Chat';
+    }
+  }
+
+  function toggleFullscreen() {
+    const container = document.getElementById('browser-container');
+    if (!container) return;
+
+    const fsLabel = document.getElementById('browser-fs-label');
+
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (container.requestFullscreen) {
+        container.requestFullscreen().catch(() => {});
+      } else if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+      }
+      if (fsLabel) fsLabel.textContent = 'Exit Pop-out';
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+      if (fsLabel) fsLabel.textContent = 'Pop-out';
+    }
+  }
+
+  // Update fullscreen button text on native escape/exit
+  document.addEventListener('fullscreenchange', () => {
+    const fsLabel = document.getElementById('browser-fs-label');
+    if (fsLabel) {
+      fsLabel.textContent = document.fullscreenElement ? 'Exit Pop-out' : 'Pop-out';
+    }
+  });
+
   // Public API
   return {
     enter,
     exit,
     toggleProxy,
     getIframeUrl,
+    toggleChatMinimize,
+    toggleFullscreen,
     openExternal: function() {
       if (_currentUrl && _currentUrl !== 'about:blank') {
         window.open(_currentUrl, '_blank', 'noopener,noreferrer');
