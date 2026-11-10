@@ -498,6 +498,25 @@
     return url;
   }
 
+  
+  function updateTabAndUrlUI(url) {
+    const input = document.getElementById('browser-url-input');
+    if (input) input.value = url;
+
+    const label = document.getElementById('browser-tab-label');
+    if (label) {
+      try {
+        const u = new URL(url);
+        label.textContent = u.hostname.replace(/^www\./, '') + (u.pathname !== '/' ? u.pathname : '');
+      } catch (_) {
+        label.textContent = url;
+      }
+    }
+
+    const status = document.getElementById('browser-status');
+    if (status) status.textContent = '🌐 Ready: ' + url;
+  }
+
   function navigate(url, broadcast = true) {
     const finalUrl = normalizeUrl(url);
     _currentUrl = finalUrl;
@@ -1105,6 +1124,11 @@
   return {
     enter,
     exit,
+    openExternal: function() {
+      if (_currentUrl && _currentUrl !== 'about:blank') {
+        window.open(_currentUrl, '_blank', 'noopener,noreferrer');
+      }
+    },
     submitPin,
     closePinModal,
     openPinManagerModal,

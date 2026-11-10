@@ -57,7 +57,7 @@
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.8"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.1" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=3.1" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=3.2" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -65,7 +65,7 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v25';
+    const CURRENT_VERSION = 'v26';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -340,9 +340,32 @@
 
 
         
-        <!-- Browser room (Collaborative Browsing & Streaming) -->
+                <!-- Browser room (Collaborative Browsing & Streaming) -->
         <div id="browser-container" class="media-container browser-container hidden">
-          <!-- Top Navigation Bar -->
+          <!-- Window Header (Mac/Chrome tabs & window controls) -->
+          <div class="browser-window-header">
+            <div class="browser-window-dots">
+              <span class="browser-dot dot-red" title="Close" onclick="BrowserRoom.goHome()"></span>
+              <span class="browser-dot dot-yellow" title="Reload" onclick="BrowserRoom.reload()"></span>
+              <span class="browser-dot dot-green" title="Open external" onclick="BrowserRoom.openExternal()"></span>
+            </div>
+            <div class="browser-tab-strip">
+              <div class="browser-tab active" id="browser-tab-title">
+                <span class="browser-tab-icon">🌐</span>
+                <span class="browser-tab-text" id="browser-tab-label">Wikipedia — Main Page</span>
+                <span class="browser-tab-close" title="Reload" onclick="BrowserRoom.reload()">✕</span>
+              </div>
+              <button type="button" class="browser-new-tab-btn" onclick="BrowserRoom.goHome()" title="Home">+</button>
+            </div>
+            <div class="browser-header-status">
+              <div id="browser-controller-pill" class="browser-controller-pill">
+                <span class="controller-icon">🎮</span>
+                <span id="browser-controller-name">Host</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top Navigation & Omnibox Bar -->
           <div id="browser-nav-bar" class="media-bar browser-bar">
             <div class="browser-nav-group">
               <button type="button" class="browser-nav-btn" id="browser-btn-back" onclick="BrowserRoom.goBack()" title="Back">◀</button>
@@ -351,18 +374,14 @@
               <button type="button" class="browser-nav-btn" id="browser-btn-home" onclick="BrowserRoom.goHome()" title="Home">🏠</button>
             </div>
             <div class="browser-url-bar">
-              <span class="browser-url-icon">🔒</span>
-              <input type="text" id="browser-url-input" placeholder="Enter URL or search (e.g. https://en.wikipedia.org)..." onkeydown="if(event.key==='Enter')BrowserRoom.navigateInput()"/>
+              <span class="browser-url-icon" title="Secure connection">🔒</span>
+              <input type="text" id="browser-url-input" placeholder="Search or enter web address (e.g. https://en.wikipedia.org)..." onkeydown="if(event.key==='Enter')BrowserRoom.navigateInput()"/>
               <button type="button" class="browser-btn-go" onclick="BrowserRoom.navigateInput()">Go</button>
             </div>
             <div class="browser-actions-group">
               <button type="button" id="browser-btn-stream" class="browser-btn-stream" onclick="BrowserRoom.toggleScreenShare()" title="Live stream a browser tab or screen for watch party">
                 🖥️ <span id="browser-stream-label">Stream Tab</span>
               </button>
-              <div id="browser-controller-pill" class="browser-controller-pill">
-                <span class="controller-icon">🎮</span>
-                <span id="browser-controller-name">Host</span>
-              </div>
               <button type="button" id="browser-btn-pass-wheel" class="browser-btn-wheel" onclick="BrowserRoom.openPassWheelModal()" title="Pass interactive control to a participant">
                 🤝 Pass Wheel
               </button>
@@ -372,7 +391,19 @@
               <button type="button" id="browser-btn-pin-mgr" class="browser-btn-pin hidden" onclick="BrowserRoom.openPinManagerModal()" title="Admin PIN Control">
                 🔐 <span id="browser-admin-pin-text">PIN: 1234</span>
               </button>
+              <button type="button" class="browser-nav-btn" id="browser-btn-external" onclick="BrowserRoom.openExternal()" title="Open current URL in external tab">↗️</button>
             </div>
+          </div>
+
+          <!-- Bookmarks / Favorites Strip -->
+          <div class="browser-bookmarks-bar">
+            <span class="bookmarks-label">⭐ Quick Links:</span>
+            <button type="button" class="browser-bookmark-pill" onclick="BrowserRoom.navigate('https://en.wikipedia.org/wiki/Main_Page')">📖 Wikipedia</button>
+            <button type="button" class="browser-bookmark-pill" onclick="BrowserRoom.navigate('https://archive.org')">🏛️ Archive.org</button>
+            <button type="button" class="browser-bookmark-pill" onclick="BrowserRoom.navigate('https://news.ycombinator.com')">📰 Hacker News</button>
+            <button type="button" class="browser-bookmark-pill" onclick="BrowserRoom.navigate('https://html5test.co')">🧪 HTML5 Test</button>
+            <button type="button" class="browser-bookmark-pill" onclick="BrowserRoom.navigate('https://lite.duckduckgo.com/lite')">🔍 DuckDuckGo</button>
+            <button type="button" class="browser-bookmark-pill" onclick="BrowserRoom.navigate('https://openlibrary.org')">📚 Open Library</button>
           </div>
 
           <!-- Stage / Viewport -->
@@ -393,13 +424,7 @@
 
           <!-- Footer / Status Bar -->
           <div class="media-footer browser-footer">
-            <span id="browser-status">🌐 Collaborative Browser Ready</span>
-            <div class="browser-presets">
-              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://en.wikipedia.org/wiki/Main_Page')">Wikipedia</button>
-              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://news.ycombinator.com')">Hacker News</button>
-              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://archive.org')">Archive.org</button>
-              <button type="button" class="browser-preset-btn" onclick="BrowserRoom.navigate('https://html5test.co')">HTML5 Test</button>
-            </div>
+            <span id="browser-status">🌐 Ready: https://en.wikipedia.org/wiki/Main_Page</span>
             <button type="button" id="browser-btn-sync" class="browser-sync-btn" onclick="BrowserRoom.requestSync()">🔄 Sync View</button>
           </div>
         </div>
@@ -595,14 +620,14 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=6.2" defer></script>
+  <script src="js/chat-v3.js?v=6.3" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
   <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script src="js/virtual-room-users.js?v=3.1" defer></script>
-  <script src="js/browser-room.js?v=1.0" defer></script>
+  <script src="js/browser-room.js?v=1.1" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {

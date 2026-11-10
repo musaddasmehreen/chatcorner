@@ -1435,13 +1435,19 @@ async function loadRooms(preloadedRooms = null) {
       [['sp-virtual', '🎧 Spotify', 'Spotify – Listen together', 'virtual_spotify_enabled'],
        ['yt-virtual', '▶️ YouTube', 'YouTube – Watch together', 'virtual_youtube_enabled'],
        ['browser-virtual', '🌐 Browser', 'Browser – Collaborative Browsing', 'virtual_browser_enabled']].forEach(([id, label, title, enabledKey]) => {
-        if (!_virtualRoomConfig[enabledKey]) return;
+        if (_virtualRoomConfig && _virtualRoomConfig[enabledKey] === false) return;
         const li = document.createElement('li');
         li.textContent = label;
         li.title = title;
         li.dataset.roomId = id;
         li.classList.add('iptv-room-item');
-        li.onclick = () => enterMediaRoom(id);
+        li.onclick = () => {
+          if (id === 'browser-virtual') {
+            enterBrowserRoom();
+          } else {
+            enterMediaRoom(id);
+          }
+        };
         textList.appendChild(li);
       });
     }
@@ -1497,6 +1503,8 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       enterIPTVRoom();
     } else if (room.id === 'sp-virtual' || room.id === 'yt-virtual') {
       enterMediaRoom(room.id);
+    } else if (room.id === 'browser-virtual') {
+      enterBrowserRoom();
     } else if (room.id === 'ludo-virtual') {
       enterLudoRoom();
     } 
@@ -5581,7 +5589,11 @@ const VIRTUAL_ROOM_DEFAULTS = {
   virtual_spotify_enabled: true,
   virtual_spotify_default: '',
   virtual_ludo_enabled: true,
-  virtual_ludo_room: ''
+  virtual_ludo_room: '',
+  virtual_browser_enabled: true,
+  virtual_browser_default: 'https://en.wikipedia.org/wiki/Main_Page',
+  virtual_browser_locked: false,
+  virtual_browser_pin: '1234'
 };
 let _virtualRoomConfig = { ...VIRTUAL_ROOM_DEFAULTS };
 
@@ -6891,3 +6903,11 @@ window.exitMediaRoom = exitMediaRoom;
 
 
 window.enterBrowserRoom = function() { if (window.BrowserRoom) window.BrowserRoom.enter(); };
+
+
+function enterBrowserRoom() {
+  if (window.BrowserRoom && typeof window.BrowserRoom.enter === 'function') {
+    window.BrowserRoom.enter();
+  }
+}
+window.enterBrowserRoom = enterBrowserRoom;
