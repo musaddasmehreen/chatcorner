@@ -5968,6 +5968,20 @@ window.sendMessage = async function() {
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
+
+    // Browser Virtual Room in-room chat
+    if (currentRoom.id === 'browser-virtual') {
+      if (window.BrowserRoom && typeof window.BrowserRoom.sendChatMessage === 'function') {
+        const ok = await window.BrowserRoom.sendChatMessage(text);
+        if (ok) {
+          input.value = '';
+          if (typeof autoResizeTextarea === 'function') autoResizeTextarea(input);
+          const counter = document.getElementById('msg-char-counter');
+          if (counter) counter.textContent = '0/500';
+        }
+      }
+      return;
+    }
     const channel = _iptvActive && _iptvChannelChannel ? _iptvChannelChannel : _mediaChannel;
     if (!channel) {
       showChatToast('Chat is still connecting. Please try again.', 'warning');

@@ -452,6 +452,11 @@ window.BrowserRoom = (function() {
       });
 
       _channel
+        .on('broadcast', { event: 'message' }, ({ payload }) => {
+          if (typeof window.renderIPTVChatMessage === 'function') {
+            window.renderIPTVChatMessage(payload);
+          }
+        })
         .on('broadcast', { event: 'browser-nav' }, ({ payload }) => handleRemoteNav(payload))
         .on('broadcast', { event: 'browser-scroll' }, ({ payload }) => handleRemoteScroll(payload))
         .on('broadcast', { event: 'browser-cursor' }, ({ payload }) => handleRemoteCursor(payload))
@@ -1291,6 +1296,38 @@ window.BrowserRoom = (function() {
     }
   }
 
+  
+  async function sendChatMessage(text) {
+    if (!_channel) {
+      if (typeof window.showChatToast === 'function') {
+        window.showChatToast('Chat is still connecting. Please try again.', 'warning');
+      }
+      return false;
+    }
+    const payload = {
+      username: getMyDisplayName(),
+      text,
+      ts: Date.now()
+    };
+    try {
+      const res = await _channel.send({
+        type: 'broadcast',
+        event: 'message',
+        payload
+      });
+      if (res === 'ok' || !res) {
+        if (typeof window.renderIPTVChatMessage === 'function') {
+          window.renderIPTVChatMessage(payload);
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('[BrowserRoom] sendChatMessage error:', err);
+      return false;
+    }
+  }
+
   // Public API
   return {
     enter,
@@ -1302,6 +1339,7 @@ window.BrowserRoom = (function() {
     toggleFullscreen,
     openIndependent,
     clearUrlBar,
+    sendChatMessage,
     openExternal: function() {
       if (_currentUrl && _currentUrl !== 'about:blank') {
         window.open(_currentUrl, '_blank', 'noopener,noreferrer');
