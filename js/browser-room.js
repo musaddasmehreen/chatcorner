@@ -515,6 +515,31 @@ window.BrowserRoom = (function() {
     return targetUrl;
   }
 
+  
+  let _isStealth = false;
+
+  function toggleStealth() {
+    _isStealth = !_isStealth;
+    const btn = document.getElementById('browser-btn-stealth');
+    const input = document.getElementById('browser-url-input');
+    if (btn) btn.classList.toggle('active', _isStealth);
+
+    if (_isStealth) {
+      if (input) input.placeholder = '🔒 Private Stealth Sandbox (Active)';
+      if (input && input.value) input.dataset.realUrl = input.value;
+      if (input) input.value = '';
+      document.title = '💬 ChatCorner';
+    } else {
+      if (input) input.placeholder = 'Search or enter URL privately...';
+      if (input && input.dataset.realUrl) input.value = input.dataset.realUrl;
+      document.title = '🌐 Browser – ChatCorner';
+    }
+  }
+
+  function isDirectMedia(url) {
+    return /\.(mp4|m3u8|webm|ogg|mov|mkv)(\?.*)?$/i.test(url);
+  }
+
   function normalizeUrl(input) {
     let url = String(input || '').trim();
     if (!url) return DEFAULT_URL;
@@ -555,11 +580,29 @@ window.BrowserRoom = (function() {
     const input = document.getElementById('browser-url-input');
     if (input) input.value = finalUrl;
 
+    // If direct video/stream, play directly in container player
+    const videoEl = document.getElementById('browser-stream-video');
+    const iframeWrapper = document.getElementById('browser-iframe-wrapper');
     const iframe = document.getElementById('browser-iframe');
-    if (iframe) {
-      const resolvedSrc = getIframeUrl(finalUrl);
-      if (iframe.src !== resolvedSrc) {
-        iframe.src = resolvedSrc;
+
+    if (isDirectMedia(finalUrl)) {
+      if (videoEl && iframeWrapper) {
+        iframeWrapper.classList.add('hidden');
+        videoEl.classList.remove('hidden');
+        videoEl.controls = true;
+        videoEl.src = finalUrl;
+        videoEl.play().catch(() => {});
+      }
+    } else {
+      if (videoEl && iframeWrapper && !_isScreenSharing) {
+        videoEl.classList.add('hidden');
+        iframeWrapper.classList.remove('hidden');
+      }
+      if (iframe) {
+        const resolvedSrc = getIframeUrl(finalUrl);
+        if (iframe.src !== resolvedSrc) {
+          iframe.src = resolvedSrc;
+        }
       }
     }
 
@@ -1253,6 +1296,7 @@ window.BrowserRoom = (function() {
     enter,
     exit,
     toggleProxy,
+    toggleStealth,
     getIframeUrl,
     toggleChatMinimize,
     toggleFullscreen,

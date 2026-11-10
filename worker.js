@@ -46,6 +46,11 @@ export default {
 
         const contentType = (upstreamResponse.headers.get('content-type') || '').toLowerCase();
 
+        // If upstream or Cloudflare DNS returned 530 / 5xx, redirect directly to target to bypass 1016!
+        if (upstreamResponse.status >= 500) {
+          return Response.redirect(targetUrl, 302);
+        }
+
         // For HTML pages: Inject <base href="..."> so images, scripts, and stylesheets load
         if (contentType.includes('text/html')) {
           let html = await upstreamResponse.text();
@@ -61,7 +66,7 @@ export default {
           }
 
           return new Response(html, {
-            status: upstreamResponse.status,
+            status: 200,
             headers: newHeaders
           });
         }
