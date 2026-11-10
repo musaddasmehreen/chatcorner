@@ -22,6 +22,7 @@ window.BrowserRoom = (function() {
   let _channel = null;
   let _roomPin = DEFAULT_PIN;
   let _isLocked = false;
+  let _useProxy = true;
   let _currentUrl = DEFAULT_URL;
   let _controllerId = null;
   let _controllerName = 'Host';
@@ -382,7 +383,7 @@ window.BrowserRoom = (function() {
 
     const iframe = document.getElementById('browser-iframe');
     if (iframe && (!iframe.src || iframe.src === 'about:blank' || iframe.src.endsWith('/about:blank'))) {
-      iframe.src = _currentUrl || DEFAULT_URL;
+      iframe.src = getIframeUrl(_currentUrl || DEFAULT_URL);
     }
     updateTabAndUrlUI(_currentUrl || DEFAULT_URL);
 
@@ -499,6 +500,21 @@ window.BrowserRoom = (function() {
 
   /* ══ Navigation & Viewport Controls ═══════════════════════════════ */
 
+  
+  function getIframeUrl(targetUrl) {
+    if (!targetUrl || targetUrl === 'about:blank') return 'about:blank';
+    if (_useProxy && /^https?:\/\//i.test(targetUrl)) {
+      try {
+        const u = new URL(targetUrl);
+        // Only proxy external origins to strip CSP and X-Frame-Options
+        if (u.origin !== window.location.origin) {
+          return '/api/proxy?url=' + encodeURIComponent(targetUrl);
+        }
+      } catch (_) {}
+    }
+    return targetUrl;
+  }
+
   function normalizeUrl(input) {
     let url = String(input || '').trim();
     if (!url) return DEFAULT_URL;
@@ -506,8 +522,8 @@ window.BrowserRoom = (function() {
       if (url.includes('.') && !url.includes(' ')) {
         url = 'https://' + url;
       } else {
-        // Search query
-        url = 'https://en.wikipedia.org/w/index.php?search=' + encodeURIComponent(url);
+        // Search query -> Google Search
+        url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
       }
     }
     return url;
@@ -540,8 +556,11 @@ window.BrowserRoom = (function() {
     if (input) input.value = finalUrl;
 
     const iframe = document.getElementById('browser-iframe');
-    if (iframe && iframe.src !== finalUrl) {
-      iframe.src = finalUrl;
+    if (iframe) {
+      const resolvedSrc = getIframeUrl(finalUrl);
+      if (iframe.src !== resolvedSrc) {
+        iframe.src = resolvedSrc;
+      }
     }
 
     if (broadcast && isController()) {
@@ -1135,10 +1154,25 @@ window.BrowserRoom = (function() {
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  
+  function toggleProxy() {
+    _useProxy = !_useProxy;
+    const btn = document.getElementById('browser-btn-proxy');
+    if (btn) {
+      btn.classList.toggle('active', _useProxy);
+      btn.innerHTML = _useProxy ? '⚡ Proxy: ON' : '⚡ Proxy: OFF';
+      btn.title = _useProxy ? 'Proxy is unblocking CSP & X-Frame-Options' : 'Direct iframe loading (may trigger CSP blocks)';
+    }
+    // Reload current page with updated proxy setting
+    navigate(_currentUrl, true);
+  }
+
   // Public API
   return {
     enter,
     exit,
+    toggleProxy,
+    getIframeUrl,
     openExternal: function() {
       if (_currentUrl && _currentUrl !== 'about:blank') {
         window.open(_currentUrl, '_blank', 'noopener,noreferrer');
