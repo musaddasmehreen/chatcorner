@@ -57,7 +57,7 @@
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.8"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.1" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=3.2" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=3.3" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -65,7 +65,7 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v26';
+    const CURRENT_VERSION = 'v27';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -413,7 +413,7 @@
 
             <!-- Interactive Iframe Viewport -->
             <div id="browser-iframe-wrapper" class="browser-iframe-wrapper">
-              <iframe id="browser-iframe" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-downloads" allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
+              <iframe id="browser-iframe" src="https://en.wikipedia.org/wiki/Main_Page" allow="autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write; clipboard-read" referrerpolicy="no-referrer-when-downgrade" style="width:100%;height:100%;border:none;display:block;background:#fff;"></iframe>
               <div id="browser-guard" class="browser-guard hidden" title="View-only mode. Controller has interactive control."></div>
               <div id="browser-synced-cursor" class="browser-synced-cursor hidden">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 2L19 13.5L12 15L9 22L4 2Z" fill="#8b6ded" stroke="#ffffff" stroke-width="1.5"/></svg>
@@ -620,14 +620,14 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=6.3" defer></script>
+  <script src="js/chat-v3.js?v=6.4" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
   <script src="js/resizable-layout.js?v=1.7" defer></script>
   <script src="js/virtual-room-users.js?v=3.1" defer></script>
-  <script src="js/browser-room.js?v=1.1" defer></script>
+  <script src="js/browser-room.js?v=1.2" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {

@@ -10,7 +10,7 @@
  * - Granular Permission Hierarchy & "Pass the Wheel" delegation with Admin absolute override
  */
 
-(function() {
+window.BrowserRoom = (function() {
   'use strict';
 
   // Constants & State
@@ -21,7 +21,7 @@
   let _active = false;
   let _channel = null;
   let _roomPin = DEFAULT_PIN;
-  let _isLocked = true;
+  let _isLocked = false;
   let _currentUrl = DEFAULT_URL;
   let _controllerId = null;
   let _controllerName = 'Host';
@@ -60,10 +60,13 @@
 
   function isAdmin() {
     if (typeof window.getViewerRoleLevel === 'function') {
-      return window.getViewerRoleLevel() >= 4;
+      if (window.getViewerRoleLevel() >= 3) return true;
     }
     const p = window.currentProfile;
-    return !!(p && (p.is_admin || p.is_owner));
+    if (p && (p.is_admin || p.is_owner || p.is_mod || p.isAdmin || p.isOwner || p.isMod)) return true;
+    const u = window.currentUser;
+    if (u && (u.is_admin || u.is_owner || u.is_mod)) return true;
+    return false;
   }
 
   function isController() {
@@ -370,6 +373,18 @@
       wrapper.appendChild(messages);
       wrapper.appendChild(inputStrip);
     }
+
+    // Ensure container and iframe are immediately ready
+    if (container) {
+      container.classList.remove('hidden');
+      container.style.display = 'flex';
+    }
+
+    const iframe = document.getElementById('browser-iframe');
+    if (iframe && (!iframe.src || iframe.src === 'about:blank' || iframe.src.endsWith('/about:blank'))) {
+      iframe.src = _currentUrl || DEFAULT_URL;
+    }
+    updateTabAndUrlUI(_currentUrl || DEFAULT_URL);
 
     // Set virtual room state
     window.currentRoom = {

@@ -2818,3 +2818,131 @@
   text-align: center;
   padding: 1.5rem 0;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+ * Universal Modal Overlay & Box Styling (Browser PIN & Wheel Modals)
+ * ═══════════════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  background: rgba(8, 9, 20, 0.8) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+
+.modal-overlay.hidden {
+  display: none !important;
+}
+
+.modal-box {
+  background: #18192e !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 14px !important;
+  width: min(440px, 94vw) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  animation: modal-zoom-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes modal-zoom-in {
+  0% { transform: scale(0.94); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 18px !important;
+  background: #20223a !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.modal-header h3 {
+  margin: 0 !important;
+  font-size: 1.05rem !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+
+.modal-close {
+  background: transparent !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  font-size: 1.5rem !important;
+  cursor: pointer !important;
+  padding: 0 4px !important;
+  line-height: 1 !important;
+  border-radius: 4px !important;
+}
+
+.modal-close:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.modal-body {
+  padding: 18px 20px !important;
+  color: #cbd5e1 !important;
+  font-size: 0.88rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.modal-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  padding: 12px 18px !important;
+  background: #141527 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* PIN Inputs Styling */
+.pin-inputs-container {
+  display: flex !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  margin: 12px 0 !important;
+}
+
+.pin-digit {
+  width: 52px !important;
+  height: 60px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 2px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 10px !important;
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  color: #fff !important;
+  outline: none !important;
+  transition: all 0.15s ease !important;
+}
+
+.pin-digit:focus {
+  border-color: #8b6ded !important;
+  box-shadow: 0 0 0 3px rgba(139, 109, 237, 0.35) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.pin-error-msg {
+  color: #ef4444 !important;
+  font-size: 0.82rem !important;
+  text-align: center !important;
+  padding: 4px 0 !important;
+}
+
+.pin-error-msg.hidden {
+  display: none !important;
+}
