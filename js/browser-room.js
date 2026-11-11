@@ -302,6 +302,13 @@ window.BrowserRoom = (function() {
   /* ══ Room Entry & Lifecycle ═════════════════════════════════════════ */
 
   async function enter() {
+    if (typeof window.isGuestUser === 'function' && window.isGuestUser(window.currentProfile)) {
+      if (typeof window.showChatToast === 'function') {
+        window.showChatToast('🔒 Only registered members can access other rooms. Please register or log in to unlock all rooms!', 'warning', 5000);
+      }
+      return;
+    }
+
     await loadPinConfig();
 
     // 1. Check Admin instant bypass
@@ -395,6 +402,9 @@ window.BrowserRoom = (function() {
       is_audio_enabled: true,
       _virtual: true
     };
+    if (typeof window.trackMyCurrentRoomPresence === 'function') {
+      window.trackMyCurrentRoomPresence();
+    }
     if (typeof window.updateComposerState === 'function') {
       window.updateComposerState();
     }

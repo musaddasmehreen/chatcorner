@@ -522,6 +522,8 @@ async function getActiveChatSession() {
 function isGuestProfile(profile = currentProfile) {
   return !!profile && profile.is_registered === false;
 }
+window.isGuestProfile = isGuestProfile;
+window.isGuestUser = isGuestProfile;
 
 function buildGuestProfile(user = currentUser) {
   const fallbackId = String(user?.id || '').replace(/-/g, '');
@@ -1386,32 +1388,160 @@ window.addEventListener('DOMContentLoaded', async () => {
   window._ccReconnect = _reconnect;
 });
 
-let _roomCountInterval = null;
+// ── Global Realtime Room Presence (User Counts in Every Room) ──
+let _globalRoomPresenceChannel = null;
+let _roomUserCounts = {};
+
+function initGlobalRoomPresence() {
+  if (_globalRoomPresenceChannel || !window.sbClient) return;
+  const myKey = (currentUser && currentUser.id) || currentProfile?.username || ('guest_' + Math.random().toString(36).slice(2, 7));
+  _globalRoomPresenceChannel = window.sbClient.channel('cc-global-rooms', {
+    config: { presence: { key: myKey } }
+  });
+
+  _globalRoomPresenceChannel
+    .on('presence', { event: 'sync' }, () => updateAllRoomCountsFromPresence())
+    .on('presence', { event: 'join' }, () => updateAllRoomCountsFromPresence())
+    .on('presence', { event: 'leave' }, () => updateAllRoomCountsFromPresence())
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        trackMyCurrentRoomPresence();
+      }
+    });
+}
+window.initGlobalRoomPresence = initGlobalRoomPresence;
+
+function trackMyCurrentRoomPresence() {
+  if (!_globalRoomPresenceChannel || !currentRoom) return;
+  const myId = (currentUser && currentUser.id) || ('guest_' + Math.random().toString(36).slice(2, 7));
+  const myName = (currentProfile && currentProfile.username) || 'Guest';
+  _globalRoomPresenceChannel.track({
+    userId: myId,
+    username: myName,
+    roomId: String(currentRoom.id),
+    roomName: currentRoom.name || '',
+    ts: Date.now()
+  }).catch(() => {});
+}
+window.trackMyCurrentRoomPresence = trackMyCurrentRoomPresence;
+
+function updateAllRoomCountsFromPresence() {
+  if (!_globalRoomPresenceChannel) return;
+  const state = _globalRoomPresenceChannel.presenceState();
+  const counts = {};
+
+  Object.values(state).forEach(entries => {
+    (entries || []).forEach(e => {
+      if (e && e.roomId) {
+        counts[e.roomId] = (counts[e.roomId] || 0) + 1;
+      }
+    });
+  });
+
+  _roomUserCounts = counts;
+
+  // Update badges in front of all rooms in sidebar and popup in real time
+  document.querySelectorAll('#room-list li').forEach(li => {
+    const roomId = li.dataset.roomId;
+    if (!roomId) return;
+    const count = counts[roomId] || 0;
+    let badge = li.querySelector('.room-count-pill');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'room-count-pill';
+      li.prepend(badge);
+    }
+    badge.textContent = count;
+    badge.title = `${count} user${count === 1 ? '' : 's'} online in this room`;
+  });
+}
+window.updateAllRoomCountsFromPresence = updateAllRoomCountsFromPresence;
+
+async function syncDatabaseRooms(rooms) {
+  if (!currentProfile || (!currentProfile.is_admin && !currentProfile.is_owner)) return;
+  try {
+    const gaming = rooms.find(r => r.name && r.name.toLowerCase() === 'gaming');
+    if (gaming) {
+      await sbClient.from('rooms').update({ name: 'ChatCorner', description: 'ChatCorner main lobby 💬' }).eq('id', gaming.id);
+    }
+  } catch (_) {}
+  try {
+    const hasGuestInDb = rooms.some(r => r.name && r.name.toLowerCase() === 'guest' && !r._isGuestRoom);
+    if (!hasGuestInDb) {
+      const { data: newGuest } = await sbClient.from('rooms').insert({
+        name: 'Guest',
+        description: 'Welcome lounge for guests',
+        is_audio_enabled: false
+      }).select().maybeSingle();
+      if (newGuest && currentRoom && currentRoom._isGuestRoom) {
+        currentRoom.id = newGuest.id;
+        delete currentRoom._isGuestRoom;
+      }
+    }
+  } catch (_) {}
+}
 
 async function loadRooms(preloadedRooms = null) {
-  await loadVirtualRoomConfig();
+  // Parallelize config loading to boost speed
+  const [, roomsData] = await Promise.all([
+    loadVirtualRoomConfig(),
+    (preloadedRooms && preloadedRooms.length)
+      ? Promise.resolve({ data: preloadedRooms, error: null })
+      : sbClient.from('rooms').select('*').order('name')
+  ]);
+
   try {
-    let rooms = preloadedRooms;
-    if (!rooms || !rooms.length) {
-      const { data, error } = await sbClient.from('rooms').select('*').order('name');
-      if (error) throw error;
-      rooms = data;
-    }
+    let rooms = roomsData.data || preloadedRooms || [];
     if (!rooms?.length) return;
     // Exclude legacy popcorn/cowatch rooms from sidebar
     rooms = rooms.filter(r => r.room_type !== 'cowatch' && !(r.name && r.name.toLowerCase().includes('popcorn')));
+
+    // 1. Rename 'Gaming' to 'ChatCorner'
+    rooms = rooms.map(r => {
+      if (r.name && r.name.toLowerCase() === 'gaming') {
+        return {
+          ...r,
+          name: 'ChatCorner',
+          description: 'ChatCorner main lobby 💬'
+        };
+      }
+      return r;
+    });
+
+    // 2. Ensure "Guest" proper room exists
+    let guestRoom = rooms.find(r => r.name && r.name.toLowerCase() === 'guest');
+    if (!guestRoom) {
+      guestRoom = {
+        id: 'guest-room-global',
+        name: 'Guest',
+        description: 'Welcome lounge for guests',
+        is_audio_enabled: false,
+        _isGuestRoom: true
+      };
+      // Place Guest room right after ChatCorner
+      const ccIdx = rooms.findIndex(r => r.name.toLowerCase() === 'chatcorner');
+      if (ccIdx >= 0) {
+        rooms.splice(ccIdx + 1, 0, guestRoom);
+      } else {
+        rooms.unshift(guestRoom);
+      }
+    }
+
     cachedRooms = rooms;
     const textList = document.getElementById('room-list');
     if (textList) textList.innerHTML = '';
+
+    // Render proper rooms with user count pill in front of room name
     rooms.forEach(room => {
       const icon = room.is_audio_enabled ? '🎤' : '💬';
       const li = document.createElement('li');
-      li.textContent = `${icon} ${room.name}`;
-      li.title = room.user_count != null ? `${room.name} — ${room.user_count} users` : room.name;
       li.dataset.roomId = String(room.id);
+      li.title = room.name;
       if (room.is_locked) {
         li.classList.add('room-item-locked');
       }
+      const initialCount = _roomUserCounts[String(room.id)] || 0;
+      li.innerHTML = `<span class="room-count-pill" title="${initialCount} online">${initialCount}</span><span class="room-icon">${icon}</span> <span class="room-name">${escHtml(room.name)}</span>`;
       li.onclick = () => enterRoom(room);
       li.oncontextmenu = (e) => {
         e.preventDefault();
@@ -1420,27 +1550,29 @@ async function loadRooms(preloadedRooms = null) {
       if (textList) textList.appendChild(li);
     });
 
-    // Inject virtual IPTV room at end of sidebar list
+    // Inject virtual rooms with user count pills in front of room name
     if (textList) {
       if (_virtualRoomConfig.virtual_iptv_enabled) {
         const iptvLi = document.createElement('li');
-        iptvLi.textContent = '📺 IPTV';
-        iptvLi.title = 'IPTV – Live TV Channels';
         iptvLi.dataset.roomId = 'iptv-virtual';
+        iptvLi.title = 'IPTV – Live TV Channels';
         iptvLi.classList.add('iptv-room-item');
+        const count = _roomUserCounts['iptv-virtual'] || 0;
+        iptvLi.innerHTML = `<span class="room-count-pill" title="${count} online">${count}</span><span class="room-icon">📺</span> <span class="room-name">IPTV</span>`;
         iptvLi.onclick = () => enterIPTVRoom();
         textList.appendChild(iptvLi);
       }
 
-      [['sp-virtual', '🎧 Spotify', 'Spotify – Listen together', 'virtual_spotify_enabled'],
-       ['yt-virtual', '▶️ YouTube', 'YouTube – Watch together', 'virtual_youtube_enabled'],
-       ['browser-virtual', '🌐 Browser', 'Browser – Collaborative Browsing', 'virtual_browser_enabled']].forEach(([id, label, title, enabledKey]) => {
+      [['sp-virtual', '🎧', 'Spotify', 'Spotify – Listen together', 'virtual_spotify_enabled'],
+       ['yt-virtual', '▶️', 'YouTube', 'YouTube – Watch together', 'virtual_youtube_enabled'],
+       ['browser-virtual', '🌐', 'Browser', 'Browser – Collaborative Browsing', 'virtual_browser_enabled']].forEach(([id, icon, label, title, enabledKey]) => {
         if (_virtualRoomConfig && _virtualRoomConfig[enabledKey] === false) return;
         const li = document.createElement('li');
-        li.textContent = label;
-        li.title = title;
         li.dataset.roomId = id;
+        li.title = title;
         li.classList.add('iptv-room-item');
+        const count = _roomUserCounts[id] || 0;
+        li.innerHTML = `<span class="room-count-pill" title="${count} online">${count}</span><span class="room-icon">${icon}</span> <span class="room-name">${label}</span>`;
         li.onclick = () => {
           if (id === 'browser-virtual') {
             enterBrowserRoom();
@@ -1450,39 +1582,41 @@ async function loadRooms(preloadedRooms = null) {
         };
         textList.appendChild(li);
       });
+
+      if (_virtualRoomConfig.virtual_ludo_enabled) {
+        const ludoLi = document.createElement('li');
+        ludoLi.dataset.roomId = 'ludo-virtual';
+        ludoLi.title = 'Ludo – Play Ludo Game';
+        ludoLi.classList.add('ludo-room-item');
+        const count = _roomUserCounts['ludo-virtual'] || 0;
+        ludoLi.innerHTML = `<span class="room-count-pill" title="${count} online">${count}</span><span class="room-icon">🎲</span> <span class="room-name">Ludo Room</span>`;
+        ludoLi.onclick = () => enterLudoRoom();
+        textList.appendChild(ludoLi);
+      }
     }
 
-    // Inject virtual Ludo room at end of sidebar list
-    if (textList && _virtualRoomConfig.virtual_ludo_enabled) {
-      const ludoLi = document.createElement('li');
-      ludoLi.textContent = '🎲 Ludo Room';
-      ludoLi.title = 'Ludo – Play Ludo Game';
-      ludoLi.dataset.roomId = 'ludo-virtual';
-      ludoLi.classList.add('ludo-room-item');
-      ludoLi.onclick = () => enterLudoRoom();
-      textList.appendChild(ludoLi);
+    renderRoomsTopbar(rooms);
 
-      
+    // Initial Drop: Guests drop into "Guest", Registered members drop into "ChatCorner"
+    const isGuest = isGuestProfile(currentProfile);
+    let targetRoom = null;
+    if (isGuest) {
+      targetRoom = rooms.find(r => r.name && r.name.toLowerCase() === 'guest') || rooms[0];
+    } else {
+      targetRoom = rooms.find(r => r.name && r.name.toLowerCase() === 'chatcorner')
+                || rooms.find(r => r.name && r.name.toLowerCase() === 'gaming')
+                || rooms[0];
     }
+    enterRoom(targetRoom, false, true);
 
-        renderRoomsTopbar(rooms);
-    // Optimization: skip redundant moderation status check on the first load since we just did it
-    enterRoom(rooms[0], false, true);
     tryAutoEnterLudoFromUrl();
-    if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
+    initGlobalRoomPresence();
+    syncDatabaseRooms(rooms);
   } catch(e) { console.error('loadRooms error', e); }
 }
 
 async function refreshRoomCounts() {
-  try {
-    const { data: rooms } = await sbClient.from('rooms').select('id,user_count').order('name');
-    if (!rooms) return;
-    rooms.forEach(r => {
-      const tab = document.querySelector(`.room-tab[data-room-id="${r.id}"]`);
-      const badge = tab?.querySelector('.room-count-badge');
-      if (badge && r.user_count != null) badge.textContent = r.user_count;
-    });
-  } catch(e) {}
+  updateAllRoomCountsFromPresence();
 }
 
 function updateRoomTabCount(roomId, count) {
@@ -1508,6 +1642,14 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     } else if (room.id === 'ludo-virtual') {
       enterLudoRoom();
     } 
+    return;
+  }
+
+  // ── Access Guard: Only registered members can access other rooms ──
+  const isGuest = isGuestProfile(currentProfile);
+  const isGuestRoom = room.name && room.name.toLowerCase() === 'guest';
+  if (isGuest && !isGuestRoom) {
+    showChatToast('🔒 Only registered members can access other rooms. Please register or log in to unlock all rooms!', 'warning', 5000);
     return;
   }
   // Access Guard check for restricted users and locked rooms
@@ -1546,6 +1688,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (typeof leaveVoice === 'function') leaveVoice();
 
   currentRoom = room;
+  trackMyCurrentRoomPresence();
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '# ' + room.name;
 
@@ -1712,6 +1855,16 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       rememberDeletedMessage(payload.messageId, room.id);
       removeMessageNodeById(payload.messageId);
     })
+    .on('broadcast', { event: 'chat-message' }, async ({ payload }) => {
+      if (!payload || payload.room_id !== room.id) return;
+      if (payload.user_id === currentUser?.id) return;
+      if (!canProcessIncomingPayload(payload.user_id)) return;
+      if (payload.user_id) {
+        await cacheSenderProfiles([payload.user_id]);
+      }
+      appendMessage(payload);
+      scrollToBottom();
+    })
     .subscribe((status) => {
       const banner = document.getElementById('connection-error-banner');
       if (status === 'SUBSCRIBED') {
@@ -1728,8 +1881,9 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       }
     });
 
+  const _roomPresenceKey = (currentUser && currentUser.id) || ('guest_' + Math.random().toString(36).slice(2, 7));
   presenceChannel = sbClient.channel('presence:' + room.id, {
-    config: { presence: { key: currentUser.id } }
+    config: { presence: { key: _roomPresenceKey } }
   });
 
   presenceChannel
@@ -5827,6 +5981,10 @@ function playIPTVChannel(ch, liEl) {
 }
 
 function enterIPTVRoom() {
+  if (isGuestProfile(currentProfile)) {
+    showChatToast('🔒 Only registered members can access other rooms. Please register or log in to unlock all rooms!', 'warning', 5000);
+    return;
+  }
   cleanupVirtualRooms();
   _iptvActive = true;
 
@@ -5885,6 +6043,7 @@ function enterIPTVRoom() {
 
   // Set currentRoom to a virtual object so message sending works via realtime broadcast
   currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: true, _virtual: true };
+  trackMyCurrentRoomPresence();
   updateComposerState();
 
   // Subscribe to realtime broadcast channel for IPTV chat (no DB writes, broadcast only)
@@ -5941,7 +6100,16 @@ function exitIPTVRoom() {
 function exitIPTVRoomAndShowRooms() {
   cleanupVirtualRooms();
   if (cachedRooms && cachedRooms.length > 0) {
-    enterRoom(cachedRooms[0]);
+    const isGuest = isGuestProfile(currentProfile);
+    let targetRoom = null;
+    if (isGuest) {
+      targetRoom = cachedRooms.find(r => r.name && r.name.toLowerCase() === 'guest') || cachedRooms[0];
+    } else {
+      targetRoom = cachedRooms.find(r => r.name && r.name.toLowerCase() === 'chatcorner')
+                || cachedRooms.find(r => r.name && r.name.toLowerCase() === 'gaming')
+                || cachedRooms[0];
+    }
+    enterRoom(targetRoom);
   }
   if (typeof switchMobileTab === 'function') {
     switchMobileTab('rooms');
@@ -6373,6 +6541,10 @@ function tryAutoEnterLudoFromUrl() {
 
 /* ── Ludo Room Functions ── */
 function enterLudoRoom(roomKey) {
+  if (isGuestProfile(currentProfile)) {
+    showChatToast('🔒 Only registered members can access other rooms. Please register or log in to unlock all rooms!', 'warning', 5000);
+    return;
+  }
   cleanupVirtualRooms();
 
   // Mark sidebar item active
@@ -6383,6 +6555,7 @@ function enterLudoRoom(roomKey) {
   // Set virtual room state
   const resolvedRoomKey = sanitizeLudoRoomKey(roomKey) || getDefaultLudoRoomKey();
   currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true };
+  trackMyCurrentRoomPresence();
 
   // Update topbar title
   const titleEl = document.getElementById('current-room-name');
@@ -6526,6 +6699,10 @@ function _mediaToast(msg) {
 }
 
 function enterMediaRoom(id) {
+  if (isGuestProfile(currentProfile)) {
+    showChatToast('🔒 Only registered members can access other rooms. Please register or log in to unlock all rooms!', 'warning', 5000);
+    return;
+  }
   cleanupVirtualRooms();
   const kind = id === 'sp-virtual' ? 'sp' : 'yt';
   _mediaKind = kind;
@@ -6572,6 +6749,7 @@ function enterMediaRoom(id) {
   }
 
   currentRoom = { id, name: kind === 'sp' ? 'Spotify' : 'YouTube', is_audio_enabled: true, _virtual: true };
+  trackMyCurrentRoomPresence();
   updateComposerState();
 
   if (kind === 'yt') initYouTubeRoom(); else initSpotifyRoom();
