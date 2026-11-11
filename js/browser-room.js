@@ -402,9 +402,6 @@ window.BrowserRoom = (function() {
       is_audio_enabled: true,
       _virtual: true
     };
-    if (typeof window.trackMyCurrentRoomPresence === 'function') {
-      window.trackMyCurrentRoomPresence();
-    }
     if (typeof window.updateComposerState === 'function') {
       window.updateComposerState();
     }

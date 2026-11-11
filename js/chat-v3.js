@@ -1388,63 +1388,16 @@ window.addEventListener('DOMContentLoaded', async () => {
   window._ccReconnect = _reconnect;
 });
 
-// ── Global Realtime Room Presence (User Counts in Every Room) ──
-let _globalRoomPresenceChannel = null;
+// ── Lightweight Room User Count Management (Zero WebSocket Overhead) ──
+let _roomCountInterval = null;
 let _roomUserCounts = {};
 
-function initGlobalRoomPresence() {
-  if (_globalRoomPresenceChannel || !window.sbClient) return;
-  const myKey = (currentUser && currentUser.id) || currentProfile?.username || ('guest_' + Math.random().toString(36).slice(2, 7));
-  _globalRoomPresenceChannel = window.sbClient.channel('cc-global-rooms', {
-    config: { presence: { key: myKey } }
-  });
-
-  _globalRoomPresenceChannel
-    .on('presence', { event: 'sync' }, () => updateAllRoomCountsFromPresence())
-    .on('presence', { event: 'join' }, () => updateAllRoomCountsFromPresence())
-    .on('presence', { event: 'leave' }, () => updateAllRoomCountsFromPresence())
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        trackMyCurrentRoomPresence();
-      }
-    });
-}
-window.initGlobalRoomPresence = initGlobalRoomPresence;
-
-function trackMyCurrentRoomPresence() {
-  if (!_globalRoomPresenceChannel || !currentRoom) return;
-  const myId = (currentUser && currentUser.id) || ('guest_' + Math.random().toString(36).slice(2, 7));
-  const myName = (currentProfile && currentProfile.username) || 'Guest';
-  _globalRoomPresenceChannel.track({
-    userId: myId,
-    username: myName,
-    roomId: String(currentRoom.id),
-    roomName: currentRoom.name || '',
-    ts: Date.now()
-  }).catch(() => {});
-}
-window.trackMyCurrentRoomPresence = trackMyCurrentRoomPresence;
-
-function updateAllRoomCountsFromPresence() {
-  if (!_globalRoomPresenceChannel) return;
-  const state = _globalRoomPresenceChannel.presenceState();
-  const counts = {};
-
-  Object.values(state).forEach(entries => {
-    (entries || []).forEach(e => {
-      if (e && e.roomId) {
-        counts[e.roomId] = (counts[e.roomId] || 0) + 1;
-      }
-    });
-  });
-
-  _roomUserCounts = counts;
-
-  // Update badges in front of all rooms in sidebar and popup in real time
+function updateAllRoomCounts(counts = _roomUserCounts) {
+  _roomUserCounts = counts || {};
   document.querySelectorAll('#room-list li').forEach(li => {
     const roomId = li.dataset.roomId;
     if (!roomId) return;
-    const count = counts[roomId] || 0;
+    const count = counts[roomId] ?? (roomId === currentRoom?.id ? Object.keys(onlineUsers || {}).length : 0);
     let badge = li.querySelector('.room-count-pill');
     if (!badge) {
       badge = document.createElement('span');
@@ -1452,34 +1405,28 @@ function updateAllRoomCountsFromPresence() {
       li.prepend(badge);
     }
     badge.textContent = count;
-    badge.title = `${count} user${count === 1 ? '' : 's'} online in this room`;
+    badge.title = count + ' online in this room';
   });
 }
-window.updateAllRoomCountsFromPresence = updateAllRoomCountsFromPresence;
+window.updateAllRoomCounts = updateAllRoomCounts;
+window.updateAllRoomCountsFromPresence = updateAllRoomCounts;
+window.trackMyCurrentRoomPresence = () => {};
+window.initGlobalRoomPresence = () => {};
 
-async function syncDatabaseRooms(rooms) {
-  if (!currentProfile || (!currentProfile.is_admin && !currentProfile.is_owner)) return;
+async function refreshRoomCounts() {
   try {
-    const gaming = rooms.find(r => r.name && r.name.toLowerCase() === 'gaming');
-    if (gaming) {
-      await sbClient.from('rooms').update({ name: 'ChatCorner', description: 'ChatCorner main lobby 💬' }).eq('id', gaming.id);
+    const { data: rooms } = await sbClient.from('rooms').select('id,user_count');
+    if (!rooms) return;
+    rooms.forEach(r => {
+      _roomUserCounts[String(r.id)] = r.user_count || 0;
+    });
+    if (currentRoom) {
+      _roomUserCounts[String(currentRoom.id)] = Object.keys(onlineUsers || {}).length || 1;
     }
-  } catch (_) {}
-  try {
-    const hasGuestInDb = rooms.some(r => r.name && r.name.toLowerCase() === 'guest' && !r._isGuestRoom);
-    if (!hasGuestInDb) {
-      const { data: newGuest } = await sbClient.from('rooms').insert({
-        name: 'Guest',
-        description: 'Welcome lounge for guests',
-        is_audio_enabled: false
-      }).select().maybeSingle();
-      if (newGuest && currentRoom && currentRoom._isGuestRoom) {
-        currentRoom.id = newGuest.id;
-        delete currentRoom._isGuestRoom;
-      }
-    }
-  } catch (_) {}
+    updateAllRoomCounts(_roomUserCounts);
+  } catch(_) {}
 }
+window.refreshRoomCounts = refreshRoomCounts;
 
 async function loadRooms(preloadedRooms = null) {
   // Parallelize config loading to boost speed
@@ -1610,13 +1557,8 @@ async function loadRooms(preloadedRooms = null) {
     enterRoom(targetRoom, false, true);
 
     tryAutoEnterLudoFromUrl();
-    initGlobalRoomPresence();
-    syncDatabaseRooms(rooms);
+    if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
-}
-
-async function refreshRoomCounts() {
-  updateAllRoomCountsFromPresence();
 }
 
 function updateRoomTabCount(roomId, count) {
@@ -1688,7 +1630,6 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (typeof leaveVoice === 'function') leaveVoice();
 
   currentRoom = room;
-  trackMyCurrentRoomPresence();
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '# ' + room.name;
 
@@ -1894,7 +1835,13 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
       }));
-      updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
+      const currentRoomCount = Object.keys(onlineUsers).length;
+      updateRoomTabCount(currentRoom.id, currentRoomCount);
+      if (currentRoom) {
+        _roomUserCounts[String(currentRoom.id)] = currentRoomCount;
+        const myPill = document.querySelector(`#room-list li[data-room-id="${currentRoom.id}"] .room-count-pill`);
+        if (myPill) myPill.textContent = currentRoomCount;
+      }
       scheduleRenderUserList();
     })
     .on('presence', { event: 'join' }, ({ newPresences }) => {
@@ -6043,7 +5990,6 @@ function enterIPTVRoom() {
 
   // Set currentRoom to a virtual object so message sending works via realtime broadcast
   currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: true, _virtual: true };
-  trackMyCurrentRoomPresence();
   updateComposerState();
 
   // Subscribe to realtime broadcast channel for IPTV chat (no DB writes, broadcast only)
@@ -6555,8 +6501,6 @@ function enterLudoRoom(roomKey) {
   // Set virtual room state
   const resolvedRoomKey = sanitizeLudoRoomKey(roomKey) || getDefaultLudoRoomKey();
   currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true };
-  trackMyCurrentRoomPresence();
-
   // Update topbar title
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '🎲 Ludo Room';
@@ -6749,7 +6693,6 @@ function enterMediaRoom(id) {
   }
 
   currentRoom = { id, name: kind === 'sp' ? 'Spotify' : 'YouTube', is_audio_enabled: true, _virtual: true };
-  trackMyCurrentRoomPresence();
   updateComposerState();
 
   if (kind === 'yt') initYouTubeRoom(); else initSpotifyRoom();
