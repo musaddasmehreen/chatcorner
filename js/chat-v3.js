@@ -1740,6 +1740,17 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   refreshIgnoredMessageVisibility();
   scrollToBottom();
 
+  const guideBanner = document.getElementById('guest-room-guidance-banner');
+  if (guideBanner) {
+    guideBanner.classList.toggle('hidden', !isGuestRoom);
+  }
+  if (isGuestRoom) {
+    appendGuestRoomGuidanceCard();
+    startGuestRoomGuidanceBroadcast();
+  } else {
+    stopGuestRoomGuidanceBroadcast();
+  }
+
   messageChannel = sbClient
     .channel('room:' + room.id)
     .on('postgres_changes', {
@@ -6423,7 +6434,74 @@ async function handleMenuRestrictUser() {
 
 
 /* ── Virtual Rooms Unified Cleanup ── */
+
+/* ── Guest Room Guidance & Registration System ── */
+let _guestGuideTimer = null;
+
+function appendGuestRoomGuidanceCard() {
+  const container = document.getElementById('messages');
+  if (!container || container.querySelector('.guest-chat-guide-card')) return;
+  const card = document.createElement('div');
+  card.className = 'guest-chat-guide-card';
+  card.innerHTML = `
+    <div class="guest-chat-guide-header">
+      <span>💡 Welcome to ChatCorner Guest Lounge</span>
+    </div>
+    <div class="guest-chat-guide-body">
+      <p style="margin:0 0 0.5rem;color:#f1f5f9;">You are currently in the <strong>#Guest</strong> room. Only registered members can access other chatrooms and virtual media rooms.</p>
+      <ul class="guest-chat-guide-perks">
+        <li>🔓 <strong>ChatRooms:</strong> ChatCorner, General, Voice Lounge</li>
+        <li>🌐 <strong>Browser Room:</strong> Synchronized watch parties & browsing</li>
+        <li>📺 <strong>Virtual Entertainment:</strong> IPTV Channels, Spotify & Ludo</li>
+        <li>🎙️ <strong>Voice Calls & Notes:</strong> Send and hear voice notes in real-time</li>
+        <li>🎨 <strong>Personal Identity:</strong> Custom avatar, nick colors & VIP status</li>
+      </ul>
+      <p style="margin:0.5rem 0 0.4rem;font-size:0.78rem;color:#a78bfa;">Registration is 100% free, takes 10 seconds, and only requires a username and password.</p>
+      <div class="guest-chat-guide-actions">
+        <a href="login.html" class="btn-guest-register-cta">👉 Click Here to Register Free / Log In</a>
+      </div>
+    </div>
+  `;
+  container.prepend(card);
+}
+
+function startGuestRoomGuidanceBroadcast() {
+  if (_guestGuideTimer) clearInterval(_guestGuideTimer);
+  _guestGuideTimer = setInterval(() => {
+    if (!currentRoom || currentRoom.name?.toLowerCase() !== 'guest') {
+      stopGuestRoomGuidanceBroadcast();
+      return;
+    }
+    const container = document.getElementById('messages');
+    if (!container) return;
+    const noticeNode = document.createElement('div');
+    noticeNode.className = 'msg-row system-msg guest-guide-notice';
+    noticeNode.innerHTML = `
+      <div class="msg-bubble system-bubble" style="background:linear-gradient(135deg,rgba(139,109,237,0.22),rgba(236,72,153,0.22));border:1px solid rgba(139,109,237,0.45);border-radius:10px;padding:0.6rem 0.9rem;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,0.3);">
+        <span style="font-weight:700;color:#f472b6;">📢 Registration Guidance:</span>
+        <span style="color:#e2e8f0;margin:0 6px;">Register your free account to unlock <strong>ChatCorner</strong>, <strong>Browser Room</strong>, <strong>IPTV</strong>, and voice notes!</span>
+        <a href="login.html" style="color:#38bdf8;font-weight:700;text-decoration:underline;margin-left:4px;">Register Free →</a>
+      </div>
+    `;
+    container.appendChild(noticeNode);
+    scrollToBottom();
+  }, 120000);
+}
+
+function stopGuestRoomGuidanceBroadcast() {
+  if (_guestGuideTimer) {
+    clearInterval(_guestGuideTimer);
+    _guestGuideTimer = null;
+  }
+}
+window.appendGuestRoomGuidanceCard = appendGuestRoomGuidanceCard;
+window.startGuestRoomGuidanceBroadcast = startGuestRoomGuidanceBroadcast;
+window.stopGuestRoomGuidanceBroadcast = stopGuestRoomGuidanceBroadcast;
+
 function cleanupVirtualRooms() {
+  const guideBanner = document.getElementById('guest-room-guidance-banner');
+  if (guideBanner) guideBanner.classList.add('hidden');
+  stopGuestRoomGuidanceBroadcast();
   // Exit voice and cleanup message/presence realtime channels from old room
   if (messageChannel) sbClient.removeChannel(messageChannel);
   if (presenceChannel) sbClient.removeChannel(presenceChannel);

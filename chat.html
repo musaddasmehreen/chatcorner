@@ -57,7 +57,7 @@
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.8"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.1" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=4.0" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=4.1" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -65,7 +65,7 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v36';
+    const CURRENT_VERSION = 'v37';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -419,6 +419,25 @@
           ⬆ Load older messages
         </button>
 
+        <!-- Guest Room Guidance & Registration Banner -->
+        <div id="guest-room-guidance-banner" class="guest-room-guidance-banner hidden" role="region" aria-label="Guest Room Guidance">
+          <div class="guest-guide-content">
+            <div class="guest-guide-header">
+              <span class="guest-guide-tag">🚀 REGISTRATION GUIDANCE</span>
+              <span class="guest-guide-title">Unlock All Rooms & Full Access</span>
+            </div>
+            <p class="guest-guide-desc">
+              You are currently in the <strong>Guest Room</strong>. Only registered members can access <strong>ChatCorner</strong>, <strong>General</strong>, <strong>Voice Lounge</strong>, <strong>Browser Room</strong>, <strong>IPTV</strong>, <strong>Spotify</strong> & <strong>Ludo</strong>.
+            </p>
+            <div class="guest-guide-steps">
+              <span>1️⃣ Click Register</span>
+              <span>2️⃣ Choose Username & Password</span>
+              <span>3️⃣ Instant Full Access (No complex steps!)</span>
+            </div>
+          </div>
+          <a href="login.html" class="btn-guest-register-cta">✨ Register Free / Log In</a>
+        </div>
+
         <!-- Messages -->
         <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
 
@@ -598,7 +617,7 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=7.1" defer></script>
+  <script src="js/chat-v3.js?v=7.2" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
