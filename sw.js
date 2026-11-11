@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chatcorner-v42';
+const CACHE_NAME = 'chatcorner-v43';
 
 const STATIC_ASSETS = [
   './',
