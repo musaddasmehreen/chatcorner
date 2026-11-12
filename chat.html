@@ -57,7 +57,7 @@
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.8"/>
   <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.1" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=4.1" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=4.2" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -65,7 +65,7 @@
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
     // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v37';
+    const CURRENT_VERSION = 'v38';
     if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -201,7 +201,7 @@
     <!-- TOPBAR -->
     <header class="topbar" role="banner">
       <div class="rooms-menu" id="rooms-menu">
-        <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms">&#9776;</button>
+        <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms"><span class="rooms-btn-icon">&#9776;</span> <span class="rooms-btn-text">Rooms</span></button>
         <div class="rooms-popup" id="rooms-popup" role="menu" hidden>
           <div class="rooms-popup-title">🏠 Rooms <button type="button" class="rooms-popup-close" aria-label="Close rooms" onclick="document.getElementById('btn-rooms-menu').click()">✕</button></div>
           <ul class="room-list" id="room-list"></ul>
