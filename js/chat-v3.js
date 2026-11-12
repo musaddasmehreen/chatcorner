@@ -1121,6 +1121,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (localAvatar && currentProfile) currentProfile.avatar_url = localAvatar;
   updatePresenceBaseFromProfile(currentProfile);
   startProfileRealtimeWatcher();
+  initGlobalNotificationChannel();
   startOnlineTimeTracking(currentProfile);
 
   if (!currentProfile.is_registered && !sessionStorage.getItem('cc-nick-prompt-shown')) {
@@ -1413,12 +1414,60 @@ window.updateAllRoomCountsFromPresence = updateAllRoomCounts;
 window.trackMyCurrentRoomPresence = () => {};
 window.initGlobalRoomPresence = () => {};
 
+// ── Global Guest Notification Dot Management ──
+let globalNotifChannel = null;
+let _hasGuestNotification = false;
+
+function showGuestNotificationDot() {
+  const isCurrentlyInGuestRoom = (currentRoom && currentRoom.name && currentRoom.name.toLowerCase() === 'guest');
+  if (isCurrentlyInGuestRoom) return; // Don't show dot if user is already inside the Guest room
+  _hasGuestNotification = true;
+  const dot = document.getElementById('rooms-guest-dot');
+  if (dot) dot.classList.add('visible');
+}
+window.showGuestNotificationDot = showGuestNotificationDot;
+
+function dismissGuestNotificationDot() {
+  _hasGuestNotification = false;
+  const dot = document.getElementById('rooms-guest-dot');
+  if (dot) dot.classList.remove('visible');
+}
+window.dismissGuestNotificationDot = dismissGuestNotificationDot;
+
+function initGlobalNotificationChannel() {
+  if (globalNotifChannel) return;
+  globalNotifChannel = sbClient
+    .channel('global:guest-alerts')
+    .on('broadcast', { event: 'guest-entered' }, ({ payload }) => {
+      // If someone else entered the Guest room, light up the notification dot
+      showGuestNotificationDot();
+    })
+    .subscribe();
+}
+
+function broadcastGuestEntered() {
+  try {
+    if (!globalNotifChannel) initGlobalNotificationChannel();
+    globalNotifChannel.send({
+      type: 'broadcast',
+      event: 'guest-entered',
+      payload: {
+        timestamp: Date.now()
+      }
+    }).catch(() => {});
+  } catch (_) {}
+}
+
 async function refreshRoomCounts() {
   try {
-    const { data: rooms } = await sbClient.from('rooms').select('id,user_count');
+    const { data: rooms } = await sbClient.from('rooms').select('id,user_count,name');
     if (!rooms) return;
     rooms.forEach(r => {
       _roomUserCounts[String(r.id)] = r.user_count || 0;
+      // If Guest room has users and we are in another room, ensure dot is lit
+      if (r.name && r.name.toLowerCase() === 'guest' && (r.user_count || 0) > 0) {
+        showGuestNotificationDot();
+      }
     });
     if (currentRoom) {
       _roomUserCounts[String(currentRoom.id)] = Object.keys(onlineUsers || {}).length || 1;
@@ -1632,6 +1681,11 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   currentRoom = room;
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '# ' + room.name;
+
+  // If user enters Guest room, dismiss the red dot
+  if (room.name && room.name.toLowerCase() === 'guest') {
+    dismissGuestNotificationDot();
+  }
 
   // Dynamic SEO: update page title and meta description for the current room
   document.title = `#${room.name} – ChatCorner`;
@@ -1905,6 +1959,10 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         if (banner) banner.classList.add('hidden');
         window._ccReconnect?.reset();
         await presenceChannel.track(presenceBaseData);
+        // If current user is in Guest room, broadcast notification to other rooms
+        if (room && room.name && room.name.toLowerCase() === 'guest') {
+          broadcastGuestEntered();
+        }
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (banner) {
           banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';

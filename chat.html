@@ -201,7 +201,7 @@
     <!-- TOPBAR -->
     <header class="topbar" role="banner">
       <div class="rooms-menu" id="rooms-menu">
-        <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms"><span class="rooms-btn-icon">&#9776;</span> <span class="rooms-btn-text">Rooms</span></button>
+        <button class="rooms-menu-btn" id="btn-rooms-menu" type="button" aria-label="Rooms" aria-haspopup="true" aria-expanded="false" title="Rooms"><span class="rooms-btn-icon">&#9776;</span> <span class="rooms-btn-text">Rooms</span><span class="rooms-guest-dot" id="rooms-guest-dot" title="A guest has entered the Guest room"></span></button>
         <div class="rooms-popup" id="rooms-popup" role="menu" hidden>
           <div class="rooms-popup-title">🏠 Rooms <button type="button" class="rooms-popup-close" aria-label="Close rooms" onclick="document.getElementById('btn-rooms-menu').click()">✕</button></div>
           <ul class="room-list" id="room-list"></ul>
@@ -713,6 +713,9 @@
           const willOpen = pop.hidden;
           if (willOpen && typeof window.refreshRoomCounts === 'function') {
             window.refreshRoomCounts();
+          }
+          if (willOpen && typeof window.dismissGuestNotificationDot === 'function') {
+            window.dismissGuestNotificationDot();
           }
           setOpen(willOpen);
         });
