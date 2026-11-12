@@ -1856,8 +1856,45 @@
 .topbar-logo-area { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; margin-left: 0.1rem; margin-right: 1.25rem; }
 .topbar-room { flex: 0 1 auto; text-align: left; padding-left: 0.25rem; margin-right: auto; }
 .topbar-actions { align-items: center; }
-.topbar-clears-stack { flex-direction: row !important; height: auto !important; align-items: center; gap: 4px !important; }
-.topbar-clear-btn { font-size: 0.68rem !important; padding: 4px 8px !important; line-height: 1.2 !important; }
+.topbar-clears-stack {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: stretch !important;
+  gap: 2px !important;
+  height: auto !important;
+  margin-right: 0.35rem !important;
+  padding: 1px 0 !important;
+}
+.topbar-clear-btn {
+  font-size: 0.62rem !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  padding: 2px 7px !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-muted, #c4b5fd) !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  text-align: center !important;
+  transition: all 0.15s ease !important;
+}
+.topbar-clear-btn:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+.topbar-clear-btn#btn-clear-all {
+  color: #fca5a5 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+.topbar-clear-btn#btn-clear-all:hover {
+  background: rgba(239, 68, 68, 0.22) !important;
+  color: #ffffff !important;
+  border-color: #ef4444 !important;
+}
 
 /* Channel strip */
 .rooms-strip { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); }
