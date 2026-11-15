@@ -2,7 +2,7 @@
    Reads/writes localStorage key 'cc-theme'.
    Syncs dots in both the chat theme bar and any fixed switcher.
 ═══════════════════════════════════════════════════════════════ */
-const THEMES      = ['nebula','ember','arctic','matrix','rose'];
+const THEMES      = ['nebula','ember','arctic','matrix','rose','sakura'];
 const THEME_NAMES = { nebula:'Nebula', ember:'Ember \ud83d\udd25', arctic:'Arctic \u2744\ufe0f', matrix:'Matrix', rose:'Rose \ud83c\udf38' };
 const GUEST_VOICE_LIMIT = 2;
 const EMOJI_GROUPS = [

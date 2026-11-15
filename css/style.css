@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
    ChatCorner — Master Stylesheet
-   5 Themes: nebula | ember | arctic | matrix | rose
+   6 Themes: nebula | ember | arctic | matrix | rose | sakura
    Design principle: light, airy, readable — nothing overfilled.
 ═══════════════════════════════════════════════════════════════ */
 
@@ -148,6 +148,32 @@
   --input-bg:    #0c0612;
   --send-btn:    linear-gradient(135deg,#e0628a,#f0a0c0);
   --shadow:      0 6px 28px rgba(0,0,0,0.45);
+}
+
+/* ── Theme: Sakura — crisp white & lime green, ultra clean ── */
+[data-theme="sakura"] {
+  --bg:          #f7fff7;
+  --surface:     #ffffff;
+  --panel:       #edfced;
+  --border:      #c3ecc3;
+  --accent:      #2bb52b;
+  --accent2:     #ff6faa;
+  --accent-rgb:  43,181,43;
+  --accent2-rgb: 255,111,170;
+  --green:       #16a34a;
+  --red:         #ef4444;
+  --text:        #1a2e1a;
+  --muted:       #5a7a5a;
+  --nick:        #1a7a1a;
+  --msg-bg:      #edfced;
+  --msg-self:    #d4f7d4;
+  --radius:      12px;
+  --particle:    rgba(43,181,43,0.08);
+  --glow:        rgba(43,181,43,0.16);
+  --topbar-bg:   #d8f8d8;
+  --input-bg:    #f0fff0;
+  --send-btn:    linear-gradient(135deg,#2bb52b,#ff6faa);
+  --shadow:      0 4px 20px rgba(43,181,43,0.13);
 }
 
 /* ══ GLOBAL ══════════════════════════════════════════════════ */
@@ -873,26 +899,28 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   border-radius: 14px 14px 14px 4px;
   padding: 0.5rem 0.82rem 0.4rem;
   max-width: 100%;
-  border: 1px solid rgba(255,255,255,0.04);
+  border: none;
   transition: background 0.25s;
 }
 
 [data-theme="arctic"] .msg-bubble {
-  border: 1px solid rgba(0,0,0,0.06);
+  border: none;
 }
 
 .msg-row.self .msg-bubble {
   background: var(--msg-self);
   border-radius: 14px 14px 4px 14px;
-  border-color: rgba(var(--accent-rgb),0.15);
+  border: none;
 }
 
+/* ── Image / GIF messages: fully borderless, no background, no padding ── */
 .msg-row.image-message .msg-bubble {
   position: relative;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
 }
 
 .msg-row.image-message .avatar {
@@ -959,12 +987,12 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   display: block;
   width: min(100%, 340px);
   height: auto;
-  max-height: 260px;
+  max-height: 280px;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 10px;
   margin-top: 0.2rem;
-  border: 0;
-  background: rgba(255,255,255,0.04);
+  border: none;
+  background: transparent;
   transition: transform 0.2s ease;
 }
 .msg-inline-image:hover,
