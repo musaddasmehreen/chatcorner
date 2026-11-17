@@ -424,6 +424,37 @@ window.clearAllFormatting = function() {
   document.getElementById('msg-input')?.focus();
 };
 
+// Fast Enter-to-Send Handler (immediate, reliable, zero delay)
+function onChatInputKeyDown(event) {
+  if (!event) return;
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+    if (event.key === 'b' || event.key === 'B') {
+      event.preventDefault();
+      window.toggleFormatBtn?.('bold');
+      return;
+    }
+    if (event.key === 'i' || event.key === 'I') {
+      event.preventDefault();
+      window.toggleFormatBtn?.('italic');
+      return;
+    }
+    if (event.key === 'u' || event.key === 'U') {
+      event.preventDefault();
+      window.toggleFormatBtn?.('underline');
+      return;
+    }
+  }
+
+  // Enter sends message (Shift+Enter allows newline)
+  if ((event.key === 'Enter' || event.keyCode === 13 || event.which === 13) && !event.shiftKey) {
+    event.preventDefault();
+    event.stopPropagation();
+    sendMessage();
+    return false;
+  }
+}
+window.onChatInputKeyDown = onChatInputKeyDown;
+
 // Initialize formatting styles on load
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', loadChatFormatState);
@@ -1484,29 +1515,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       autoResizeTextarea(msgInputEl);
     });
     // Enter = send, Shift+Enter = newline, Ctrl+B/I/U = toggle format
-    msgInputEl.addEventListener('keydown', (event) => {
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
-        if (event.key === 'b' || event.key === 'B') {
-          event.preventDefault();
-          window.toggleFormatBtn?.('bold');
-          return;
-        }
-        if (event.key === 'i' || event.key === 'I') {
-          event.preventDefault();
-          window.toggleFormatBtn?.('italic');
-          return;
-        }
-        if (event.key === 'u' || event.key === 'U') {
-          event.preventDefault();
-          window.toggleFormatBtn?.('underline');
-          return;
-        }
-      }
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage();
-      }
-    });
+    msgInputEl.addEventListener('keydown', onChatInputKeyDown);
   }
 
   // Scroll-to-bottom button visibility
@@ -2405,8 +2414,19 @@ async function sendMessage() {
   const isSendingImage = !imagePopover?.classList.contains('hidden') && !!rawImageUrl;
   if (!text && !isSendingImage) return;
   if (!currentRoom) {
-    appendSystemMessage('No room selected. Please wait for rooms to load...');
-    return;
+    if (Array.isArray(cachedRooms) && cachedRooms.length > 0) {
+      const isGuest = typeof isGuestProfile === 'function' && isGuestProfile(currentProfile);
+      const targetRoom = isGuest
+        ? (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'guest') || cachedRooms[0])
+        : (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'chatcorner') || cachedRooms[0]);
+      if (targetRoom) {
+        await enterRoom(targetRoom, false, true);
+      }
+    }
+    if (!currentRoom) {
+      appendSystemMessage('No room selected. Please click a room from the Rooms list.');
+      return;
+    }
   }
   if (currentRoom.is_locked && !isAdminOrOwnerOrMod) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
