@@ -460,7 +460,9 @@
   background: var(--surface);
   flex-shrink: 0;
   flex-wrap: wrap;
-  overflow-x: auto;
+  overflow: visible;
+  position: relative;
+  z-index: 50;
 }
 .audio-bar.hidden { display: none; }
 .audio-status-text { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }

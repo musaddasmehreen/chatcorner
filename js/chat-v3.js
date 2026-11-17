@@ -225,10 +225,6 @@ function parseChatBbcodeHtml(text) {
   res = res.replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>');
   // [u]...[/u]
   res = res.replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<span style="text-decoration: underline;">$1</span>');
-  // [s]...[/s]
-  res = res.replace(/\[s\]([\s\S]*?)\[\/s\]/gi, '<del>$1</del>');
-  // [glow]...[/glow]
-  res = res.replace(/\[glow\]([\s\S]*?)\[\/glow\]/gi, '<span class="glow-text">$1</span>');
 
   // [color=#hex or name]...[/color]
   res = res.replace(/\[color=([#a-zA-Z0-9]+)\]([\s\S]*?)\[\/color\]/gi, (match, color, content) => {
@@ -240,12 +236,6 @@ function parseChatBbcodeHtml(text) {
   res = res.replace(/\[size=(\d{1,2})\]([\s\S]*?)\[\/size\]/gi, (match, size, content) => {
     const s = Math.min(24, Math.max(10, parseInt(size, 10) || 13));
     return `<span style="font-size: ${s}px;">${content}</span>`;
-  });
-
-  // [font=name]...[/font]
-  res = res.replace(/\[font=([a-zA-Z0-9_\-\s]+)\]([\s\S]*?)\[\/font\]/gi, (match, font, content) => {
-    const safeFont = String(font).replace(/[^a-zA-Z0-9_\-\s]/g, '');
-    return `<span style="font-family: '${safeFont}', sans-serif;">${content}</span>`;
   });
 
   return res;
@@ -266,56 +256,82 @@ function formatMessageContent(rawContent) {
 window.formatMessageText = formatMessageContent;
 
 /* ════════════════════════════════════════════════════════════════
-   Smart Text Formatting Toolbar (BBCode & Outgoing Message State)
+   Smart Text Formatting Toolbar (B, I, U, Color, Size)
    ════════════════════════════════════════════════════════════════ */
 window.chatFormatState = {
   bold: false,
   italic: false,
   underline: false,
-  strike: false,
-  glow: false,
   color: null,
-  size: null,
-  font: null
+  size: null
 };
 
 window.toggleFormatBtn = function(type) {
   const textarea = document.getElementById('msg-input');
-  const selStart = textarea?.selectionStart;
-  const selEnd = textarea?.selectionEnd;
-  const hasSelection = (textarea && selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+  if (!textarea) return;
+  const tagMap = { bold: 'b', italic: 'i', underline: 'u' };
+  const tag = tagMap[type];
+  if (!tag) return;
+
+  const selStart = textarea.selectionStart;
+  const selEnd = textarea.selectionEnd;
+  const val = textarea.value;
+  const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
 
   if (hasSelection) {
-    const val = textarea.value;
+    // 1. User selected a range of text -> wrap the selected range
     const selected = val.substring(selStart, selEnd);
-    const tagMap = { bold: 'b', italic: 'i', underline: 'u', strike: 's', glow: 'glow' };
-    const tag = tagMap[type];
-    if (tag) {
-      const wrapped = `[${tag}]${selected}[/${tag}]`;
-      textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
+    const wrapped = `[${tag}]${selected}[/${tag}]`;
+    textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
+    textarea.focus();
+    const newCursor = selStart + tag.length + 2 + selected.length + tag.length + 3;
+    textarea.setSelectionRange(newCursor, newCursor);
+    window.chatFormatState[type] = true;
+  } else if (val.trim().length > 0) {
+    // 2. User has text in textarea but no selection -> wrap or unwrap the whole text
+    const openTag = `[${tag}]`;
+    const closeTag = `[/${tag}]`;
+    if (val.startsWith(openTag) && val.endsWith(closeTag)) {
+      // Unwrap
+      textarea.value = val.slice(openTag.length, -closeTag.length);
+      window.chatFormatState[type] = false;
+    } else {
+      // Wrap whole text
+      textarea.value = `${openTag}${val}${closeTag}`;
+      window.chatFormatState[type] = true;
+    }
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  } else {
+    // 3. Textarea is empty -> insert tags and place cursor in the middle [b]|[/b]
+    window.chatFormatState[type] = !window.chatFormatState[type];
+    if (window.chatFormatState[type]) {
+      textarea.value = `[${tag}][/${tag}]`;
+      const cursorPos = tag.length + 2;
       textarea.focus();
-      textarea.setSelectionRange(selStart + tag.length + 2, selStart + tag.length + 2 + selected.length);
-      return;
+      textarea.setSelectionRange(cursorPos, cursorPos);
+    } else {
+      textarea.value = '';
+      textarea.focus();
     }
   }
 
-  // Toggle persistent mode for outgoing messages
-  window.chatFormatState[type] = !window.chatFormatState[type];
+  // Update button active UI
   const btn = document.getElementById('fmt-' + type);
   if (btn) btn.classList.toggle('active', !!window.chatFormatState[type]);
-  const menuItem = document.getElementById('fmt-item-' + type);
-  if (menuItem) menuItem.classList.toggle('active', !!window.chatFormatState[type]);
   closeAllFormatPopovers();
-  textarea?.focus();
 };
 
 window.toggleFormatDropdown = function(ev, type) {
-  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (ev) {
+    ev.stopPropagation();
+    ev.preventDefault();
+  }
   const popover = document.getElementById('fmt-' + type + '-popover');
   if (!popover) return;
-  const isHidden = popover.classList.contains('hidden');
+  const willOpen = popover.classList.contains('hidden');
   closeAllFormatPopovers();
-  if (isHidden) {
+  if (willOpen) {
     popover.classList.remove('hidden');
   }
 };
@@ -324,23 +340,18 @@ window.closeAllFormatPopovers = function() {
   document.querySelectorAll('.fmt-popover').forEach(p => p.classList.add('hidden'));
 };
 
+// Close formatting dropdowns when clicking anywhere outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#chat-format-toolbar')) {
+    closeAllFormatPopovers();
+  }
+});
+
 window.applyColorFormat = function(color) {
   const textarea = document.getElementById('msg-input');
-  const selStart = textarea?.selectionStart;
-  const selEnd = textarea?.selectionEnd;
-  const hasSelection = (textarea && selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+  window.chatFormatState.color = color || null;
 
-  if (hasSelection && color) {
-    const val = textarea.value;
-    const selected = val.substring(selStart, selEnd);
-    const wrapped = `[color=${color}]${selected}[/color]`;
-    textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
-    closeAllFormatPopovers();
-    textarea.focus();
-    return;
-  }
-
-  window.chatFormatState.color = color;
+  // Update color preview UI
   const preview = document.getElementById('fmt-color-preview');
   if (preview) {
     preview.style.borderBottomColor = color || 'var(--accent, #8b6ded)';
@@ -348,8 +359,45 @@ window.applyColorFormat = function(color) {
   }
   const btn = document.getElementById('fmt-color-btn');
   if (btn) btn.classList.toggle('active', !!color);
+
+  if (textarea) {
+    const selStart = textarea.selectionStart;
+    const selEnd = textarea.selectionEnd;
+    const val = textarea.value;
+    const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+    if (color) {
+      if (hasSelection) {
+        const selected = val.substring(selStart, selEnd);
+        textarea.value = val.substring(0, selStart) + `[color=${color}]${selected}[/color]` + val.substring(selEnd);
+        textarea.focus();
+        const newCursor = selStart + color.length + 8 + selected.length + 8;
+        textarea.setSelectionRange(newCursor, newCursor);
+      } else if (val.trim().length > 0) {
+        const colorRegex = /^\[color=#[a-fA-F0-9]{3,8}\]([\s\S]*?)\[\/color\]$/;
+        if (colorRegex.test(val)) {
+          textarea.value = val.replace(/^\[color=#[a-fA-F0-9]{3,8}\]/, `[color=${color}]`);
+        } else {
+          textarea.value = `[color=${color}]${val}[/color]`;
+        }
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      } else {
+        textarea.value = `[color=${color}][/color]`;
+        const cursor = color.length + 8;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+      }
+    } else {
+      // Reset color to default
+      if (val.trim().length > 0) {
+        textarea.value = val.replace(/\[color=#[a-fA-F0-9]{3,8}\]/gi, '').replace(/\[\/color\]/gi, '');
+      }
+      textarea.focus();
+    }
+  }
+
   closeAllFormatPopovers();
-  textarea?.focus();
 };
 
 window.applyCustomColor = function(color) {
@@ -362,35 +410,53 @@ window.resetColorFormat = function() {
 
 window.applySizeFormat = function(size) {
   const textarea = document.getElementById('msg-input');
-  const selStart = textarea?.selectionStart;
-  const selEnd = textarea?.selectionEnd;
-  const hasSelection = (textarea && selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+  window.chatFormatState.size = size || null;
 
-  if (hasSelection && size) {
-    const val = textarea.value;
-    const selected = val.substring(selStart, selEnd);
-    const wrapped = `[size=${size}]${selected}[/size]`;
-    textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
-    closeAllFormatPopovers();
-    textarea.focus();
-    return;
-  }
-
-  window.chatFormatState.size = size;
   const label = document.getElementById('fmt-size-label');
   if (label) {
     label.textContent = size ? (size + 'px') : 'Size';
   }
   const btn = document.getElementById('fmt-size-btn');
   if (btn) btn.classList.toggle('active', !!size);
-  closeAllFormatPopovers();
-  textarea?.focus();
-};
 
-window.applyFontFormat = function(font) {
-  window.chatFormatState.font = font;
+  if (textarea) {
+    const selStart = textarea.selectionStart;
+    const selEnd = textarea.selectionEnd;
+    const val = textarea.value;
+    const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+    if (size) {
+      if (hasSelection) {
+        const selected = val.substring(selStart, selEnd);
+        textarea.value = val.substring(0, selStart) + `[size=${size}]${selected}[/size]` + val.substring(selEnd);
+        textarea.focus();
+        const newCursor = selStart + size.length + 7 + selected.length + 7;
+        textarea.setSelectionRange(newCursor, newCursor);
+      } else if (val.trim().length > 0) {
+        const sizeRegex = /^\[size=\d{1,2}\]([\s\S]*?)\[\/size\]$/;
+        if (sizeRegex.test(val)) {
+          textarea.value = val.replace(/^\[size=\d{1,2}\]/, `[size=${size}]`);
+        } else {
+          textarea.value = `[size=${size}]${val}[/size]`;
+        }
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      } else {
+        textarea.value = `[size=${size}][/size]`;
+        const cursor = size.length + 7;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+      }
+    } else {
+      // Normal size (Default)
+      if (val.trim().length > 0) {
+        textarea.value = val.replace(/\[size=\d{1,2}\]/gi, '').replace(/\[\/size\]/gi, '');
+      }
+      textarea.focus();
+    }
+  }
+
   closeAllFormatPopovers();
-  textarea?.focus();
 };
 
 window.clearAllFormatting = function() {
@@ -398,13 +464,10 @@ window.clearAllFormatting = function() {
     bold: false,
     italic: false,
     underline: false,
-    strike: false,
-    glow: false,
     color: null,
-    size: null,
-    font: null
+    size: null
   };
-  document.querySelectorAll('.fmt-btn, .fmt-menu-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.fmt-btn').forEach(el => el.classList.remove('active'));
   const preview = document.getElementById('fmt-color-preview');
   if (preview) {
     preview.style.borderBottomColor = 'var(--accent, #8b6ded)';
@@ -2446,20 +2509,11 @@ async function sendMessage() {
     if (window.chatFormatState.underline && !formattedText.includes('[u]')) {
       formattedText = `[u]${formattedText}[/u]`;
     }
-    if (window.chatFormatState.strike && !formattedText.includes('[s]')) {
-      formattedText = `[s]${formattedText}[/s]`;
-    }
-    if (window.chatFormatState.glow && !formattedText.includes('[glow]')) {
-      formattedText = `[glow]${formattedText}[/glow]`;
-    }
     if (window.chatFormatState.color && !formattedText.includes('[color=')) {
       formattedText = `[color=${window.chatFormatState.color}]${formattedText}[/color]`;
     }
     if (window.chatFormatState.size && !formattedText.includes('[size=')) {
       formattedText = `[size=${window.chatFormatState.size}]${formattedText}[/size]`;
-    }
-    if (window.chatFormatState.font && !formattedText.includes('[font=')) {
-      formattedText = `[font=${window.chatFormatState.font}]${formattedText}[/font]`;
     }
   }
   const finalContent = isSendingImage ? safeImageUrl : formattedText;
