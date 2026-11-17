@@ -24,13 +24,21 @@ function initIdleDisconnectSystem() {
   console.log('[IDLE] Idle disconnect system initialized');
 }
 
+let _lastIdleReset = 0;
+
 function resetIdleTimer() {
+  const now = Date.now();
+  if (now - _lastIdleReset < 5000 && !userIdleStatus) return;
+  _lastIdleReset = now;
+
   clearTimeout(idleTimer);
   if (userIdleStatus) {
     userIdleStatus = false;
     reconnectPresence();
   }
-  localStorage.setItem('cc_guest_last_active', Date.now().toString());
+  try {
+    localStorage.setItem('cc_guest_last_active', now.toString());
+  } catch (_) {}
   startIdleTimer();
 }
 

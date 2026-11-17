@@ -332,7 +332,7 @@
   function init() {
     checkRoomState();
     if (!pollInterval) {
-      pollInterval = setInterval(checkRoomState, 400);
+      pollInterval = setInterval(checkRoomState, 1500);
     }
 
     document.addEventListener('keydown', function(e) {

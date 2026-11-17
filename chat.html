@@ -56,45 +56,19 @@
   <link rel="preconnect" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=1.9"/>
-  <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.5" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=4.5" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.6" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=4.6" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'"/>
   <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet"/></noscript>
   <script>
-    // PWA Cache Buster - Automatically unregisters old Service Worker to fetch fresh code
-    const CURRENT_VERSION = 'v38';
-    if (localStorage.getItem('cc-sw-version') !== CURRENT_VERSION) {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-          let p = [];
-          for (let r of registrations) {
-            p.push(r.unregister());
-          }
-          Promise.all(p).then(() => {
-            localStorage.setItem('cc-sw-version', CURRENT_VERSION);
-            location.reload(true);
-          });
-        });
-      } else {
-        localStorage.setItem('cc-sw-version', CURRENT_VERSION);
-      }
-    }
-
     window.addEventListener('error', function(e) {
-      var div = document.createElement('div');
-      div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
-      // Use textContent only — never innerHTML with user/runtime data
-      div.textContent = '🚨 Runtime Error: ' + (e.message || '') + ' at ' + (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '');
-      document.body && document.body.appendChild(div);
+      console.error('[App Error]', e.message, e.filename, e.lineno);
     });
     window.addEventListener('unhandledrejection', function(e) {
-      var div = document.createElement('div');
-      div.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#f59e0b;color:#fff;padding:12px;z-index:999999;font-family:monospace;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.5);word-break:break-all;';
-      div.textContent = '🚨 Promise Rejection: ' + (e.reason ? (e.reason.message || String(e.reason)) : 'Unknown reason');
-      document.body && document.body.appendChild(div);
+      console.warn('[App Unhandled Rejection]', e.reason);
     });
   </script>
 </head>
@@ -618,23 +592,14 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=7.8" defer></script>
+  <script src="js/chat-v3.js?v=7.9" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
-  <script src="js/free-tier-optimizer.js?v=1.0" defer></script>
+  <script src="js/free-tier-optimizer.js?v=1.1" defer></script>
   <script src="js/resizable-layout.js?v=1.8" defer></script>
-  <script src="js/virtual-room-users.js?v=3.1" defer></script>
+  <script src="js/virtual-room-users.js?v=3.2" defer></script>
   <script src="js/browser-room.js?v=2.0" defer></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for (var registration of registrations) {
-          registration.unregister();
-        }
-      }).catch(function() {});
-    }
-  </script>
 
   <!-- Mobile Sidebar Drawer Logic -->
   <script>

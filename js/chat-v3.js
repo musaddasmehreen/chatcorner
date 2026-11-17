@@ -6473,6 +6473,7 @@ window.showRoomContextMenu = showRoomContextMenu;
 
 
 async function checkGlobalChatMute() {
+  if (document.hidden) return; // Prevent quota burn and battery drain when tab is hidden
   try {
     const { data, error } = await sbClient
       .from('app_settings')
@@ -6492,7 +6493,10 @@ async function checkGlobalChatMute() {
 }
 
 checkGlobalChatMute();
-setInterval(checkGlobalChatMute, 10000);
+setInterval(checkGlobalChatMute, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkGlobalChatMute();
+});
 
 
 async function toggleGlobalChatMute(active) {
