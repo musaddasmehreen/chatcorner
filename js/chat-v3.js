@@ -2347,10 +2347,7 @@ function renderUserList() {
     const displayName = escHtml(u.username) + (isRecording ? ' (Recording...)' : '');
     
     li.innerHTML = `
-      <span class="dot${u.registered ? '' : ' guest'}"></span>
       ${avatarHtml}
-      ${roleBadge}
-      ${stealthBadge}
       <button type="button" class="user-name-btn${nameClass}${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${displayName}</button>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${escHtml(u.userId)}" title="View camera">\ud83d\udcf7</button>
@@ -3790,9 +3787,12 @@ async function showProfileCard(u, anchor, pinned = false) {
   card.innerHTML = `
     ${closeBtnHtml}
     <div class="pc-header">
-      ${avatarHtml}
+      <div class="pc-avatar-wrap" style="position:relative;display:inline-flex;">
+        ${avatarHtml}
+        <span class="dot${profile.is_registered ? '' : ' guest'}" style="position:absolute;bottom:0;right:0;border:2px solid var(--surface);box-shadow:0 0 4px rgba(0,0,0,0.5);" title="${profile.is_registered ? 'Online' : 'Guest'}"></span>
+      </div>
       <div class="pc-info">
-        <div class="pc-name">${escHtml(profile.username || 'Unknown')} ${vipBadge}</div>
+        <div class="pc-name"><span class="dot${profile.is_registered ? '' : ' guest'}" style="display:inline-block;margin-right:6px;vertical-align:middle;" title="${profile.is_registered ? 'Registered User' : 'Guest'}"></span>${escHtml(profile.username || 'Unknown')} ${vipBadge}${u.isStealth ? '<span class="role-badge" style="background:rgba(100,116,139,0.3);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);font-size:0.72rem;margin-left:4px;" title="Staff member in Stealth Mode">🕵️ Stealth</span>' : ''}</div>
         <div class="pc-role">${roleBadge} ${escHtml(roleLabel)}</div>
         ${profileBtn}
       </div>

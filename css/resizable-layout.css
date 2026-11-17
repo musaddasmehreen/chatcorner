@@ -3648,3 +3648,66 @@
     display: none !important;
   }
 }
+
+/* ══ RESIZABLE RIGHT SIDEBAR (USERS IN ROOM) ══ */
+.sidebar-right {
+  position: relative !important;
+  flex-shrink: 0 !important;
+  min-width: 140px !important;
+  max-width: 550px !important;
+}
+
+.resize-divider {
+  width: 6px;
+  background: transparent;
+  position: relative;
+  cursor: col-resize;
+  flex-shrink: 0;
+  z-index: 40;
+  transition: background-color 0.15s ease;
+  user-select: none;
+}
+
+.resize-divider:hover,
+.resize-divider.dragging {
+  background: var(--accent, #8b6ded);
+  box-shadow: 0 0 8px rgba(139, 109, 237, 0.6);
+}
+
+.resize-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.resize-divider:hover::after,
+.resize-divider.dragging::after {
+  opacity: 1;
+}
+
+/* User item: full username appearance with avatar */
+.sidebar-right .user-list li,
+.sidebar-right .user-list .user-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  padding: 0.35rem 0.65rem !important;
+}
+
+.sidebar-right .user-list .user-name-btn {
+  flex: 1 !important;
+  min-width: 0 !important;
+  font-size: 0.84rem !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
