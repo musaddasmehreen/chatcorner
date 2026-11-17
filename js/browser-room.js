@@ -396,12 +396,25 @@ window.BrowserRoom = (function() {
     updateTabAndUrlUI(_currentUrl || DEFAULT_URL);
 
     // Set virtual room state
+    const oldRoom = window.currentRoom;
     window.currentRoom = {
       id: 'browser-virtual',
       name: 'Browser',
       is_audio_enabled: true,
       _virtual: true
     };
+    if (oldRoom && String(oldRoom.id) !== 'browser-virtual') {
+      if (typeof window._roomUserCounts !== 'undefined') {
+        window._roomUserCounts[String(oldRoom.id)] = Math.max(0, (window._roomUserCounts[String(oldRoom.id)] || 1) - 1);
+        window._roomUserCounts['browser-virtual'] = (window._roomUserCounts['browser-virtual'] || 0) + 1;
+        if (typeof window.updateAllRoomCounts === 'function') {
+          window.updateAllRoomCounts(window._roomUserCounts);
+        }
+      }
+    }
+    if (typeof window.trackMyCurrentRoomPresence === 'function') {
+      window.trackMyCurrentRoomPresence();
+    }
     if (typeof window.updateComposerState === 'function') {
       window.updateComposerState();
     }

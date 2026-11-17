@@ -199,6 +199,8 @@
       });
   }
 
+  let _hoverCloseTimer = null;
+
   function createUsersButton(id) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -207,11 +209,26 @@
     btn.setAttribute('aria-label', 'Users in this room');
     btn.title = 'Users in this room';
     btn.onclick = window.toggleVirtualRoomUsers;
+
+    // Hover to reveal drawer without click, retract when mouse moves out
+    btn.addEventListener('mouseenter', () => {
+      clearTimeout(_hoverCloseTimer);
+      window.openVirtualRoomUsers();
+    });
+    btn.addEventListener('mouseleave', (e) => {
+      const drawer = document.getElementById('vr-users-drawer');
+      if (drawer && (drawer.contains(e.relatedTarget) || e.relatedTarget === drawer)) return;
+      _hoverCloseTimer = setTimeout(() => {
+        window.closeVirtualRoomUsers();
+      }, 250);
+    });
+
     btn.innerHTML =
       '<span class="vr-line"></span>' +
       '<span class="vr-line"></span>' +
       '<span class="vr-line"></span>' +
-      '<span class="vr-badge">' + (roomUsersMap.size || 0) + '</span>';
+      '<span class="vr-badge">' + (roomUsersMap.size || 0) + '</span>' +
+      '<span class="vr-arrow">▶</span>';
     return btn;
   }
 
@@ -333,6 +350,20 @@
     checkRoomState();
     if (!pollInterval) {
       pollInterval = setInterval(checkRoomState, 1500);
+    }
+
+    const drawer = document.getElementById('vr-users-drawer');
+    if (drawer) {
+      drawer.addEventListener('mouseenter', () => {
+        clearTimeout(_hoverCloseTimer);
+      });
+      drawer.addEventListener('mouseleave', (e) => {
+        const btn = document.getElementById('vr-users-btn');
+        if (btn && (btn.contains(e.relatedTarget) || e.relatedTarget === btn)) return;
+        _hoverCloseTimer = setTimeout(() => {
+          window.closeVirtualRoomUsers();
+        }, 250);
+      });
     }
 
     document.addEventListener('keydown', function(e) {

@@ -55,9 +55,9 @@
   <meta http-equiv="X-Frame-Options" content="DENY"/>
   <link rel="preconnect" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
-  <link rel="stylesheet" href="css/style.css?v=2.0"/>
-  <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.7" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="css/resizable-layout.css?v=4.7" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/style.css?v=2.1"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=2.8" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/resizable-layout.css?v=4.8" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -503,6 +503,69 @@
           <button class="btn-stop-radio" id="btn-stop-radio" onclick="stopRadioPlayer()" aria-label="Stop radio">⏹️ Stop</button>
         </div>
       </div>
+
+      <!-- Text Formatting Toolbar (Rich chat styles, zero extra height) -->
+      <div class="bar-divider" id="bar-divider-fmt"></div>
+      <div class="chat-format-toolbar" id="chat-format-toolbar" role="toolbar" aria-label="Text formatting">
+        <button type="button" class="fmt-btn" id="fmt-bold" onclick="toggleFormatBtn('bold')" title="Bold (Ctrl+B)"><b>B</b></button>
+        <button type="button" class="fmt-btn" id="fmt-italic" onclick="toggleFormatBtn('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
+        <button type="button" class="fmt-btn" id="fmt-underline" onclick="toggleFormatBtn('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
+        
+        <div class="fmt-dropdown-wrap" id="fmt-color-wrap">
+          <button type="button" class="fmt-btn fmt-dropdown-btn" id="fmt-color-btn" onclick="toggleFormatDropdown(event, 'color')" title="Text Color">
+            <span id="fmt-color-preview">A</span> <span class="fmt-caret">▾</span>
+          </button>
+          <div class="fmt-popover hidden" id="fmt-color-popover">
+            <div class="fmt-popover-title">Message Color</div>
+            <div class="fmt-color-grid">
+              <span class="fmt-color-dot" style="background:#ffffff;" data-color="#ffffff" onclick="applyColorFormat(this.dataset.color)" title="White"></span>
+              <span class="fmt-color-dot" style="background:#ef4444;" data-color="#ef4444" onclick="applyColorFormat(this.dataset.color)" title="Red"></span>
+              <span class="fmt-color-dot" style="background:#f97316;" data-color="#f97316" onclick="applyColorFormat(this.dataset.color)" title="Orange"></span>
+              <span class="fmt-color-dot" style="background:#eab308;" data-color="#eab308" onclick="applyColorFormat(this.dataset.color)" title="Yellow"></span>
+              <span class="fmt-color-dot" style="background:#22c55e;" data-color="#22c55e" onclick="applyColorFormat(this.dataset.color)" title="Green"></span>
+              <span class="fmt-color-dot" style="background:#06b6d4;" data-color="#06b6d4" onclick="applyColorFormat(this.dataset.color)" title="Cyan"></span>
+              <span class="fmt-color-dot" style="background:#3b82f6;" data-color="#3b82f6" onclick="applyColorFormat(this.dataset.color)" title="Blue"></span>
+              <span class="fmt-color-dot" style="background:#8b5cf6;" data-color="#8b5cf6" onclick="applyColorFormat(this.dataset.color)" title="Purple"></span>
+              <span class="fmt-color-dot" style="background:#ec4899;" data-color="#ec4899" onclick="applyColorFormat(this.dataset.color)" title="Pink"></span>
+              <span class="fmt-color-dot" style="background:#ffd700;" data-color="#ffd700" onclick="applyColorFormat(this.dataset.color)" title="Gold"></span>
+            </div>
+            <div class="fmt-custom-color-row">
+              <input type="color" id="fmt-custom-color-input" onchange="applyCustomColor(this.value)" title="Custom color picker"/>
+              <button type="button" class="fmt-reset-btn" onclick="resetColorFormat()">Default</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="fmt-dropdown-wrap" id="fmt-size-wrap">
+          <button type="button" class="fmt-btn fmt-dropdown-btn" id="fmt-size-btn" onclick="toggleFormatDropdown(event, 'size')" title="Font Size">
+            <span id="fmt-size-label">Size</span> <span class="fmt-caret">▾</span>
+          </button>
+          <div class="fmt-popover hidden" id="fmt-size-popover">
+            <div class="fmt-popover-title">Font Size</div>
+            <button type="button" class="fmt-menu-item" onclick="applySizeFormat(null)">Normal (Default)</button>
+            <button type="button" class="fmt-menu-item" onclick="applySizeFormat('11')">Small (11px)</button>
+            <button type="button" class="fmt-menu-item" onclick="applySizeFormat('15')">Medium (15px)</button>
+            <button type="button" class="fmt-menu-item" onclick="applySizeFormat('17')">Large (17px)</button>
+            <button type="button" class="fmt-menu-item" onclick="applySizeFormat('20')">Huge (20px)</button>
+          </div>
+        </div>
+
+        <div class="fmt-dropdown-wrap" id="fmt-more-wrap">
+          <button type="button" class="fmt-btn fmt-dropdown-btn" id="fmt-more-btn" onclick="toggleFormatDropdown(event, 'more')" title="More text options">
+            <span>More...</span> <span class="fmt-caret">▾</span>
+          </button>
+          <div class="fmt-popover hidden" id="fmt-more-popover">
+            <button type="button" class="fmt-menu-item" id="fmt-item-strike" onclick="toggleFormatBtn('strike')"><s>Strike-through</s> [s]</button>
+            <button type="button" class="fmt-menu-item" id="fmt-item-glow" onclick="toggleFormatBtn('glow')">Glow Effect ✨</button>
+            <div class="fmt-menu-divider"></div>
+            <button type="button" class="fmt-menu-item" onclick="applyFontFormat('cursive')">Font: Cursive</button>
+            <button type="button" class="fmt-menu-item" onclick="applyFontFormat('monospace')">Font: Monospace</button>
+            <button type="button" class="fmt-menu-item" onclick="applyFontFormat('Orbitron')">Font: Orbitron</button>
+            <div class="fmt-menu-divider"></div>
+            <button type="button" class="fmt-menu-item fmt-menu-danger" onclick="clearAllFormatting()">✕ Clear All Formatting</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- BOTTOM INPUT ROW (full width, split into 3 zones) -->
@@ -592,14 +655,14 @@
   <script src="js/auth.js?v=1.6" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=8.0" defer></script>
+  <script src="js/chat-v3.js?v=8.1" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.1" defer></script>
   <script src="js/resizable-layout.js?v=1.8" defer></script>
-  <script src="js/virtual-room-users.js?v=3.2" defer></script>
-  <script src="js/browser-room.js?v=2.0" defer></script>
+  <script src="js/virtual-room-users.js?v=3.3" defer></script>
+  <script src="js/browser-room.js?v=2.1" defer></script>
 
   <!-- Mobile Sidebar Drawer Logic -->
   <script>

@@ -216,6 +216,42 @@ function parseMovingEmojisHtml(text) {
 }
 window.parseMovingEmojisHtml = parseMovingEmojisHtml;
 
+function parseChatBbcodeHtml(text) {
+  if (typeof text !== 'string') return text;
+  let res = text;
+  // [b]...[/b]
+  res = res.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>');
+  // [i]...[/i]
+  res = res.replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>');
+  // [u]...[/u]
+  res = res.replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<span style="text-decoration: underline;">$1</span>');
+  // [s]...[/s]
+  res = res.replace(/\[s\]([\s\S]*?)\[\/s\]/gi, '<del>$1</del>');
+  // [glow]...[/glow]
+  res = res.replace(/\[glow\]([\s\S]*?)\[\/glow\]/gi, '<span class="glow-text">$1</span>');
+
+  // [color=#hex or name]...[/color]
+  res = res.replace(/\[color=([#a-zA-Z0-9]+)\]([\s\S]*?)\[\/color\]/gi, (match, color, content) => {
+    const safeColor = String(color).replace(/[^#a-zA-Z0-9]/g, '');
+    return `<span style="color: ${safeColor};">${content}</span>`;
+  });
+
+  // [size=10..24]...[/size]
+  res = res.replace(/\[size=(\d{1,2})\]([\s\S]*?)\[\/size\]/gi, (match, size, content) => {
+    const s = Math.min(24, Math.max(10, parseInt(size, 10) || 13));
+    return `<span style="font-size: ${s}px;">${content}</span>`;
+  });
+
+  // [font=name]...[/font]
+  res = res.replace(/\[font=([a-zA-Z0-9_\-\s]+)\]([\s\S]*?)\[\/font\]/gi, (match, font, content) => {
+    const safeFont = String(font).replace(/[^a-zA-Z0-9_\-\s]/g, '');
+    return `<span style="font-family: '${safeFont}', sans-serif;">${content}</span>`;
+  });
+
+  return res;
+}
+window.parseChatBbcodeHtml = parseChatBbcodeHtml;
+
 function formatMessageContent(rawContent) {
   if (!rawContent) return '';
   let str = escHtml(String(rawContent));
@@ -224,9 +260,161 @@ function formatMessageContent(rawContent) {
   }
   str = parseSuperEmojisHtml(str);
   str = parseMovingEmojisHtml(str);
+  str = parseChatBbcodeHtml(str);
   return str;
 }
 window.formatMessageText = formatMessageContent;
+
+/* ════════════════════════════════════════════════════════════════
+   Smart Text Formatting Toolbar (BBCode & Outgoing Message State)
+   ════════════════════════════════════════════════════════════════ */
+window.chatFormatState = {
+  bold: false,
+  italic: false,
+  underline: false,
+  strike: false,
+  glow: false,
+  color: null,
+  size: null,
+  font: null
+};
+
+window.toggleFormatBtn = function(type) {
+  const textarea = document.getElementById('msg-input');
+  const selStart = textarea?.selectionStart;
+  const selEnd = textarea?.selectionEnd;
+  const hasSelection = (textarea && selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+  if (hasSelection) {
+    const val = textarea.value;
+    const selected = val.substring(selStart, selEnd);
+    const tagMap = { bold: 'b', italic: 'i', underline: 'u', strike: 's', glow: 'glow' };
+    const tag = tagMap[type];
+    if (tag) {
+      const wrapped = `[${tag}]${selected}[/${tag}]`;
+      textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
+      textarea.focus();
+      textarea.setSelectionRange(selStart + tag.length + 2, selStart + tag.length + 2 + selected.length);
+      return;
+    }
+  }
+
+  // Toggle persistent mode for outgoing messages
+  window.chatFormatState[type] = !window.chatFormatState[type];
+  const btn = document.getElementById('fmt-' + type);
+  if (btn) btn.classList.toggle('active', !!window.chatFormatState[type]);
+  const menuItem = document.getElementById('fmt-item-' + type);
+  if (menuItem) menuItem.classList.toggle('active', !!window.chatFormatState[type]);
+  closeAllFormatPopovers();
+  textarea?.focus();
+};
+
+window.toggleFormatDropdown = function(ev, type) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  const popover = document.getElementById('fmt-' + type + '-popover');
+  if (!popover) return;
+  const isHidden = popover.classList.contains('hidden');
+  closeAllFormatPopovers();
+  if (isHidden) {
+    popover.classList.remove('hidden');
+  }
+};
+
+window.closeAllFormatPopovers = function() {
+  document.querySelectorAll('.fmt-popover').forEach(p => p.classList.add('hidden'));
+};
+
+window.applyColorFormat = function(color) {
+  const textarea = document.getElementById('msg-input');
+  const selStart = textarea?.selectionStart;
+  const selEnd = textarea?.selectionEnd;
+  const hasSelection = (textarea && selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+  if (hasSelection && color) {
+    const val = textarea.value;
+    const selected = val.substring(selStart, selEnd);
+    const wrapped = `[color=${color}]${selected}[/color]`;
+    textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
+    closeAllFormatPopovers();
+    textarea.focus();
+    return;
+  }
+
+  window.chatFormatState.color = color;
+  const preview = document.getElementById('fmt-color-preview');
+  if (preview) {
+    preview.style.borderBottomColor = color || 'var(--accent, #8b6ded)';
+    preview.style.color = color || 'inherit';
+  }
+  const btn = document.getElementById('fmt-color-btn');
+  if (btn) btn.classList.toggle('active', !!color);
+  closeAllFormatPopovers();
+  textarea?.focus();
+};
+
+window.applyCustomColor = function(color) {
+  applyColorFormat(color);
+};
+
+window.resetColorFormat = function() {
+  applyColorFormat(null);
+};
+
+window.applySizeFormat = function(size) {
+  const textarea = document.getElementById('msg-input');
+  const selStart = textarea?.selectionStart;
+  const selEnd = textarea?.selectionEnd;
+  const hasSelection = (textarea && selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+  if (hasSelection && size) {
+    const val = textarea.value;
+    const selected = val.substring(selStart, selEnd);
+    const wrapped = `[size=${size}]${selected}[/size]`;
+    textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
+    closeAllFormatPopovers();
+    textarea.focus();
+    return;
+  }
+
+  window.chatFormatState.size = size;
+  const label = document.getElementById('fmt-size-label');
+  if (label) {
+    label.textContent = size ? (size + 'px') : 'Size';
+  }
+  const btn = document.getElementById('fmt-size-btn');
+  if (btn) btn.classList.toggle('active', !!size);
+  closeAllFormatPopovers();
+  textarea?.focus();
+};
+
+window.applyFontFormat = function(font) {
+  window.chatFormatState.font = font;
+  closeAllFormatPopovers();
+  textarea?.focus();
+};
+
+window.clearAllFormatting = function() {
+  window.chatFormatState = {
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    glow: false,
+    color: null,
+    size: null,
+    font: null
+  };
+  document.querySelectorAll('.fmt-btn, .fmt-menu-item').forEach(el => el.classList.remove('active'));
+  const preview = document.getElementById('fmt-color-preview');
+  if (preview) {
+    preview.style.borderBottomColor = 'var(--accent, #8b6ded)';
+    preview.style.color = 'inherit';
+  }
+  const label = document.getElementById('fmt-size-label');
+  if (label) label.textContent = 'Size';
+  closeAllFormatPopovers();
+  document.getElementById('msg-input')?.focus();
+};
 
 function parseSuperEmojisHtml(text) {
   if (typeof text !== 'string') return text;
@@ -1280,8 +1468,25 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
       autoResizeTextarea(msgInputEl);
     });
-    // Enter = send, Shift+Enter = newline
+    // Enter = send, Shift+Enter = newline, Ctrl+B/I/U = toggle format
     msgInputEl.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+        if (event.key === 'b' || event.key === 'B') {
+          event.preventDefault();
+          window.toggleFormatBtn?.('bold');
+          return;
+        }
+        if (event.key === 'i' || event.key === 'I') {
+          event.preventDefault();
+          window.toggleFormatBtn?.('italic');
+          return;
+        }
+        if (event.key === 'u' || event.key === 'U') {
+          event.preventDefault();
+          window.toggleFormatBtn?.('underline');
+          return;
+        }
+      }
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         sendMessage();
@@ -1341,6 +1546,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (!(imagePopover.contains(event.target) || imageBtn?.contains(event.target))) {
         closeRoomImageUrlInput();
       }
+    }
+    if (!event.target.closest('.fmt-dropdown-wrap')) {
+      window.closeAllFormatPopovers?.();
     }
   });
 
@@ -1462,16 +1670,91 @@ window.addEventListener('DOMContentLoaded', async () => {
   window._ccReconnect = _reconnect;
 });
 
-// ── Lightweight Room User Count Management (Zero WebSocket Overhead) ──
+// ── Global Realtime Room Presence (User Counts Across All Rooms) ──
+let _globalRoomPresenceChannel = null;
 let _roomCountInterval = null;
 let _roomUserCounts = {};
+window._roomUserCounts = _roomUserCounts;
+
+function initGlobalRoomPresence() {
+  if (_globalRoomPresenceChannel || !window.sbClient) return;
+  const myKey = (currentUser && currentUser.id) || currentProfile?.username || ('guest_' + Math.random().toString(36).slice(2, 7));
+  _globalRoomPresenceChannel = window.sbClient.channel('cc-global-room-presence', {
+    config: { presence: { key: myKey } }
+  });
+
+  _globalRoomPresenceChannel
+    .on('presence', { event: 'sync' }, () => updateAllRoomCountsFromPresence())
+    .on('presence', { event: 'join' }, () => updateAllRoomCountsFromPresence())
+    .on('presence', { event: 'leave' }, () => updateAllRoomCountsFromPresence())
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        trackMyCurrentRoomPresence();
+      }
+    });
+}
+window.initGlobalRoomPresence = initGlobalRoomPresence;
+
+function trackMyCurrentRoomPresence() {
+  if (!_globalRoomPresenceChannel || !currentRoom) return;
+  const myId = (currentUser && currentUser.id) || ('guest_' + Math.random().toString(36).slice(2, 7));
+  const myName = (currentProfile && currentProfile.username) || 'Guest';
+  _globalRoomPresenceChannel.track({
+    userId: myId,
+    username: myName,
+    roomId: String(currentRoom.id),
+    roomName: currentRoom.name || '',
+    ts: Date.now()
+  }).catch(() => {});
+}
+window.trackMyCurrentRoomPresence = trackMyCurrentRoomPresence;
+
+function updateAllRoomCountsFromPresence() {
+  if (!_globalRoomPresenceChannel) return;
+  const state = _globalRoomPresenceChannel.presenceState();
+  const counts = {};
+
+  // Initialize every room in DOM to 0
+  document.querySelectorAll('#room-list li').forEach(li => {
+    if (li.dataset.roomId) counts[li.dataset.roomId] = 0;
+  });
+
+  let guestRoomHasUsers = false;
+  Object.values(state).forEach(entries => {
+    (entries || []).forEach(e => {
+      if (e && e.roomId) {
+        counts[e.roomId] = (counts[e.roomId] || 0) + 1;
+        if (e.roomName && e.roomName.toLowerCase() === 'guest') {
+          guestRoomHasUsers = true;
+        }
+      }
+    });
+  });
+
+  // Ensure current user's room has at least 1 locally
+  if (currentRoom?.id && (counts[String(currentRoom.id)] === undefined || counts[String(currentRoom.id)] === 0)) {
+    counts[String(currentRoom.id)] = 1;
+  }
+
+  _roomUserCounts = counts;
+  updateAllRoomCounts(counts);
+
+  // Guest notification dot
+  const inGuestNow = (currentRoom && currentRoom.name && currentRoom.name.toLowerCase() === 'guest');
+  if (guestRoomHasUsers && !inGuestNow) {
+    showGuestNotificationDot();
+  } else if (!guestRoomHasUsers) {
+    dismissGuestNotificationDot();
+  }
+}
+window.updateAllRoomCountsFromPresence = updateAllRoomCountsFromPresence;
 
 function updateAllRoomCounts(counts = _roomUserCounts) {
   _roomUserCounts = counts || {};
   document.querySelectorAll('#room-list li').forEach(li => {
     const roomId = li.dataset.roomId;
     if (!roomId) return;
-    const count = counts[roomId] ?? (roomId === currentRoom?.id ? Object.keys(onlineUsers || {}).length : 0);
+    const count = counts[roomId] ?? (roomId === String(currentRoom?.id) ? 1 : 0);
     let badge = li.querySelector('.room-count-pill');
     if (!badge) {
       badge = document.createElement('span');
@@ -1483,9 +1766,6 @@ function updateAllRoomCounts(counts = _roomUserCounts) {
   });
 }
 window.updateAllRoomCounts = updateAllRoomCounts;
-window.updateAllRoomCountsFromPresence = updateAllRoomCounts;
-window.trackMyCurrentRoomPresence = () => {};
-window.initGlobalRoomPresence = () => {};
 
 // ── Global Guest Notification Dot Management ──
 let globalNotifChannel = null;
@@ -1533,11 +1813,14 @@ function broadcastGuestEntered() {
 
 async function refreshRoomCounts() {
   try {
+    if (_globalRoomPresenceChannel) {
+      updateAllRoomCountsFromPresence();
+      return;
+    }
     const { data: rooms } = await sbClient.from('rooms').select('id,user_count,name');
     if (!rooms) return;
     rooms.forEach(r => {
       _roomUserCounts[String(r.id)] = r.user_count || 0;
-      // If Guest room has users and we are in another room, ensure dot is lit
       if (r.name && r.name.toLowerCase() === 'guest' && (r.user_count || 0) > 0) {
         showGuestNotificationDot();
       }
@@ -1679,6 +1962,7 @@ async function loadRooms(preloadedRooms = null) {
     enterRoom(targetRoom, false, true);
 
     tryAutoEnterLudoFromUrl();
+    initGlobalRoomPresence();
     if (!_roomCountInterval) _roomCountInterval = setInterval(refreshRoomCounts, 60000);
   } catch(e) { console.error('loadRooms error', e); }
 }
@@ -1741,6 +2025,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
 
   // Optimization: skip redundant db lookup if skipModRefresh is true
   if (!(await enforceCurrentUserModerationState({ refresh: !skipModRefresh }))) return;
+  const oldRoom = currentRoom;
   if (!force && currentRoom?.id === room.id) return;
   if (roomVoiceNoteRecorder?.state === 'recording') {
     discardRoomVoiceNoteOnStop = true;
@@ -1752,6 +2037,14 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (typeof leaveVoice === 'function') leaveVoice();
 
   currentRoom = room;
+
+  // Immediately transfer user count locally from old room to new room
+  if (oldRoom && String(oldRoom.id) !== String(room.id)) {
+    _roomUserCounts[String(oldRoom.id)] = Math.max(0, (_roomUserCounts[String(oldRoom.id)] || 1) - 1);
+  }
+  _roomUserCounts[String(room.id)] = (_roomUserCounts[String(room.id)] || 0) + 1;
+  updateAllRoomCounts(_roomUserCounts);
+  trackMyCurrentRoomPresence();
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '# ' + room.name;
 
@@ -2142,7 +2435,34 @@ async function sendMessage() {
     await ensureGuestProfileRecord();
   }
   const safeText = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
-  const finalContent = isSendingImage ? safeImageUrl : safeText;
+  let formattedText = safeText;
+  if (!isSendingImage && window.chatFormatState) {
+    if (window.chatFormatState.bold && !formattedText.includes('[b]')) {
+      formattedText = `[b]${formattedText}[/b]`;
+    }
+    if (window.chatFormatState.italic && !formattedText.includes('[i]')) {
+      formattedText = `[i]${formattedText}[/i]`;
+    }
+    if (window.chatFormatState.underline && !formattedText.includes('[u]')) {
+      formattedText = `[u]${formattedText}[/u]`;
+    }
+    if (window.chatFormatState.strike && !formattedText.includes('[s]')) {
+      formattedText = `[s]${formattedText}[/s]`;
+    }
+    if (window.chatFormatState.glow && !formattedText.includes('[glow]')) {
+      formattedText = `[glow]${formattedText}[/glow]`;
+    }
+    if (window.chatFormatState.color && !formattedText.includes('[color=')) {
+      formattedText = `[color=${window.chatFormatState.color}]${formattedText}[/color]`;
+    }
+    if (window.chatFormatState.size && !formattedText.includes('[size=')) {
+      formattedText = `[size=${window.chatFormatState.size}]${formattedText}[/size]`;
+    }
+    if (window.chatFormatState.font && !formattedText.includes('[font=')) {
+      formattedText = `[font=${window.chatFormatState.font}]${formattedText}[/font]`;
+    }
+  }
+  const finalContent = isSendingImage ? safeImageUrl : formattedText;
 
   // ── Clear input immediately for instant UX feel ──
   input.value = '';
@@ -6181,7 +6501,14 @@ function enterIPTVRoom() {
   }
 
   // Set currentRoom to a virtual object so message sending works via realtime broadcast
+  const oldRoom = currentRoom;
   currentRoom = { id: 'iptv-virtual', name: 'IPTV', is_audio_enabled: true, _virtual: true };
+  if (oldRoom && String(oldRoom.id) !== 'iptv-virtual') {
+    _roomUserCounts[String(oldRoom.id)] = Math.max(0, (_roomUserCounts[String(oldRoom.id)] || 1) - 1);
+  }
+  _roomUserCounts['iptv-virtual'] = (_roomUserCounts['iptv-virtual'] || 0) + 1;
+  updateAllRoomCounts(_roomUserCounts);
+  trackMyCurrentRoomPresence();
   updateComposerState();
 
   // Subscribe to realtime broadcast channel for IPTV chat (no DB writes, broadcast only)
@@ -6762,8 +7089,15 @@ function enterLudoRoom(roomKey) {
   if (ludoLi) ludoLi.classList.add('active');
 
   // Set virtual room state
+  const oldRoom = currentRoom;
   const resolvedRoomKey = sanitizeLudoRoomKey(roomKey) || getDefaultLudoRoomKey();
   currentRoom = { id: 'ludo-virtual', name: 'Ludo', _virtual: true };
+  if (oldRoom && String(oldRoom.id) !== 'ludo-virtual') {
+    _roomUserCounts[String(oldRoom.id)] = Math.max(0, (_roomUserCounts[String(oldRoom.id)] || 1) - 1);
+  }
+  _roomUserCounts['ludo-virtual'] = (_roomUserCounts['ludo-virtual'] || 0) + 1;
+  updateAllRoomCounts(_roomUserCounts);
+  trackMyCurrentRoomPresence();
   // Update topbar title
   const titleEl = document.getElementById('current-room-name');
   if (titleEl) titleEl.textContent = '🎲 Ludo Room';
@@ -6955,7 +7289,14 @@ function enterMediaRoom(id) {
     wrapper.appendChild(inputStrip);
   }
 
+  const oldRoom = currentRoom;
   currentRoom = { id, name: kind === 'sp' ? 'Spotify' : 'YouTube', is_audio_enabled: true, _virtual: true };
+  if (oldRoom && String(oldRoom.id) !== String(id)) {
+    _roomUserCounts[String(oldRoom.id)] = Math.max(0, (_roomUserCounts[String(oldRoom.id)] || 1) - 1);
+  }
+  _roomUserCounts[String(id)] = (_roomUserCounts[String(id)] || 0) + 1;
+  updateAllRoomCounts(_roomUserCounts);
+  trackMyCurrentRoomPresence();
   updateComposerState();
 
   if (kind === 'yt') initYouTubeRoom(); else initSpotifyRoom();
