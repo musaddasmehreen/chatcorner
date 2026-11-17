@@ -1,3 +1,74 @@
+
+// Compress image to ensure it is crisp, covers the box, and stays under 20KB
+function compressAvatarDataUrl(img, targetDim = 250, maxKb = 20) {
+  const canvas = document.createElement('canvas');
+  canvas.width = targetDim;
+  canvas.height = targetDim;
+  const ctx = canvas.getContext('2d');
+  
+  // Center crop (cover)
+  const srcAspect = img.naturalWidth / img.naturalHeight;
+  let sx, sy, sw, sh;
+  if (srcAspect >= 1) {
+    sh = img.naturalHeight;
+    sw = img.naturalHeight;
+    sx = (img.naturalWidth - sw) / 2;
+    sy = 0;
+  } else {
+    sw = img.naturalWidth;
+    sh = img.naturalWidth;
+    sx = 0;
+    sy = (img.naturalHeight - sh) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetDim, targetDim);
+  
+  // Try qualities starting from 0.85 down until <= maxKb
+  let quality = 0.85;
+  let dataUrl = canvas.toDataURL('image/jpeg', quality);
+  while (dataUrl.length > maxKb * 1024 * 1.33 && quality > 0.25) {
+    quality -= 0.1;
+    dataUrl = canvas.toDataURL('image/jpeg', quality);
+  }
+  return dataUrl;
+}
+
+// Lightbox modal for full large profile image preview
+window.openAvatarLightbox = function(imageUrl, username = 'User') {
+  if (!imageUrl) return;
+  const existing = document.getElementById('image-lightbox-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'image-lightbox-modal';
+  modal.className = 'image-lightbox-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-label', username + ' profile image');
+
+  modal.innerHTML = `
+    <div class="image-lightbox-content" onclick="event.stopPropagation()">
+      <button type="button" class="image-lightbox-close" onclick="closeAvatarLightbox()" aria-label="Close" title="Close">✕</button>
+      <img src="${imageUrl}" class="image-lightbox-img" alt="${username} profile picture" />
+      <div style="margin-top:12px;color:#fff;font-weight:700;font-size:1.1rem;text-shadow:0 2px 8px rgba(0,0,0,0.8);">${username}</div>
+    </div>
+  `;
+
+  modal.addEventListener('click', () => closeAvatarLightbox());
+  document.body.appendChild(modal);
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      closeAvatarLightbox();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+};
+
+window.closeAvatarLightbox = function() {
+  const modal = document.getElementById('image-lightbox-modal');
+  if (modal) modal.remove();
+};
+
 /* ══ Theme Management ═══════════════════════════════════════════
    Reads/writes localStorage key 'cc-theme'.
    Syncs dots in both the chat theme bar and any fixed switcher.
@@ -2346,9 +2417,12 @@ function renderUserList() {
     
     const displayName = escHtml(u.username) + (isRecording ? ' (Recording...)' : '');
     
+    const isRegistered = !!(u.registered || u.is_registered || u.isRegistered);
+    const dotHtml = `<span class="dot${isRegistered ? '' : ' guest'}" title="${isRegistered ? 'Online' : 'Guest'}" style="margin-right:6px;flex-shrink:0;"></span>`;
+
     li.innerHTML = `
-      ${avatarHtml}
-      <button type="button" class="user-name-btn${nameClass}${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${displayName}</button>
+      ${dotHtml}
+      <button type="button" class="user-name-btn${nameClass}${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${roleBadge ? roleBadge + ' ' : ''}${displayName}</button>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${escHtml(u.userId)}" title="View camera">\ud83d\udcf7</button>
     `;
@@ -3784,20 +3858,28 @@ async function showProfileCard(u, anchor, pinned = false) {
   const card = document.createElement('div');
   card.id = 'profile-card';
   card.className = 'profile-card' + (pinned ? ' pinned' : '');
+  const totalOnlineSecs = profile.total_online_time || 0;
+  const formattedTotalTime = (typeof formatOnlineTime === 'function') ? formatOnlineTime(totalOnlineSecs) : (totalOnlineSecs + 's');
+  const avatarClickAttr = profile.avatar_url ? `onclick="openAvatarLightbox('${escHtml(profile.avatar_url)}', '${escHtml(profile.username || 'User')}')" style="cursor:pointer;" title="Click to view full image"` : '';
   card.innerHTML = `
     ${closeBtnHtml}
     <div class="pc-header">
-      <div class="pc-avatar-wrap" style="position:relative;display:inline-flex;">
+      <div class="pc-avatar-wrap" ${avatarClickAttr} style="position:relative;display:inline-flex;">
         ${avatarHtml}
-        <span class="dot${profile.is_registered ? '' : ' guest'}" style="position:absolute;bottom:0;right:0;border:2px solid var(--surface);box-shadow:0 0 4px rgba(0,0,0,0.5);" title="${profile.is_registered ? 'Online' : 'Guest'}"></span>
+        <span class="dot${profile.is_registered ? '' : ' guest'}" style="position:absolute;bottom:-2px;right:-2px;border:2px solid var(--surface);box-shadow:0 0 6px rgba(0,0,0,0.6);width:10px;height:10px;" title="${profile.is_registered ? 'Online' : 'Guest'}"></span>
       </div>
       <div class="pc-info">
-        <div class="pc-name"><span class="dot${profile.is_registered ? '' : ' guest'}" style="display:inline-block;margin-right:6px;vertical-align:middle;" title="${profile.is_registered ? 'Registered User' : 'Guest'}"></span>${escHtml(profile.username || 'Unknown')} ${vipBadge}${u.isStealth ? '<span class="role-badge" style="background:rgba(100,116,139,0.3);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);font-size:0.72rem;margin-left:4px;" title="Staff member in Stealth Mode">🕵️ Stealth</span>' : ''}</div>
-        <div class="pc-role">${roleBadge} ${escHtml(roleLabel)}</div>
+        <div class="pc-name">${escHtml(profile.username || 'Unknown')} ${vipBadge}${u.isStealth ? '<span class="role-badge" style="background:rgba(100,116,139,0.3);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);font-size:0.72rem;margin-left:4px;" title="Staff member in Stealth Mode">🕵️ Stealth</span>' : ''}</div>
+        <div class="pc-role">${roleBadge} <span>${escHtml(roleLabel)}</span></div>
         ${profileBtn}
       </div>
     </div>
-    <div class="pc-join">📅 Joined ${escHtml(joinDate)}</div>
+    <div class="pc-extra-info">
+      <div class="pc-extra-row"><span class="lbl">⏱️ Time Spent:</span><span class="val">${formattedTotalTime}</span></div>
+      <div class="pc-extra-row"><span class="lbl">📅 Joined:</span><span class="val">${escHtml(joinDate)}</span></div>
+      ${profile.country ? `<div class="pc-extra-row"><span class="lbl">🌐 Country:</span><span class="val">${escHtml(profile.country)}</span></div>` : ''}
+      ${profile.sex ? `<div class="pc-extra-row"><span class="lbl">🚻 Sex:</span><span class="val">${escHtml(profile.sex)}</span></div>` : ''}
+    </div>
     ${ipRow}
     ${actionsHtml}
     ${promoteSectionHtml}
@@ -4331,6 +4413,7 @@ async function cacheSenderProfiles(userIds) {
 }
 
 async function showProfileModal(userId, startTab = 'profile') {
+  window._currentlyViewingProfileId = userId;
   document.getElementById('cc-profile-modal-overlay')?.remove();
   
   let targetProfile = null;
@@ -4403,6 +4486,7 @@ async function showProfileModal(userId, startTab = 'profile') {
 }
 
 function closeProfileModal() {
+  window._currentlyViewingProfileId = null;
   document.getElementById('cc-profile-modal-overlay')?.remove();
 }
 
@@ -4580,7 +4664,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
       container.innerHTML = `
         <div class="cc-profile-view-layout">
           <div class="cc-profile-view-left">
-            <div class="cc-profile-large-avatar" id="cc-profile-avatar-container" style="background:${escHtml(profile.avatar_color || '#7c3aed')}">
+            <div class="cc-profile-large-avatar" id="cc-profile-avatar-container" style="background:${escHtml(profile.avatar_color || '#7c3aed')};cursor:pointer;" ${profile.avatar_url ? `onclick="openAvatarLightbox('${escHtml(profile.avatar_url)}', '${escHtml(profile.username || 'User')}')" title="Click to view full image"` : ''}>
               ${avatarHtml}
             </div>
             
@@ -4890,7 +4974,7 @@ function onProfileAvatarSelect(event) {
       }
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
       
-      const croppedUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const croppedUrl = compressAvatarDataUrl(img, 240, 20);
       pendingAvatarDataUrl = croppedUrl;
       
       const container = document.getElementById('cc-profile-avatar-container');
@@ -5103,19 +5187,22 @@ function startOnlineTimeTracking(profile) {
     displayTotalOnline++;
     displayMonthlyOnline++;
     
-    const sessionEl = document.getElementById('cc-time-session');
-    const monthEl = document.getElementById('cc-time-month');
-    const allEl = document.getElementById('cc-time-all');
-    
-    if (sessionEl) {
-      const sessionSecs = Math.floor((Date.now() - sessionStart) / 1000);
-      sessionEl.textContent = formatOnlineTime(sessionSecs);
-    }
-    if (monthEl) {
-      monthEl.textContent = formatOnlineTime(displayMonthlyOnline);
-    }
-    if (allEl) {
-      allEl.textContent = formatOnlineTime(displayTotalOnline);
+    // Only update profile modal time displays if viewing MY OWN profile
+    if (!window._currentlyViewingProfileId || window._currentlyViewingProfileId === currentUser?.id) {
+      const sessionEl = document.getElementById('cc-time-session');
+      const monthEl = document.getElementById('cc-time-month');
+      const allEl = document.getElementById('cc-time-all');
+      
+      if (sessionEl) {
+        const sessionSecs = Math.floor((Date.now() - sessionStart) / 1000);
+        sessionEl.textContent = formatOnlineTime(sessionSecs);
+      }
+      if (monthEl) {
+        monthEl.textContent = formatOnlineTime(displayMonthlyOnline);
+      }
+      if (allEl) {
+        allEl.textContent = formatOnlineTime(displayTotalOnline);
+      }
     }
   }, 1000);
   

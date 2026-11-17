@@ -3701,6 +3701,10 @@
   gap: 0.5rem !important;
   padding: 0.35rem 0.65rem !important;
 }
+.sidebar-right .user-list .roster-avatar,
+.sidebar-right .user-list .roster-avatar-init {
+  display: none !important;
+}
 
 .sidebar-right .user-list .user-name-btn {
   flex: 1 !important;

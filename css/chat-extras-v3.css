@@ -2888,3 +2888,162 @@ body.guest-mode .emoji-bar { display: none; }
 /* Super icon previews inside the emoji picker */
 .emoji-btn.emoji-btn-super { overflow: hidden; }
 .emoji-btn.emoji-btn-super .super-emoji-container { font-size: 1.3rem !important; margin: 0 !important; animation: none !important; pointer-events: none; }
+
+/* ══ ENHANCED EXPANDED PROFILE CARD & AVATAR ══ */
+.profile-card {
+  width: 310px !important;
+  padding: 1.15rem !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, rgba(24, 18, 38, 0.98), rgba(15, 11, 24, 0.99)) !important;
+  border: 1px solid rgba(139, 109, 237, 0.45) !important;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(139, 109, 237, 0.2) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.profile-card.pinned {
+  width: 325px !important;
+  border-color: rgba(139, 109, 237, 0.7) !important;
+  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.75), 0 0 20px rgba(139, 109, 237, 0.35) !important;
+}
+
+.pc-header {
+  gap: 0.9rem !important;
+  margin-bottom: 0.85rem !important;
+  align-items: flex-start !important;
+}
+
+/* Rounded square profile picture covering fully */
+.pc-avatar-img {
+  width: 72px !important;
+  height: 72px !important;
+  border-radius: 14px !important;
+  object-fit: cover !important;
+  flex-shrink: 0 !important;
+  border: 2px solid rgba(139, 109, 237, 0.5) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+  cursor: pointer !important;
+  transition: transform 0.16s ease, border-color 0.16s ease !important;
+}
+
+.pc-avatar-img:hover {
+  transform: scale(1.04) !important;
+  border-color: var(--accent, #8b6ded) !important;
+}
+
+.pc-avatar-init {
+  width: 72px !important;
+  height: 72px !important;
+  border-radius: 14px !important;
+  font-size: 1.85rem !important;
+  font-weight: 800 !important;
+  border: 2px solid rgba(139, 109, 237, 0.4) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+  cursor: pointer !important;
+}
+
+.pc-info .pc-name {
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  margin-bottom: 2px !important;
+}
+
+.pc-info .pc-role {
+  font-size: 0.8rem !important;
+  margin-bottom: 6px !important;
+}
+
+/* Profile extra info rows */
+.pc-extra-info {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.76rem;
+  color: var(--text-muted, #c4b5fd);
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.pc-extra-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pc-extra-row span.lbl {
+  color: var(--muted, #94a3b8);
+  font-weight: 500;
+}
+
+.pc-extra-row span.val {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Fullscreen / Big Image Lightbox Modal */
+.image-lightbox-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  cursor: pointer;
+  animation: lbFadeIn 0.2s ease-out;
+}
+
+@keyframes lbFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.image-lightbox-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: default;
+}
+
+.image-lightbox-img {
+  width: min(520px, 86vw);
+  height: min(520px, 86vw);
+  object-fit: cover;
+  border-radius: 24px;
+  border: 3px solid rgba(139, 109, 237, 0.7);
+  box-shadow: 0 16px 54px rgba(0, 0, 0, 0.85), 0 0 35px rgba(139, 109, 237, 0.5);
+  background: #0d0a14;
+}
+
+.image-lightbox-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: #1e1535;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transition: all 0.15s ease;
+}
+
+.image-lightbox-close:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  transform: scale(1.1);
+}
