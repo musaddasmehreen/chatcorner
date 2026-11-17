@@ -334,21 +334,25 @@ function syncFormatInputStyles() {
 window.syncFormatInputStyles = syncFormatInputStyles;
 
 function loadChatFormatState() {
+  // Only restore color & size preferences across sessions.
+  // Bold / italic / underline reset to OFF each page load —
+  // they are per-message toggles, not sticky preferences.
   try {
     const saved = localStorage.getItem('cc_chat_format_state');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed && typeof parsed === 'object') {
         window.chatFormatState = {
-          bold: !!parsed.bold,
-          italic: !!parsed.italic,
-          underline: !!parsed.underline,
+          bold: false,
+          italic: false,
+          underline: false,
           color: parsed.color || null,
           size: parsed.size || null
         };
       }
     }
   } catch (e) {}
+  if (!window.chatFormatState) window.chatFormatState = { bold: false, italic: false, underline: false, color: null, size: null };
   syncFormatInputStyles();
 }
 
@@ -811,8 +815,9 @@ async function getActiveChatSession() {
   // Check if we're coming from a logout action
   const isLogoutFlag = sessionStorage.getItem('cc_logout_flag') === 'true';
   if (isLogoutFlag) {
-    // Clear the flag and don't create guest session
+    // Clear the flag and redirect to login page instead of stalling
     sessionStorage.removeItem('cc_logout_flag');
+    window.location.replace(AUTH_ENTRY_PAGE_URL);
     return null;
   }
 
@@ -1397,25 +1402,34 @@ function getSortedOnlineUsers(users = Object.values(onlineUsers)) {
   });
 }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  const session = await getActiveChatSession();
-  if (!session) return;
+let _chatAppInitialized = false;
+async function initChatApp() {
+  if (_chatAppInitialized) return;
+  _chatAppInitialized = true;
 
-  currentUser = session.user;
+  try {
+    const session = await getActiveChatSession();
+    if (!session) {
+      console.warn('[initChatApp] No active session found. Redirecting to login...');
+      window.location.replace(AUTH_ENTRY_PAGE_URL);
+      return;
+    }
 
-  // Optimize: Fetch profile, room list, and proxy URL in parallel to reduce sequential database network roundtrips
-  const [profileResult, roomsResult, proxyBaseUrl] = await Promise.all([
-    sbClient.from('profiles').select('*').eq('id', currentUser.id).single(),
-    sbClient.from('rooms').select('*').order('name'),
-    window.ccSecurity ? window.ccSecurity.getAppSettingValue('proxy_base_url').catch(() => null) : Promise.resolve(null)
-  ]);
+    currentUser = session.user;
 
-  if (proxyBaseUrl) {
-    window._cachedProxyBaseUrl = proxyBaseUrl.trim();
-  }
+    // Optimize: Fetch profile, room list, and proxy URL in parallel to reduce sequential database network roundtrips
+    const [profileResult, roomsResult, proxyBaseUrl] = await Promise.all([
+      sbClient.from('profiles').select('*').eq('id', currentUser.id).single(),
+      sbClient.from('rooms').select('*').order('name'),
+      (typeof getAppSettingValue === 'function' ? getAppSettingValue('proxy_base_url').catch(() => null) : Promise.resolve(null))
+    ]);
 
-  let prof = profileResult.data;
-  const initialRooms = roomsResult.data || [];
+    if (proxyBaseUrl) {
+      window._cachedProxyBaseUrl = String(proxyBaseUrl).trim();
+    }
+
+    let prof = profileResult?.data;
+    const initialRooms = roomsResult?.data || [];
 
   if (!prof) {
     prof = currentUser?.is_anonymous
@@ -1690,9 +1704,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Expose so channel-error callbacks (below, outside DOMContentLoaded) can use it
+  // Expose so channel-error callbacks can use it
   window._ccReconnect = _reconnect;
-});
+  } catch (initErr) {
+    console.error('[initChatApp] Initialization error:', initErr);
+  }
+}
+
+// Ensure initChatApp runs reliably on DOMContentLoaded or immediately if already loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initChatApp);
+} else {
+  initChatApp();
+}
 
 // ── Global Realtime Room Presence (User Counts Across All Rooms) ──
 let _globalRoomPresenceChannel = null;
@@ -2496,6 +2520,15 @@ async function sendMessage() {
   autoResizeTextarea(input);
   const counter = document.getElementById('msg-char-counter');
   if (counter) counter.textContent = '0/500';
+
+  // ── Reset per-message format toggles (bold/italic/underline) after send ──
+  // Color and size are kept as user preferences.
+  if (window.chatFormatState) {
+    window.chatFormatState.bold = false;
+    window.chatFormatState.italic = false;
+    window.chatFormatState.underline = false;
+  }
+  syncFormatInputStyles();
 
   // ── OPTIMISTIC UI: append message node instantly before DB confirms ──
   let optimisticNode = null;
