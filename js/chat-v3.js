@@ -23,32 +23,6 @@ function compressAvatarDataUrl(img, targetDim = 400, maxKb = 20) {
     sy = (img.naturalHeight - sh) / 2;
   }
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetDim, targetDim);
-
-  // Apply subtle pre-sharpening so uploaded avatars are crystal clear
-  try {
-    const imgData = ctx.getImageData(0, 0, targetDim, targetDim);
-    const pixels = imgData.data;
-    const output = ctx.createImageData(targetDim, targetDim);
-    const outPixels = output.data;
-    outPixels.set(pixels);
-    const k = 0.35;
-    const kCenter = 1 + 4 * k;
-    for (let y = 1; y < targetDim - 1; y++) {
-      for (let x = 1; x < targetDim - 1; x++) {
-        const idx = (y * targetDim + x) * 4;
-        for (let c = 0; c < 3; c++) {
-          const top = ((y - 1) * targetDim + x) * 4 + c;
-          const bottom = ((y + 1) * targetDim + x) * 4 + c;
-          const left = (y * targetDim + (x - 1)) * 4 + c;
-          const right = (y * targetDim + (x + 1)) * 4 + c;
-          const val = pixels[idx + c] * kCenter - (pixels[top] + pixels[bottom] + pixels[left] + pixels[right]) * k;
-          outPixels[idx + c] = Math.min(255, Math.max(0, val));
-        }
-        outPixels[idx + 3] = pixels[idx + 3];
-      }
-    }
-    ctx.putImageData(output, 0, 0);
-  } catch (_) {}
   
   // Try qualities starting from 0.85 down until <= maxKb
   let quality = 0.82;
@@ -60,113 +34,11 @@ function compressAvatarDataUrl(img, targetDim = 400, maxKb = 20) {
   return dataUrl;
 }
 
-// Crystal Clear Image De-Blur & Super-Resolution Algorithm
-function makeImageCrystalClear(img, strength = 0.65) {
-  const targetW = Math.max(520, img.naturalWidth || 520);
-  const targetH = Math.max(520, img.naturalHeight || 520);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = targetW;
-  canvas.height = targetH;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-
-  ctx.drawImage(img, 0, 0, targetW, targetH);
-
-  try {
-    const imgData = ctx.getImageData(0, 0, targetW, targetH);
-    const pixels = imgData.data;
-    const output = ctx.createImageData(targetW, targetH);
-    const outPixels = output.data;
-    outPixels.set(pixels);
-
-    // Multi-directional Unsharp Mask & High-Pass Convolution
-    const k = strength;
-    const kCorner = k * 0.25;
-    const kCross  = k * 0.5;
-    const kCenter = 1 + 3 * k;
-
-    for (let y = 1; y < targetH - 1; y++) {
-      const rowOffset = y * targetW;
-      const rowTop = (y - 1) * targetW;
-      const rowBottom = (y + 1) * targetW;
-
-      for (let x = 1; x < targetW - 1; x++) {
-        const idx = (rowOffset + x) * 4;
-
-        const idxTL = (rowTop + (x - 1)) * 4;
-        const idxTC = (rowTop + x) * 4;
-        const idxTR = (rowTop + (x + 1)) * 4;
-
-        const idxML = (rowOffset + (x - 1)) * 4;
-        const idxMR = (rowOffset + (x + 1)) * 4;
-
-        const idxBL = (rowBottom + (x - 1)) * 4;
-        const idxBC = (rowBottom + x) * 4;
-        const idxBR = (rowBottom + (x + 1)) * 4;
-
-        for (let c = 0; c < 3; c++) {
-          const val = pixels[idx + c] * kCenter
-            - (pixels[idxTC + c] + pixels[idxBC + c] + pixels[idxML + c] + pixels[idxMR + c]) * kCross
-            - (pixels[idxTL + c] + pixels[idxTR + c] + pixels[idxBL + c] + pixels[idxBR + c]) * kCorner;
-
-          // Adaptive local contrast boost (+6% dynamic range stretch)
-          const contrastVal = 128 + (val - 128) * 1.06;
-          outPixels[idx + c] = Math.min(255, Math.max(0, contrastVal));
-        }
-        outPixels[idx + 3] = pixels[idx + 3];
-      }
-    }
-
-    ctx.putImageData(output, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.92);
-  } catch (err) {
-    console.warn('Cannot enhance image via canvas (CORS restriction):', err);
-    return null;
-  }
-}
-
-// Ensure SVG convolution filters exist for instant, universal Crystal Clear HD
-function ensureCrystalClearSvgFilters() {
-  if (document.getElementById('cc-crystal-clear-filters')) return;
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.id = 'cc-crystal-clear-filters';
-  svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = `
-    <defs>
-      <!-- Crystal Clear HD (Balanced Sharpening & De-Blur) -->
-      <filter id="crystal-clear-fe" x="-10%" y="-10%" width="120%" height="120%">
-        <feConvolveMatrix order="3,3" preserveAlpha="true" kernelMatrix="0 -0.85 0 -0.85 4.4 -0.85 0 -0.85 0"/>
-      </filter>
-      <!-- Crystal Clear Ultra (Maximum Super-Resolution Clarity) -->
-      <filter id="crystal-clear-ultra" x="-10%" y="-10%" width="120%" height="120%">
-        <feConvolveMatrix order="3,3" preserveAlpha="true" kernelMatrix="-0.4 -0.9 -0.4 -0.9 6.2 -0.9 -0.4 -0.9 -0.4"/>
-      </filter>
-    </defs>
-  `;
-  document.body.appendChild(svg);
-}
-
-// Lightbox state
-let _lbOriginalUrl = null;
-let _lbEnhancedUrl = null;
-let _lbUltraUrl = null;
-let _lbMode = 'hd'; // 'hd' | 'ultra' | 'off'
-
-// Lightbox modal for full large profile image preview with Crystal Clear HD
+// Lightbox modal for full large profile image preview
 window.openAvatarLightbox = function(imageUrl, username = 'User') {
   if (!imageUrl) return;
   const existing = document.getElementById('image-lightbox-modal');
   if (existing) existing.remove();
-
-  ensureCrystalClearSvgFilters();
-
-  _lbOriginalUrl = imageUrl;
-  _lbEnhancedUrl = null;
-  _lbUltraUrl = null;
-  _lbMode = 'hd';
 
   const modal = document.createElement('div');
   modal.id = 'image-lightbox-modal';
@@ -177,38 +49,13 @@ window.openAvatarLightbox = function(imageUrl, username = 'User') {
   modal.innerHTML = `
     <div class="image-lightbox-content" onclick="event.stopPropagation()">
       <button type="button" class="image-lightbox-close" onclick="closeAvatarLightbox()" aria-label="Close" title="Close">✕</button>
-      <div class="lb-img-wrap">
-        <img id="lightbox-active-img" src="${imageUrl}" class="image-lightbox-img crystal-clear" alt="${username} profile picture" />
-        <button type="button" id="lb-clarity-badge" class="lb-clarity-badge active" onclick="toggleLightboxClarity(event)" title="Click to toggle Crystal Clear HD">
-          <span class="lb-badge-icon">✨</span> <span id="lb-badge-txt">Crystal Clear: ON</span>
-        </button>
-      </div>
+      <img id="lightbox-active-img" src="${imageUrl}" class="image-lightbox-img" alt="${username} profile picture" />
       <div class="lb-user-title">${username}</div>
-      <div class="lb-controls-bar">
-        <button type="button" id="lb-btn-hd" class="lb-btn active" onclick="setLightboxClarityMode('hd')">✨ Crystal Clear</button>
-        <button type="button" id="lb-btn-ultra" class="lb-btn" onclick="setLightboxClarityMode('ultra')">🚀 Ultra Sharp</button>
-        <button type="button" id="lb-btn-off" class="lb-btn" onclick="setLightboxClarityMode('off')">🔄 Original</button>
-      </div>
-      <div id="lb-status-tip" class="lb-clarity-tip">✨ Crystal Clear is ON — image de-blurred & sharpened</div>
     </div>
   `;
 
   modal.addEventListener('click', () => closeAvatarLightbox());
   document.body.appendChild(modal);
-
-  // Also try canvas-based super-resolution if possible
-  const tempImg = new Image();
-  tempImg.crossOrigin = 'anonymous';
-  tempImg.onload = () => {
-    try {
-      _lbEnhancedUrl = makeImageCrystalClear(tempImg, 0.65);
-      const activeImg = document.getElementById('lightbox-active-img');
-      if (activeImg && _lbMode === 'hd' && _lbEnhancedUrl) {
-        activeImg.src = _lbEnhancedUrl;
-      }
-    } catch (_) {}
-  };
-  tempImg.src = imageUrl;
 
   const onKey = (e) => {
     if (e.key === 'Escape') {
@@ -217,81 +64,6 @@ window.openAvatarLightbox = function(imageUrl, username = 'User') {
     }
   };
   document.addEventListener('keydown', onKey);
-};
-
-window.setLightboxClarityMode = function(mode) {
-  _lbMode = mode;
-  const activeImg = document.getElementById('lightbox-active-img');
-  const badge = document.getElementById('lb-clarity-badge');
-  const badgeTxt = document.getElementById('lb-badge-txt');
-  const tip = document.getElementById('lb-status-tip');
-  const btnHd = document.getElementById('lb-btn-hd');
-  const btnUltra = document.getElementById('lb-btn-ultra');
-  const btnOff = document.getElementById('lb-btn-off');
-
-  if (!activeImg) return;
-
-  btnHd?.classList.remove('active');
-  btnUltra?.classList.remove('active');
-  btnOff?.classList.remove('active');
-  activeImg.classList.remove('crystal-clear', 'crystal-clear-ultra', 'crystal-clear-off');
-
-  if (mode === 'hd') {
-    activeImg.classList.add('crystal-clear');
-    if (_lbEnhancedUrl) activeImg.src = _lbEnhancedUrl;
-    btnHd?.classList.add('active');
-    if (badge) {
-      badge.className = 'lb-clarity-badge active';
-      badge.style.display = 'inline-flex';
-    }
-    if (badgeTxt) badgeTxt.textContent = 'Crystal Clear: ON';
-    if (tip) tip.textContent = '✨ Crystal Clear is ON — image de-blurred & sharpened';
-  } else if (mode === 'ultra') {
-    activeImg.classList.add('crystal-clear-ultra');
-    if (_lbUltraUrl) {
-      activeImg.src = _lbUltraUrl;
-    } else {
-      const tempImg = new Image();
-      tempImg.crossOrigin = 'anonymous';
-      tempImg.onload = () => {
-        try {
-          _lbUltraUrl = makeImageCrystalClear(tempImg, 1.0);
-          if (_lbUltraUrl && _lbMode === 'ultra') activeImg.src = _lbUltraUrl;
-        } catch (_) {}
-      };
-      tempImg.src = _lbOriginalUrl;
-    }
-    btnUltra?.classList.add('active');
-    if (badge) {
-      badge.className = 'lb-clarity-badge active';
-      badge.style.display = 'inline-flex';
-    }
-    if (badgeTxt) badgeTxt.textContent = 'Ultra Sharp: ON';
-    if (tip) tip.textContent = '🚀 Ultra Sharp is ON — maximum clarity & micro-contrast';
-  } else {
-    // off
-    activeImg.classList.add('crystal-clear-off');
-    activeImg.src = _lbOriginalUrl;
-    btnOff?.classList.add('active');
-    if (badge) {
-      badge.className = 'lb-clarity-badge off';
-      badge.style.display = 'inline-flex';
-    }
-    if (badgeTxt) badgeTxt.textContent = 'Original: OFF';
-    if (tip) tip.textContent = '🔄 Showing original unenhanced image';
-  }
-};
-
-window.toggleLightboxClarity = function(ev) {
-  if (ev) {
-    ev.stopPropagation();
-    ev.preventDefault();
-  }
-  if (_lbMode === 'off') {
-    setLightboxClarityMode('hd');
-  } else {
-    setLightboxClarityMode('off');
-  }
 };
 
 window.closeAvatarLightbox = function() {
