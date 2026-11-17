@@ -3114,35 +3114,42 @@ body.guest-mode .emoji-bar { display: none; }
   border-radius: 7px !important;
 }
 
-/* Bubble Styling */
+/* Bubble Styling: Plain on background without any border, box, or shadow */
 .msg-row .msg-bubble,
-.msg-row.self .msg-bubble {
-  background: var(--msg-bg, rgba(255, 255, 255, 0.06)) !important;
-  border-radius: 12px !important;
-  padding: 0.48rem 0.85rem 0.42rem !important;
+.msg-row.self .msg-bubble,
+.msg-bubble {
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 0.1rem 0 !important;
   max-width: 100% !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border: none !important;
+  box-shadow: none !important;
   word-break: break-word !important;
-  font-size: 0.88rem !important;
+  font-size: 0.92rem !important;
   text-align: left !important;
 }
 
 .msg-row.self .msg-bubble {
-  background: var(--msg-self, rgba(139, 109, 237, 0.16)) !important;
-  border-color: rgba(139, 109, 237, 0.28) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
+.msg-row .msg-username,
 .msg-row.self .msg-username {
+  font-weight: 700 !important;
+  font-size: 0.92rem !important;
+  margin-right: 0.35rem !important;
   text-align: left !important;
 }
 
 .msg-row .msg-time,
 .msg-row.self .msg-time {
-  font-size: 0.67rem !important;
+  font-size: 0.68rem !important;
   color: var(--muted, #94a3b8) !important;
-  margin-top: 0.2rem !important;
-  text-align: right !important;
-  opacity: 0.75 !important;
+  margin-top: 0.15rem !important;
+  text-align: left !important;
+  opacity: 0.72 !important;
 }
 
 /* ══ TEXT FORMATTING TOOLBAR (ZERO EXTRA SPACE, INTEGRATED IN AUDIO BAR) ══ */
