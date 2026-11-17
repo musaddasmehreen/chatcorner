@@ -667,6 +667,23 @@ let oldestMessageTimestamp = null;
 let isLoadingOlderMessages = false;
 let cachedRooms = [];
 
+const VIRTUAL_ROOM_DEFAULTS = {
+  virtual_iptv_enabled: true,
+  virtual_iptv_category: 'country:pk',
+  virtual_iptv_source: '',
+  virtual_youtube_enabled: true,
+  virtual_youtube_default: '',
+  virtual_spotify_enabled: true,
+  virtual_spotify_default: '',
+  virtual_ludo_enabled: true,
+  virtual_ludo_room: '',
+  virtual_browser_enabled: true,
+  virtual_browser_default: 'https://en.wikipedia.org/wiki/Main_Page',
+  virtual_browser_locked: false,
+  virtual_browser_pin: '1234'
+};
+let _virtualRoomConfig = { ...VIRTUAL_ROOM_DEFAULTS };
+
 let _ytPlayer = null;
 let _isSettingVideoState = false;
 let _bypassPasswordRooms = new Set();
@@ -1596,6 +1613,17 @@ async function initChatApp() {
   // Pass pre-fetched rooms list to avoid duplicate loading queries
   await loadRooms(initialRooms);
 
+  // Safety net: ensure a room is ALWAYS entered and currentRoom is never null
+  if (!currentRoom && Array.isArray(cachedRooms) && cachedRooms.length > 0) {
+    const isGuest = isGuestProfile(currentProfile);
+    const fallbackRoom = isGuest
+      ? (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'guest') || cachedRooms[0])
+      : (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'chatcorner') || cachedRooms[0]);
+    if (fallbackRoom) {
+      await enterRoom(fallbackRoom, true, true);
+    }
+  }
+
   // ── Exponential-Backoff Reconnect Engine ────────────────────────────
   // Prevents the "thundering herd" problem: when hundreds of clients
   // reconnect at the same moment (e.g. after a network outage or server
@@ -1709,13 +1737,6 @@ async function initChatApp() {
   } catch (initErr) {
     console.error('[initChatApp] Initialization error:', initErr);
   }
-}
-
-// Ensure initChatApp runs reliably on DOMContentLoaded or immediately if already loaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initChatApp);
-} else {
-  initChatApp();
 }
 
 // ── Global Realtime Room Presence (User Counts Across All Rooms) ──
@@ -6253,22 +6274,6 @@ const IPTV_SOURCES = {
   'cat:general':     'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
 };
 
-const VIRTUAL_ROOM_DEFAULTS = {
-  virtual_iptv_enabled: true,
-  virtual_iptv_category: 'country:pk',
-  virtual_iptv_source: '',
-  virtual_youtube_enabled: true,
-  virtual_youtube_default: '',
-  virtual_spotify_enabled: true,
-  virtual_spotify_default: '',
-  virtual_ludo_enabled: true,
-  virtual_ludo_room: '',
-  virtual_browser_enabled: true,
-  virtual_browser_default: 'https://en.wikipedia.org/wiki/Main_Page',
-  virtual_browser_locked: false,
-  virtual_browser_pin: '1234'
-};
-let _virtualRoomConfig = { ...VIRTUAL_ROOM_DEFAULTS };
 
 async function loadVirtualRoomConfig() {
   try {
@@ -7710,3 +7715,11 @@ function enterBrowserRoom() {
   }
 }
 window.enterBrowserRoom = enterBrowserRoom;
+
+// ── App Startup: runs ONLY after entire chat-v3.js script has loaded & evaluated ──
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initChatApp);
+} else {
+  // Use setTimeout to ensure all deferred companion scripts have also finished executing
+  setTimeout(initChatApp, 0);
+}
