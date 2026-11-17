@@ -3361,6 +3361,11 @@ body.guest-mode .emoji-bar { display: none; }
   font-weight: 600 !important;
 }
 
+/* Live WYSIWYG Message Input Styling */
+#msg-input {
+  transition: border-color 0.15s ease, color 0.12s ease, font-size 0.12s ease !important;
+}
+
 /* ══ IPTV / VIRTUAL ROOM BUTTON: DOCKED FLUSH TO VERY LEFT EDGE WITH ARROW & HOVER REVEAL ══ */
 .iptv-chat-wrapper #vr-users-btn,
 .vr-users-btn {

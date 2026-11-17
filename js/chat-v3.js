@@ -256,7 +256,7 @@ function formatMessageContent(rawContent) {
 window.formatMessageText = formatMessageContent;
 
 /* ════════════════════════════════════════════════════════════════
-   Smart Text Formatting Toolbar (B, I, U, Color, Size)
+   Live WYSIWYG Text Formatting (Zero Code in Input, Pure Live Effect)
    ════════════════════════════════════════════════════════════════ */
 window.chatFormatState = {
   bold: false,
@@ -266,60 +266,100 @@ window.chatFormatState = {
   size: null
 };
 
-window.toggleFormatBtn = function(type) {
-  const textarea = document.getElementById('msg-input');
-  if (!textarea) return;
-  const tagMap = { bold: 'b', italic: 'i', underline: 'u' };
-  const tag = tagMap[type];
-  if (!tag) return;
+// Strips any BBCode tags if user pasted them or from legacy state
+function stripChatBbcodeTags(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/\[\/?(b|i|u|s|glow)\]/gi, '')
+    .replace(/\[\/?color(=[^\]]*)?\]/gi, '')
+    .replace(/\[\/?size(=[^\]]*)?\]/gi, '')
+    .replace(/\[\/?font(=[^\]]*)?\]/gi, '');
+}
+window.stripChatBbcodeTags = stripChatBbcodeTags;
 
-  const selStart = textarea.selectionStart;
-  const selEnd = textarea.selectionEnd;
-  const val = textarea.value;
-  const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+function syncFormatInputStyles() {
+  const input = document.getElementById('msg-input');
+  if (!input) return;
 
-  if (hasSelection) {
-    // 1. User selected a range of text -> wrap the selected range
-    const selected = val.substring(selStart, selEnd);
-    const wrapped = `[${tag}]${selected}[/${tag}]`;
-    textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
-    textarea.focus();
-    const newCursor = selStart + tag.length + 2 + selected.length + tag.length + 3;
-    textarea.setSelectionRange(newCursor, newCursor);
-    window.chatFormatState[type] = true;
-  } else if (val.trim().length > 0) {
-    // 2. User has text in textarea but no selection -> wrap or unwrap the whole text
-    const openTag = `[${tag}]`;
-    const closeTag = `[/${tag}]`;
-    if (val.startsWith(openTag) && val.endsWith(closeTag)) {
-      // Unwrap
-      textarea.value = val.slice(openTag.length, -closeTag.length);
-      window.chatFormatState[type] = false;
-    } else {
-      // Wrap whole text
-      textarea.value = `${openTag}${val}${closeTag}`;
-      window.chatFormatState[type] = true;
-    }
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-  } else {
-    // 3. Textarea is empty -> insert tags and place cursor in the middle [b]|[/b]
-    window.chatFormatState[type] = !window.chatFormatState[type];
-    if (window.chatFormatState[type]) {
-      textarea.value = `[${tag}][/${tag}]`;
-      const cursorPos = tag.length + 2;
-      textarea.focus();
-      textarea.setSelectionRange(cursorPos, cursorPos);
-    } else {
-      textarea.value = '';
-      textarea.focus();
+  const state = window.chatFormatState || {};
+
+  // Apply LIVE visual styles directly onto the input box as you type
+  input.style.fontWeight = state.bold ? '700' : 'normal';
+  input.style.fontStyle = state.italic ? 'italic' : 'normal';
+  input.style.textDecoration = state.underline ? 'underline' : 'none';
+  input.style.color = state.color || '';
+  input.style.caretColor = state.color || '';
+  input.style.fontSize = state.size ? (state.size + 'px') : '';
+
+  // Clean any BBCode tags if accidentally present in input (so user never sees code)
+  if (input.value && (input.value.includes('[') && input.value.includes(']'))) {
+    const cleaned = stripChatBbcodeTags(input.value);
+    if (cleaned !== input.value) {
+      input.value = cleaned;
     }
   }
 
-  // Update button active UI
-  const btn = document.getElementById('fmt-' + type);
-  if (btn) btn.classList.toggle('active', !!window.chatFormatState[type]);
+  // Update toolbar button UI
+  const btnBold = document.getElementById('fmt-bold');
+  if (btnBold) btnBold.classList.toggle('active', !!state.bold);
+
+  const btnItalic = document.getElementById('fmt-italic');
+  if (btnItalic) btnItalic.classList.toggle('active', !!state.italic);
+
+  const btnUnderline = document.getElementById('fmt-underline');
+  if (btnUnderline) btnUnderline.classList.toggle('active', !!state.underline);
+
+  const btnColor = document.getElementById('fmt-color-btn');
+  const preview = document.getElementById('fmt-color-preview');
+  if (btnColor) btnColor.classList.toggle('active', !!state.color);
+  if (preview) {
+    preview.style.borderBottomColor = state.color || 'var(--accent, #8b6ded)';
+    preview.style.color = state.color || 'inherit';
+  }
+
+  const btnSize = document.getElementById('fmt-size-btn');
+  const sizeLabel = document.getElementById('fmt-size-label');
+  if (btnSize) btnSize.classList.toggle('active', !!state.size);
+  if (sizeLabel) sizeLabel.textContent = state.size ? (state.size + 'px') : 'Size';
+
+  // Keep auto-resize in sync if font size changes
+  if (typeof autoResizeTextarea === 'function') {
+    autoResizeTextarea(input);
+  }
+
+  try {
+    localStorage.setItem('cc_chat_format_state', JSON.stringify(state));
+  } catch (e) {}
+}
+window.syncFormatInputStyles = syncFormatInputStyles;
+
+function loadChatFormatState() {
+  try {
+    const saved = localStorage.getItem('cc_chat_format_state');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        window.chatFormatState = {
+          bold: !!parsed.bold,
+          italic: !!parsed.italic,
+          underline: !!parsed.underline,
+          color: parsed.color || null,
+          size: parsed.size || null
+        };
+      }
+    }
+  } catch (e) {}
+  syncFormatInputStyles();
+}
+
+window.toggleFormatBtn = function(type) {
+  if (!window.chatFormatState) window.chatFormatState = {};
+  if (type === 'bold' || type === 'italic' || type === 'underline') {
+    window.chatFormatState[type] = !window.chatFormatState[type];
+  }
+  syncFormatInputStyles();
   closeAllFormatPopovers();
+  document.getElementById('msg-input')?.focus();
 };
 
 window.toggleFormatDropdown = function(ev, type) {
@@ -348,56 +388,11 @@ document.addEventListener('click', function(e) {
 });
 
 window.applyColorFormat = function(color) {
-  const textarea = document.getElementById('msg-input');
+  if (!window.chatFormatState) window.chatFormatState = {};
   window.chatFormatState.color = color || null;
-
-  // Update color preview UI
-  const preview = document.getElementById('fmt-color-preview');
-  if (preview) {
-    preview.style.borderBottomColor = color || 'var(--accent, #8b6ded)';
-    preview.style.color = color || 'inherit';
-  }
-  const btn = document.getElementById('fmt-color-btn');
-  if (btn) btn.classList.toggle('active', !!color);
-
-  if (textarea) {
-    const selStart = textarea.selectionStart;
-    const selEnd = textarea.selectionEnd;
-    const val = textarea.value;
-    const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
-
-    if (color) {
-      if (hasSelection) {
-        const selected = val.substring(selStart, selEnd);
-        textarea.value = val.substring(0, selStart) + `[color=${color}]${selected}[/color]` + val.substring(selEnd);
-        textarea.focus();
-        const newCursor = selStart + color.length + 8 + selected.length + 8;
-        textarea.setSelectionRange(newCursor, newCursor);
-      } else if (val.trim().length > 0) {
-        const colorRegex = /^\[color=#[a-fA-F0-9]{3,8}\]([\s\S]*?)\[\/color\]$/;
-        if (colorRegex.test(val)) {
-          textarea.value = val.replace(/^\[color=#[a-fA-F0-9]{3,8}\]/, `[color=${color}]`);
-        } else {
-          textarea.value = `[color=${color}]${val}[/color]`;
-        }
-        textarea.focus();
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      } else {
-        textarea.value = `[color=${color}][/color]`;
-        const cursor = color.length + 8;
-        textarea.focus();
-        textarea.setSelectionRange(cursor, cursor);
-      }
-    } else {
-      // Reset color to default
-      if (val.trim().length > 0) {
-        textarea.value = val.replace(/\[color=#[a-fA-F0-9]{3,8}\]/gi, '').replace(/\[\/color\]/gi, '');
-      }
-      textarea.focus();
-    }
-  }
-
+  syncFormatInputStyles();
   closeAllFormatPopovers();
+  document.getElementById('msg-input')?.focus();
 };
 
 window.applyCustomColor = function(color) {
@@ -409,54 +404,11 @@ window.resetColorFormat = function() {
 };
 
 window.applySizeFormat = function(size) {
-  const textarea = document.getElementById('msg-input');
+  if (!window.chatFormatState) window.chatFormatState = {};
   window.chatFormatState.size = size || null;
-
-  const label = document.getElementById('fmt-size-label');
-  if (label) {
-    label.textContent = size ? (size + 'px') : 'Size';
-  }
-  const btn = document.getElementById('fmt-size-btn');
-  if (btn) btn.classList.toggle('active', !!size);
-
-  if (textarea) {
-    const selStart = textarea.selectionStart;
-    const selEnd = textarea.selectionEnd;
-    const val = textarea.value;
-    const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
-
-    if (size) {
-      if (hasSelection) {
-        const selected = val.substring(selStart, selEnd);
-        textarea.value = val.substring(0, selStart) + `[size=${size}]${selected}[/size]` + val.substring(selEnd);
-        textarea.focus();
-        const newCursor = selStart + size.length + 7 + selected.length + 7;
-        textarea.setSelectionRange(newCursor, newCursor);
-      } else if (val.trim().length > 0) {
-        const sizeRegex = /^\[size=\d{1,2}\]([\s\S]*?)\[\/size\]$/;
-        if (sizeRegex.test(val)) {
-          textarea.value = val.replace(/^\[size=\d{1,2}\]/, `[size=${size}]`);
-        } else {
-          textarea.value = `[size=${size}]${val}[/size]`;
-        }
-        textarea.focus();
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      } else {
-        textarea.value = `[size=${size}][/size]`;
-        const cursor = size.length + 7;
-        textarea.focus();
-        textarea.setSelectionRange(cursor, cursor);
-      }
-    } else {
-      // Normal size (Default)
-      if (val.trim().length > 0) {
-        textarea.value = val.replace(/\[size=\d{1,2}\]/gi, '').replace(/\[\/size\]/gi, '');
-      }
-      textarea.focus();
-    }
-  }
-
+  syncFormatInputStyles();
   closeAllFormatPopovers();
+  document.getElementById('msg-input')?.focus();
 };
 
 window.clearAllFormatting = function() {
@@ -467,17 +419,17 @@ window.clearAllFormatting = function() {
     color: null,
     size: null
   };
-  document.querySelectorAll('.fmt-btn').forEach(el => el.classList.remove('active'));
-  const preview = document.getElementById('fmt-color-preview');
-  if (preview) {
-    preview.style.borderBottomColor = 'var(--accent, #8b6ded)';
-    preview.style.color = 'inherit';
-  }
-  const label = document.getElementById('fmt-size-label');
-  if (label) label.textContent = 'Size';
+  syncFormatInputStyles();
   closeAllFormatPopovers();
   document.getElementById('msg-input')?.focus();
 };
+
+// Initialize formatting styles on load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadChatFormatState);
+} else {
+  loadChatFormatState();
+}
 
 function parseSuperEmojisHtml(text) {
   if (typeof text !== 'string') return text;
@@ -2498,21 +2450,22 @@ async function sendMessage() {
     await ensureGuestProfileRecord();
   }
   const safeText = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
-  let formattedText = safeText;
+  const cleanText = stripChatBbcodeTags(safeText);
+  let formattedText = cleanText;
   if (!isSendingImage && window.chatFormatState) {
-    if (window.chatFormatState.bold && !formattedText.includes('[b]')) {
+    if (window.chatFormatState.bold) {
       formattedText = `[b]${formattedText}[/b]`;
     }
-    if (window.chatFormatState.italic && !formattedText.includes('[i]')) {
+    if (window.chatFormatState.italic) {
       formattedText = `[i]${formattedText}[/i]`;
     }
-    if (window.chatFormatState.underline && !formattedText.includes('[u]')) {
+    if (window.chatFormatState.underline) {
       formattedText = `[u]${formattedText}[/u]`;
     }
-    if (window.chatFormatState.color && !formattedText.includes('[color=')) {
+    if (window.chatFormatState.color) {
       formattedText = `[color=${window.chatFormatState.color}]${formattedText}[/color]`;
     }
-    if (window.chatFormatState.size && !formattedText.includes('[size=')) {
+    if (window.chatFormatState.size) {
       formattedText = `[size=${window.chatFormatState.size}]${formattedText}[/size]`;
     }
   }
