@@ -877,26 +877,36 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
 }
 
 .msg-row.self {
-  flex-direction: row-reverse;
-  align-self: flex-end;
+  flex-direction: row;
+  align-self: flex-start;
 }
 
 .avatar {
-  width: 30px; height: 30px;
-  border-radius: 50%;
+  width: 38px;
+  height: 44px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.78rem;
+  font-size: 1.1rem;
   font-weight: 800;
   color: #fff;
   flex-shrink: 0;
-  opacity: 0.9;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(139, 109, 237, 0.4);
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .msg-bubble {
   background: var(--msg-bg);
-  border-radius: 14px 14px 14px 4px;
+  border-radius: 12px;
   padding: 0.5rem 0.82rem 0.4rem;
   max-width: 100%;
   border: none;
@@ -909,7 +919,7 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
 
 .msg-row.self .msg-bubble {
   background: var(--msg-self);
-  border-radius: 14px 14px 4px 14px;
+  border-radius: 12px;
   border: none;
 }
 

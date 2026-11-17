@@ -2210,6 +2210,21 @@ async function sendMessage() {
   }
 }
 
+window.showProfileFromChat = function(ev, userId, username) {
+  if (ev) {
+    ev.stopPropagation();
+    ev.preventDefault();
+  }
+  if (!userId) return;
+  const anchor = ev?.currentTarget || ev?.target;
+  const user = { userId, username };
+  if (typeof showProfileCard === 'function' && anchor) {
+    showProfileCard(user, anchor, true);
+  } else if (typeof showProfileModal === 'function') {
+    showProfileModal(userId);
+  }
+};
+
 /* Builds a message DOM node without appending it (used for batch & single) */
 function buildMessageNode(msg) {
   if (msg?.user_id && !canProcessIncomingPayload(msg.user_id)) return null;
@@ -2231,7 +2246,7 @@ function buildMessageNode(msg) {
     const initial = (msg.username || '?')[0].toUpperCase();
     const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
     
-    const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
+    const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || senderProf?.avatarUrl || null);
     const avatarInner = avatarUrl
       ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
       : initial;
@@ -2252,7 +2267,7 @@ function buildMessageNode(msg) {
     const deleteButton = buildDeleteButtonHtml(msg.user_id);
     const reportButton = buildReportButtonHtml(msg);
     div.innerHTML = `
-      <div class="avatar" style="background:${color}">${avatarInner}</div>
+      <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
       <div class="msg-bubble">
         ${deleteButton}
         ${reportButton}
@@ -2286,7 +2301,7 @@ function buildMessageNode(msg) {
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
   
   const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
-  const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || null);
+  const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || senderProf?.avatarUrl || null);
   const avatarInner = avatarUrl
     ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
     : initial;
@@ -2315,7 +2330,7 @@ function buildMessageNode(msg) {
   const reportButton = buildReportButtonHtml(msg);
 
   div.innerHTML = `
-    <div class="avatar" style="background:${color}">${avatarInner}</div>
+    <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
       ${reportButton}
@@ -2945,8 +2960,10 @@ function buildImageMessageNode(msg) {
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
-  const avatarInner = isMe && currentProfile?.avatar_url
-    ? `<img src="${escHtml(currentProfile.avatar_url)}" alt=""/>`
+  const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
+  const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || senderProf?.avatarUrl || null);
+  const avatarInner = avatarUrl
+    ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
     : initial;
   const deleteButton = buildDeleteButtonHtml(msg.user_id, '🗑️ Delete');
   const imageMarkup = imageSrc
@@ -2958,7 +2975,7 @@ function buildImageMessageNode(msg) {
     : '<div class="msg-image-error">⚠️ Invalid image URL.</div>';
 
   div.innerHTML = `
-    <div class="avatar" style="background:${color}">${avatarInner}</div>
+    <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton ? `<div class="image-delete-row">${deleteButton}</div>` : ''}
       <div class="msg-line"><span class="msg-text">${imageMarkup}</span></div>
@@ -2981,6 +2998,11 @@ function appendVoiceNoteMessage(msg, isMe) {
 
   const initial = (msg.username || '?')[0].toUpperCase();
   const color = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
+  const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
+  const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || senderProf?.avatarUrl || null);
+  const avatarInner = avatarUrl
+    ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
+    : initial;
   const voiceSrc = sanitizeAudioSource(msg);
 
   const voiceMarkup = isRegisteredUser()
@@ -2989,7 +3011,7 @@ function appendVoiceNoteMessage(msg, isMe) {
   const deleteButton = buildDeleteButtonHtml(msg.user_id);
 
   div.innerHTML = `
-    <div class="avatar" style="background:${color}">${initial}</div>
+    <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
       ${deleteButton}
       <div class="msg-line"><span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-voice">${voiceMarkup}</span></div>
@@ -3773,21 +3795,33 @@ async function showProfileCard(u, anchor, pinned = false) {
   
   if (currentSession !== _pcSessionId) return; // Mouse left while fetching
   _pcPendingPinned = false;
-  if (!profile) return;
+  if (!profile) {
+    const online = onlineUsers[u.userId];
+    profile = {
+      id: u.userId,
+      username: online?.username || u.username || 'User',
+      avatar_url: online?.avatarUrl || null,
+      avatar_color: online?.avatarColor || '#7c3aed',
+      created_at: null,
+      is_guest: !online?.registered && !u.registered,
+      is_registered: !!(online?.registered || u.registered)
+    };
+  }
 
+  const userMerged   = { ...(onlineUsers[u.userId] || {}), ...u, ...profile };
   const viewerLevel  = getViewerRoleLevel();
-  const targetLevel  = getRoleLevel(u);
+  const targetLevel  = getRoleLevel(userMerged);
   const canSeeIp     = viewerLevel >= 3;
   const canBan       = viewerLevel > targetLevel && u.userId !== currentUser?.id;
   const canKick      = canBan;
   const canGrantVip  = viewerLevel >= 3 && targetLevel === 1;
-  const isVip        = !!(profile.is_vip);
-  const isAdmin      = !!(profile.is_admin);
-  const isMod        = !!(profile.is_mod);
+  const isVip        = !!(profile.is_vip || userMerged.is_vip || userMerged.isVip);
+  const isAdmin      = !!(profile.is_admin || userMerged.is_admin || userMerged.isAdmin);
+  const isMod        = !!(profile.is_mod || userMerged.is_mod || userMerged.isMod);
   const ignoreLabel  = isUserIgnored(u.userId) ? 'Unignore' : 'Ignore';
 
-  const roleLabel = getRoleLabel(u);
-  const roleBadge = getRoleBadgeHtml(u);
+  const roleLabel = getRoleLabel(userMerged);
+  const roleBadge = getRoleBadgeHtml(userMerged);
   const vipBadge  = isVip ? '<span class="role-badge vip" title="VIP">⭐</span>' : '';
   const joinDate  = profile.created_at
     ? new Date(profile.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })

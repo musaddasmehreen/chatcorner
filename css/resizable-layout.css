@@ -632,12 +632,12 @@
   animation: msgIn 0.16s ease both;
 }
 .msg-row.self {
-  flex-direction: row-reverse;
-  align-self: flex-end;
+  flex-direction: row;
+  align-self: flex-start;
 }
 .msg-bubble {
   background: var(--msg-bg, rgba(255,255,255,0.06));
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 0.55rem 0.9rem;
   max-width: 100%;
   border: 1px solid rgba(255,255,255,0.04);
@@ -662,16 +662,25 @@
   animation: msgIn 0.16s ease both;
 }
 .avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  width: 38px;
+  height: 44px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
+  font-size: 1.1rem;
   font-weight: 800;
   color: #fff;
   flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(139, 109, 237, 0.4);
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 /* ── EMOJI PICKER ── */

@@ -3061,3 +3061,86 @@ body.guest-mode .emoji-bar { display: none; }
   font-family: 'Exo 2', sans-serif;
   text-align: center;
 }
+
+/* ══ UNIFIED LEFT-ALIGNED CHAT MESSAGES & AVATAR IMAGE BOX ══ */
+.msg-row,
+.msg-row.self {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  align-self: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 0.65rem !important;
+  max-width: 88% !important;
+  margin-bottom: 0.55rem !important;
+}
+
+/* Avatar Box on Left Side */
+.msg-row .avatar,
+.msg-row.self .avatar {
+  width: 38px !important;
+  height: 44px !important;
+  min-width: 38px !important;
+  min-height: 44px !important;
+  border-radius: 9px !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45) !important;
+  border: 1.5px solid rgba(139, 109, 237, 0.4) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  color: #fff !important;
+  margin-top: 2px !important;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.msg-row .avatar:hover,
+.msg-row.self .avatar:hover {
+  transform: scale(1.05) !important;
+  border-color: var(--accent, #8b6ded) !important;
+  box-shadow: 0 4px 14px rgba(139, 109, 237, 0.55) !important;
+}
+
+.msg-row .avatar img,
+.msg-row.self .avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+  border-radius: 7px !important;
+}
+
+/* Bubble Styling */
+.msg-row .msg-bubble,
+.msg-row.self .msg-bubble {
+  background: var(--msg-bg, rgba(255, 255, 255, 0.06)) !important;
+  border-radius: 12px !important;
+  padding: 0.48rem 0.85rem 0.42rem !important;
+  max-width: 100% !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  word-break: break-word !important;
+  font-size: 0.88rem !important;
+  text-align: left !important;
+}
+
+.msg-row.self .msg-bubble {
+  background: var(--msg-self, rgba(139, 109, 237, 0.16)) !important;
+  border-color: rgba(139, 109, 237, 0.28) !important;
+}
+
+.msg-row.self .msg-username {
+  text-align: left !important;
+}
+
+.msg-row .msg-time,
+.msg-row.self .msg-time {
+  font-size: 0.67rem !important;
+  color: var(--muted, #94a3b8) !important;
+  margin-top: 0.2rem !important;
+  text-align: right !important;
+  opacity: 0.75 !important;
+}
