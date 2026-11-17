@@ -3047,3 +3047,111 @@ body.guest-mode .emoji-bar { display: none; }
   border-color: #ef4444;
   transform: scale(1.1);
 }
+
+/* Crystal Clear Image Enhancements */
+.image-lightbox-img.crystal-clear {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  filter: contrast(1.05) saturate(1.04);
+  transition: filter 0.2s ease;
+}
+
+.lb-img-wrap {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.lb-clarity-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background: linear-gradient(135deg, rgba(139, 109, 237, 0.95), rgba(99, 102, 241, 0.98));
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 20px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.6), 0 0 12px rgba(139, 109, 237, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+  animation: lbPulse 2s infinite ease-in-out;
+}
+
+@keyframes lbPulse {
+  0%, 100% { opacity: 0.95; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+.lb-user-title {
+  margin-top: 14px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  font-family: 'Exo 2', sans-serif;
+}
+
+.lb-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.lb-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #e2e8f0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.lb-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.lb-btn.active {
+  background: linear-gradient(135deg, rgba(139, 109, 237, 0.85), rgba(79, 70, 229, 0.9));
+  border-color: rgba(167, 139, 250, 0.7);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(139, 109, 237, 0.5);
+}
+
+.lb-btn-boost {
+  background: rgba(139, 109, 237, 0.15);
+  border: 1px solid rgba(139, 109, 237, 0.4);
+  color: #c4b5fd;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lb-btn-boost:hover {
+  background: rgba(139, 109, 237, 0.35);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.lb-clarity-tip {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 6px;
+  text-align: center;
+}
