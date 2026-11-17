@@ -127,11 +127,33 @@ function makeImageCrystalClear(img, strength = 0.65) {
   }
 }
 
+// Ensure SVG convolution filters exist for instant, universal Crystal Clear HD
+function ensureCrystalClearSvgFilters() {
+  if (document.getElementById('cc-crystal-clear-filters')) return;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.id = 'cc-crystal-clear-filters';
+  svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = `
+    <defs>
+      <!-- Crystal Clear HD (Balanced Sharpening & De-Blur) -->
+      <filter id="crystal-clear-fe" x="-10%" y="-10%" width="120%" height="120%">
+        <feConvolveMatrix order="3,3" preserveAlpha="true" kernelMatrix="0 -0.85 0 -0.85 4.4 -0.85 0 -0.85 0"/>
+      </filter>
+      <!-- Crystal Clear Ultra (Maximum Super-Resolution Clarity) -->
+      <filter id="crystal-clear-ultra" x="-10%" y="-10%" width="120%" height="120%">
+        <feConvolveMatrix order="3,3" preserveAlpha="true" kernelMatrix="-0.4 -0.9 -0.4 -0.9 6.2 -0.9 -0.4 -0.9 -0.4"/>
+      </filter>
+    </defs>
+  `;
+  document.body.appendChild(svg);
+}
+
 // Lightbox state
 let _lbOriginalUrl = null;
 let _lbEnhancedUrl = null;
 let _lbUltraUrl = null;
-let _lbIsEnhanced = true;
+let _lbMode = 'hd'; // 'hd' | 'ultra' | 'off'
 
 // Lightbox modal for full large profile image preview with Crystal Clear HD
 window.openAvatarLightbox = function(imageUrl, username = 'User') {
@@ -139,10 +161,12 @@ window.openAvatarLightbox = function(imageUrl, username = 'User') {
   const existing = document.getElementById('image-lightbox-modal');
   if (existing) existing.remove();
 
+  ensureCrystalClearSvgFilters();
+
   _lbOriginalUrl = imageUrl;
   _lbEnhancedUrl = null;
   _lbUltraUrl = null;
-  _lbIsEnhanced = true;
+  _lbMode = 'hd';
 
   const modal = document.createElement('div');
   modal.id = 'image-lightbox-modal';
@@ -155,28 +179,31 @@ window.openAvatarLightbox = function(imageUrl, username = 'User') {
       <button type="button" class="image-lightbox-close" onclick="closeAvatarLightbox()" aria-label="Close" title="Close">✕</button>
       <div class="lb-img-wrap">
         <img id="lightbox-active-img" src="${imageUrl}" class="image-lightbox-img crystal-clear" alt="${username} profile picture" />
-        <div id="lb-clarity-badge" class="lb-clarity-badge">✨ Crystal Clear HD</div>
+        <button type="button" id="lb-clarity-badge" class="lb-clarity-badge active" onclick="toggleLightboxClarity(event)" title="Click to toggle Crystal Clear HD">
+          <span class="lb-badge-icon">✨</span> <span id="lb-badge-txt">Crystal Clear: ON</span>
+        </button>
       </div>
       <div class="lb-user-title">${username}</div>
       <div class="lb-controls-bar">
-        <button type="button" id="lb-toggle-clarity-btn" class="lb-btn active" onclick="toggleLightboxClarity()"><span class="lb-sparkle">✨</span> Crystal Clear: <strong id="lb-clarity-state-txt">ON</strong></button>
-        <button type="button" class="lb-btn-boost" onclick="boostLightboxClarity(1.0)" title="Max Sharpness Boost">🚀 Ultra Clarity</button>
+        <button type="button" id="lb-btn-hd" class="lb-btn active" onclick="setLightboxClarityMode('hd')">✨ Crystal Clear</button>
+        <button type="button" id="lb-btn-ultra" class="lb-btn" onclick="setLightboxClarityMode('ultra')">🚀 Ultra Sharp</button>
+        <button type="button" id="lb-btn-off" class="lb-btn" onclick="setLightboxClarityMode('off')">🔄 Original</button>
       </div>
-      <div class="lb-clarity-tip">Auto-enhanced to Crystal Clear HD • Removes blur and sharpens details</div>
+      <div id="lb-status-tip" class="lb-clarity-tip">✨ Crystal Clear is ON — image de-blurred & sharpened</div>
     </div>
   `;
 
   modal.addEventListener('click', () => closeAvatarLightbox());
   document.body.appendChild(modal);
 
-  // Auto-generate enhanced Crystal Clear version
+  // Also try canvas-based super-resolution if possible
   const tempImg = new Image();
   tempImg.crossOrigin = 'anonymous';
   tempImg.onload = () => {
     try {
       _lbEnhancedUrl = makeImageCrystalClear(tempImg, 0.65);
       const activeImg = document.getElementById('lightbox-active-img');
-      if (activeImg && _lbIsEnhanced && _lbEnhancedUrl) {
+      if (activeImg && _lbMode === 'hd' && _lbEnhancedUrl) {
         activeImg.src = _lbEnhancedUrl;
       }
     } catch (_) {}
@@ -192,71 +219,78 @@ window.openAvatarLightbox = function(imageUrl, username = 'User') {
   document.addEventListener('keydown', onKey);
 };
 
-window.toggleLightboxClarity = function() {
+window.setLightboxClarityMode = function(mode) {
+  _lbMode = mode;
   const activeImg = document.getElementById('lightbox-active-img');
-  const btn = document.getElementById('lb-toggle-clarity-btn');
-  const txt = document.getElementById('lb-clarity-state-txt');
   const badge = document.getElementById('lb-clarity-badge');
+  const badgeTxt = document.getElementById('lb-badge-txt');
+  const tip = document.getElementById('lb-status-tip');
+  const btnHd = document.getElementById('lb-btn-hd');
+  const btnUltra = document.getElementById('lb-btn-ultra');
+  const btnOff = document.getElementById('lb-btn-off');
+
   if (!activeImg) return;
 
-  _lbIsEnhanced = !_lbIsEnhanced;
-  if (_lbIsEnhanced) {
-    if (_lbEnhancedUrl) {
-      activeImg.src = _lbEnhancedUrl;
-    }
+  btnHd?.classList.remove('active');
+  btnUltra?.classList.remove('active');
+  btnOff?.classList.remove('active');
+  activeImg.classList.remove('crystal-clear', 'crystal-clear-ultra', 'crystal-clear-off');
+
+  if (mode === 'hd') {
     activeImg.classList.add('crystal-clear');
-    if (btn) btn.classList.add('active');
-    if (txt) txt.textContent = 'ON';
+    if (_lbEnhancedUrl) activeImg.src = _lbEnhancedUrl;
+    btnHd?.classList.add('active');
     if (badge) {
-      badge.style.display = 'flex';
-      badge.textContent = '✨ Crystal Clear HD';
+      badge.className = 'lb-clarity-badge active';
+      badge.style.display = 'inline-flex';
     }
+    if (badgeTxt) badgeTxt.textContent = 'Crystal Clear: ON';
+    if (tip) tip.textContent = '✨ Crystal Clear is ON — image de-blurred & sharpened';
+  } else if (mode === 'ultra') {
+    activeImg.classList.add('crystal-clear-ultra');
+    if (_lbUltraUrl) {
+      activeImg.src = _lbUltraUrl;
+    } else {
+      const tempImg = new Image();
+      tempImg.crossOrigin = 'anonymous';
+      tempImg.onload = () => {
+        try {
+          _lbUltraUrl = makeImageCrystalClear(tempImg, 1.0);
+          if (_lbUltraUrl && _lbMode === 'ultra') activeImg.src = _lbUltraUrl;
+        } catch (_) {}
+      };
+      tempImg.src = _lbOriginalUrl;
+    }
+    btnUltra?.classList.add('active');
+    if (badge) {
+      badge.className = 'lb-clarity-badge active';
+      badge.style.display = 'inline-flex';
+    }
+    if (badgeTxt) badgeTxt.textContent = 'Ultra Sharp: ON';
+    if (tip) tip.textContent = '🚀 Ultra Sharp is ON — maximum clarity & micro-contrast';
   } else {
+    // off
+    activeImg.classList.add('crystal-clear-off');
     activeImg.src = _lbOriginalUrl;
-    activeImg.classList.remove('crystal-clear');
-    if (btn) btn.classList.remove('active');
-    if (txt) txt.textContent = 'OFF';
-    if (badge) badge.style.display = 'none';
+    btnOff?.classList.add('active');
+    if (badge) {
+      badge.className = 'lb-clarity-badge off';
+      badge.style.display = 'inline-flex';
+    }
+    if (badgeTxt) badgeTxt.textContent = 'Original: OFF';
+    if (tip) tip.textContent = '🔄 Showing original unenhanced image';
   }
 };
 
-window.boostLightboxClarity = function(strength = 1.0) {
-  const activeImg = document.getElementById('lightbox-active-img');
-  const btn = document.getElementById('lb-toggle-clarity-btn');
-  const txt = document.getElementById('lb-clarity-state-txt');
-  const badge = document.getElementById('lb-clarity-badge');
-  if (!activeImg) return;
-
-  if (!_lbUltraUrl) {
-    const tempImg = new Image();
-    tempImg.crossOrigin = 'anonymous';
-    tempImg.onload = () => {
-      try {
-        _lbUltraUrl = makeImageCrystalClear(tempImg, strength);
-        if (_lbUltraUrl) {
-          activeImg.src = _lbUltraUrl;
-          _lbIsEnhanced = true;
-          activeImg.classList.add('crystal-clear');
-          if (btn) btn.classList.add('active');
-          if (txt) txt.textContent = 'ULTRA';
-          if (badge) {
-            badge.style.display = 'flex';
-            badge.textContent = '🚀 Ultra HD Sharp';
-          }
-        }
-      } catch (_) {}
-    };
-    tempImg.src = _lbOriginalUrl;
+window.toggleLightboxClarity = function(ev) {
+  if (ev) {
+    ev.stopPropagation();
+    ev.preventDefault();
+  }
+  if (_lbMode === 'off') {
+    setLightboxClarityMode('hd');
   } else {
-    activeImg.src = _lbUltraUrl;
-    _lbIsEnhanced = true;
-    activeImg.classList.add('crystal-clear');
-    if (btn) btn.classList.add('active');
-    if (txt) txt.textContent = 'ULTRA';
-    if (badge) {
-      badge.style.display = 'flex';
-      badge.textContent = '🚀 Ultra HD Sharp';
-    }
+    setLightboxClarityMode('off');
   }
 };
 
