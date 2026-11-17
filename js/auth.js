@@ -18,127 +18,128 @@ async function loginUser() {
 
   if (!loginId || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
 
-  try {
-    // ── Security: brute-force check ──────────────────────────────────
-    if (window.ccLoginGuard) {
-      const lockStatus = window.ccLoginGuard.isLocked(loginId);
-      if (lockStatus.locked) {
-        const secs = Math.ceil(lockStatus.remainingMs / 1000);
-        const mins = Math.ceil(secs / 60);
-        showMsg(msg, `Too many failed attempts. Try again in ${mins} minute${mins !== 1 ? 's' : ''}.`, 'error');
-        return;
-      }
-    }
-
-    const lowerLoginId = loginId.toLowerCase();
-    const isEmailIdentifier = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lowerLoginId);
-    const safeId = window.ccSanitize ? window.ccSanitize.username(loginId) : loginId;
-    if (window.ccThreatDetect?.isSuspicious(loginId)) {
-      showMsg(msg, 'Incorrect username/email or password.', 'error'); // generic — don't reveal reason
+  // ── Security: brute-force check ──────────────────────────────────
+  if (window.ccLoginGuard) {
+    const lockStatus = window.ccLoginGuard.isLocked(loginId);
+    if (lockStatus.locked) {
+      const secs = Math.ceil(lockStatus.remainingMs / 1000);
+      const mins = Math.ceil(secs / 60);
+      showMsg(msg, `Too many failed attempts. Try again in ${mins} minute${mins !== 1 ? 's' : ''}.`, 'error');
       return;
     }
+  }
 
-    showMsg(msg, 'Logging in…', '');
+  const lowerLoginId = loginId.toLowerCase();
+  const isEmailIdentifier = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lowerLoginId);
+  const safeId = window.ccSanitize ? window.ccSanitize.username(loginId) : loginId;
+  if (window.ccThreatDetect?.isSuspicious(loginId)) {
+    showMsg(msg, 'Incorrect username/email or password.', 'error'); // generic — don't reveal reason
+    return;
+  }
 
-    let email = isEmailIdentifier ? lowerLoginId : '';
+  showMsg(msg, 'Logging in…', '');
 
-    if (!isEmailIdentifier) {
-      // 1) Try username lookup in profiles (may be blocked by RLS when unauthenticated)
-      const { data: byUsername, error: byUsernameErr } = await sbClient
+  let email = isEmailIdentifier ? lowerLoginId : '';
+
+  if (!isEmailIdentifier) {
+    // 1) Try username lookup in profiles (may be blocked by RLS when unauthenticated)
+    const { data: byUsername, error: byUsernameErr } = await sbClient
+      .from('profiles')
+      .select('email')
+      .ilike('username', safeId)
+      .maybeSingle();
+    if (byUsernameErr) console.warn('[login] username lookup error:', byUsernameErr);
+    if (byUsername?.email) email = byUsername.email;
+
+    // 2) If username lookup misses but identifier still looks email-like, try profiles.email
+    if (!email && safeId.includes('@')) {
+      const { data: byEmail, error: byEmailErr } = await sbClient
         .from('profiles')
         .select('email')
-        .ilike('username', safeId)
+        .ilike('email', lowerLoginId)
         .maybeSingle();
-      if (byUsernameErr) console.warn('[login] username lookup error:', byUsernameErr);
-      if (byUsername?.email) email = byUsername.email;
-
-      // 2) If username lookup misses but identifier still looks email-like, try profiles.email
-      if (!email && safeId.includes('@')) {
-        const { data: byEmail, error: byEmailErr } = await sbClient
-          .from('profiles')
-          .select('email')
-          .ilike('email', lowerLoginId)
-          .maybeSingle();
-        if (byEmailErr) console.warn('[login] email lookup error:', byEmailErr);
-        if (byEmail?.email) email = byEmail.email;
-      }
+      if (byEmailErr) console.warn('[login] email lookup error:', byEmailErr);
+      if (byEmail?.email) email = byEmail.email;
     }
-
-    // 4) Fallback: use cc_pending_email saved at registration time.
-    if (!email) {
-      const pendingUsername = localStorage.getItem('cc_pending_username') || '';
-      const pendingEmail    = localStorage.getItem('cc_pending_email')    || '';
-      if (pendingEmail && (pendingUsername.toLowerCase() === safeId.toLowerCase() || pendingEmail.toLowerCase() === safeId.toLowerCase())) {
-        email = pendingEmail;
-      }
-    }
-
-    if (!email) {
-      window.ccLoginGuard?.recordAttempt(loginId, false);
-      showMsg(msg, 'Incorrect username/email or password.', 'error');
-      return;
-    }
-
-    const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      window.ccLoginGuard?.recordAttempt(loginId, false);
-      window.ccSecLog?.record('LOGIN_FAIL', { id: loginId.slice(0, 20) });
-      const userMsg = error.message.includes('Email not confirmed')
-        ? '📧 Please confirm your email first, then try logging in again.'
-        : 'Incorrect username/email or password.';
-      showMsg(msg, userMsg, 'error');
-      return;
-    }
-
-    // Successful login
-    window.ccLoginGuard?.recordAttempt(loginId, true);
-    window.ccSecLog?.record('LOGIN_SUCCESS', {});
-
-    // Clear logout flag on successful login
-    sessionStorage.removeItem('cc_logout_flag');
-
-    // After a successful login we are authenticated — safe to read/write profiles.
-    const { data: existingProf } = await sbClient
-      .from('profiles').select('id,email,username,is_registered').eq('id', data.user.id).maybeSingle();
-
-    if (!existingProf) {
-      const pendingUsername = localStorage.getItem('cc_pending_username')
-        || 'User_' + data.user.id.substr(0, 5);
-      await sbClient.from('profiles').upsert({
-        id: data.user.id,
-        username: pendingUsername,
-        email: data.user.email,
-        avatar_color: randomColor(),
-        is_registered: true
-      });
-      localStorage.removeItem('cc_pending_username');
-      localStorage.removeItem('cc_pending_email');
-    } else {
-      const updatePayload = {};
-      if (!existingProf.is_registered) {
-        updatePayload.is_registered = true;
-        const pendingUsername = localStorage.getItem('cc_pending_username');
-        if (pendingUsername) {
-          updatePayload.username = pendingUsername;
-        }
-      }
-      if (!existingProf.email && data.user.email) {
-        updatePayload.email = data.user.email;
-      }
-      if (Object.keys(updatePayload).length > 0) {
-        await sbClient.from('profiles').update(updatePayload).eq('id', data.user.id);
-      }
-      localStorage.removeItem('cc_pending_username');
-      localStorage.removeItem('cc_pending_email');
-    }
-
-    markPendingChatRedirect();
-    window.location.href = 'chat.html';
-  } catch (err) {
-    console.error('[loginUser error]', err);
-    showMsg(msg, 'Login failed: ' + (err.message || 'Please check connection'), 'error');
   }
+
+  // 4) Fallback: use cc_pending_email saved at registration time.
+  //    This handles the case where RLS blocks the profiles lookup for
+  //    unauthenticated users (common when email confirmation is required).
+  if (!email) {
+    const pendingUsername = localStorage.getItem('cc_pending_username') || '';
+    const pendingEmail    = localStorage.getItem('cc_pending_email')    || '';
+    if (pendingEmail && (pendingUsername.toLowerCase() === safeId.toLowerCase() || pendingEmail.toLowerCase() === safeId.toLowerCase())) {
+      email = pendingEmail;
+    }
+  }
+
+  if (!email) {
+    window.ccLoginGuard?.recordAttempt(loginId, false);
+    showMsg(msg, 'Incorrect username/email or password.', 'error'); // generic — don't reveal "no such user"
+    return;
+  }
+
+  const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    window.ccLoginGuard?.recordAttempt(loginId, false);
+    window.ccSecLog?.record('LOGIN_FAIL', { id: loginId.slice(0, 20) });
+    // Generic message for all auth errors to prevent user enumeration
+    const userMsg = error.message.includes('Email not confirmed')
+      ? '📧 Please confirm your email first, then try logging in again.'
+      : 'Incorrect username/email or password.';
+    showMsg(msg, userMsg, 'error');
+    return;
+  }
+
+  // Successful login
+  window.ccLoginGuard?.recordAttempt(loginId, true);
+  window.ccSecLog?.record('LOGIN_SUCCESS', {});
+
+  // Clear logout flag on successful login
+  sessionStorage.removeItem('cc_logout_flag');
+
+  // After a successful login we are authenticated — safe to read/write profiles.
+  const { data: existingProf } = await sbClient
+    .from('profiles').select('id,email,username,is_registered').eq('id', data.user.id).maybeSingle();
+
+  if (!existingProf) {
+    // Profile was never saved (RLS blocked the upsert at registration time).
+    // Restore it now using the locally-stored pending values.
+    const pendingUsername = localStorage.getItem('cc_pending_username')
+      || 'User_' + data.user.id.substr(0, 5);
+    await sbClient.from('profiles').upsert({
+      id: data.user.id,
+      username: pendingUsername,
+      email: data.user.email,
+      avatar_color: randomColor(),
+      is_registered: true
+    });
+    localStorage.removeItem('cc_pending_username');
+    localStorage.removeItem('cc_pending_email');
+  } else {
+    // Profile exists — patch missing email, upgrade to registered if it was a guest profile, and clear pending keys.
+    const updatePayload = {};
+    if (!existingProf.is_registered) {
+      updatePayload.is_registered = true;
+      const pendingUsername = localStorage.getItem('cc_pending_username');
+      if (pendingUsername) {
+        updatePayload.username = pendingUsername;
+      }
+    }
+    if (!existingProf.email && data.user.email) {
+      updatePayload.email = data.user.email;
+    }
+    if (Object.keys(updatePayload).length > 0) {
+      await sbClient.from('profiles').update(updatePayload).eq('id', data.user.id);
+    }
+    localStorage.removeItem('cc_pending_username');
+    localStorage.removeItem('cc_pending_email');
+  }
+
+  markPendingChatRedirect();
+  window.location.href = 'chat.html';
 }
 
 // ------------------------------------------------------------------

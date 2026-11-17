@@ -56,7 +56,7 @@
   <link rel="preconnect" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=2.2"/>
-  <link rel="stylesheet" href="css/chat-extras-v3.css?v=3.2" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=3.5" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/resizable-layout.css?v=4.9" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -70,33 +70,6 @@
     window.addEventListener('unhandledrejection', function(e) {
       console.warn('[App Unhandled Rejection]', e.reason);
     });
-    window.onChatInputKeyDown = function(event) {
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
-        if (event.key === 'b' || event.key === 'B') {
-          event.preventDefault();
-          window.toggleFormatBtn?.('bold');
-          return;
-        }
-        if (event.key === 'i' || event.key === 'I') {
-          event.preventDefault();
-          window.toggleFormatBtn?.('italic');
-          return;
-        }
-        if (event.key === 'u' || event.key === 'U') {
-          event.preventDefault();
-          window.toggleFormatBtn?.('underline');
-          return;
-        }
-      }
-      if ((event.key === 'Enter' || event.keyCode === 13 || event.which === 13) && !event.shiftKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof window.sendMessage === 'function') {
-          window.sendMessage();
-        }
-        return false;
-      }
-    };
   </script>
 </head>
 <body class="chat-page">
@@ -609,7 +582,7 @@
           <span id="voice-note-timer" style="display:none;font-size:0.75rem;color:var(--muted)"></span>
         </div>
         <div class="input-strip-center">
-          <textarea id="msg-input" class="msg-input" onkeydown="onChatInputKeyDown(event)" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
+          <textarea id="msg-input" class="msg-input" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();if(typeof sendMessage==='function')sendMessage();}" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" maxlength="500" autocomplete="off" aria-label="Message input" rows="1"></textarea>
           <span id="msg-char-counter" class="msg-char-counter" aria-live="polite" aria-label="Character count">0/500</span>
           <button class="btn-send" id="btn-send" onclick="sendMessage()" aria-label="Send message">Send</button>
         </div>
@@ -663,10 +636,10 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="js/security.js?v=3.6" defer></script>
   <script src="js/config.js?v=1.6" defer></script>
-  <script src="js/auth.js?v=1.8" defer></script>
+  <script src="js/auth.js?v=2.0" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=8.7" defer></script>
+  <script src="js/chat-v3.js?v=9.0" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>

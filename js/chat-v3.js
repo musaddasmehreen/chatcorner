@@ -256,7 +256,7 @@ function formatMessageContent(rawContent) {
 window.formatMessageText = formatMessageContent;
 
 /* ════════════════════════════════════════════════════════════════
-   Live WYSIWYG Text Formatting (Zero Code in Input, Pure Live Effect)
+   Smart Text Formatting Toolbar (B, I, U, Color, Size)
    ════════════════════════════════════════════════════════════════ */
 window.chatFormatState = {
   bold: false,
@@ -266,104 +266,60 @@ window.chatFormatState = {
   size: null
 };
 
-// Strips any BBCode tags if user pasted them or from legacy state
-function stripChatBbcodeTags(text) {
-  if (typeof text !== 'string') return '';
-  return text
-    .replace(/\[\/?(b|i|u|s|glow)\]/gi, '')
-    .replace(/\[\/?color(=[^\]]*)?\]/gi, '')
-    .replace(/\[\/?size(=[^\]]*)?\]/gi, '')
-    .replace(/\[\/?font(=[^\]]*)?\]/gi, '');
-}
-window.stripChatBbcodeTags = stripChatBbcodeTags;
-
-function syncFormatInputStyles() {
-  const input = document.getElementById('msg-input');
-  if (!input) return;
-
-  const state = window.chatFormatState || {};
-
-  // Apply LIVE visual styles directly onto the input box as you type
-  input.style.fontWeight = state.bold ? '700' : 'normal';
-  input.style.fontStyle = state.italic ? 'italic' : 'normal';
-  input.style.textDecoration = state.underline ? 'underline' : 'none';
-  input.style.color = state.color || '';
-  input.style.caretColor = state.color || '';
-  input.style.fontSize = state.size ? (state.size + 'px') : '';
-
-  // Clean any BBCode tags if accidentally present in input (so user never sees code)
-  if (input.value && (input.value.includes('[') && input.value.includes(']'))) {
-    const cleaned = stripChatBbcodeTags(input.value);
-    if (cleaned !== input.value) {
-      input.value = cleaned;
-    }
-  }
-
-  // Update toolbar button UI
-  const btnBold = document.getElementById('fmt-bold');
-  if (btnBold) btnBold.classList.toggle('active', !!state.bold);
-
-  const btnItalic = document.getElementById('fmt-italic');
-  if (btnItalic) btnItalic.classList.toggle('active', !!state.italic);
-
-  const btnUnderline = document.getElementById('fmt-underline');
-  if (btnUnderline) btnUnderline.classList.toggle('active', !!state.underline);
-
-  const btnColor = document.getElementById('fmt-color-btn');
-  const preview = document.getElementById('fmt-color-preview');
-  if (btnColor) btnColor.classList.toggle('active', !!state.color);
-  if (preview) {
-    preview.style.borderBottomColor = state.color || 'var(--accent, #8b6ded)';
-    preview.style.color = state.color || 'inherit';
-  }
-
-  const btnSize = document.getElementById('fmt-size-btn');
-  const sizeLabel = document.getElementById('fmt-size-label');
-  if (btnSize) btnSize.classList.toggle('active', !!state.size);
-  if (sizeLabel) sizeLabel.textContent = state.size ? (state.size + 'px') : 'Size';
-
-  // Keep auto-resize in sync if font size changes
-  if (typeof autoResizeTextarea === 'function') {
-    autoResizeTextarea(input);
-  }
-
-  try {
-    localStorage.setItem('cc_chat_format_state', JSON.stringify(state));
-  } catch (e) {}
-}
-window.syncFormatInputStyles = syncFormatInputStyles;
-
-function loadChatFormatState() {
-  // Only restore color & size preferences across sessions.
-  // Bold / italic / underline reset to OFF each page load —
-  // they are per-message toggles, not sticky preferences.
-  try {
-    const saved = localStorage.getItem('cc_chat_format_state');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object') {
-        window.chatFormatState = {
-          bold: false,
-          italic: false,
-          underline: false,
-          color: parsed.color || null,
-          size: parsed.size || null
-        };
-      }
-    }
-  } catch (e) {}
-  if (!window.chatFormatState) window.chatFormatState = { bold: false, italic: false, underline: false, color: null, size: null };
-  syncFormatInputStyles();
-}
-
 window.toggleFormatBtn = function(type) {
-  if (!window.chatFormatState) window.chatFormatState = {};
-  if (type === 'bold' || type === 'italic' || type === 'underline') {
+  const textarea = document.getElementById('msg-input');
+  if (!textarea) return;
+  const tagMap = { bold: 'b', italic: 'i', underline: 'u' };
+  const tag = tagMap[type];
+  if (!tag) return;
+
+  const selStart = textarea.selectionStart;
+  const selEnd = textarea.selectionEnd;
+  const val = textarea.value;
+  const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+  if (hasSelection) {
+    // 1. User selected a range of text -> wrap the selected range
+    const selected = val.substring(selStart, selEnd);
+    const wrapped = `[${tag}]${selected}[/${tag}]`;
+    textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
+    textarea.focus();
+    const newCursor = selStart + tag.length + 2 + selected.length + tag.length + 3;
+    textarea.setSelectionRange(newCursor, newCursor);
+    window.chatFormatState[type] = true;
+  } else if (val.trim().length > 0) {
+    // 2. User has text in textarea but no selection -> wrap or unwrap the whole text
+    const openTag = `[${tag}]`;
+    const closeTag = `[/${tag}]`;
+    if (val.startsWith(openTag) && val.endsWith(closeTag)) {
+      // Unwrap
+      textarea.value = val.slice(openTag.length, -closeTag.length);
+      window.chatFormatState[type] = false;
+    } else {
+      // Wrap whole text
+      textarea.value = `${openTag}${val}${closeTag}`;
+      window.chatFormatState[type] = true;
+    }
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  } else {
+    // 3. Textarea is empty -> insert tags and place cursor in the middle [b]|[/b]
     window.chatFormatState[type] = !window.chatFormatState[type];
+    if (window.chatFormatState[type]) {
+      textarea.value = `[${tag}][/${tag}]`;
+      const cursorPos = tag.length + 2;
+      textarea.focus();
+      textarea.setSelectionRange(cursorPos, cursorPos);
+    } else {
+      textarea.value = '';
+      textarea.focus();
+    }
   }
-  syncFormatInputStyles();
+
+  // Update button active UI
+  const btn = document.getElementById('fmt-' + type);
+  if (btn) btn.classList.toggle('active', !!window.chatFormatState[type]);
   closeAllFormatPopovers();
-  document.getElementById('msg-input')?.focus();
 };
 
 window.toggleFormatDropdown = function(ev, type) {
@@ -392,11 +348,56 @@ document.addEventListener('click', function(e) {
 });
 
 window.applyColorFormat = function(color) {
-  if (!window.chatFormatState) window.chatFormatState = {};
+  const textarea = document.getElementById('msg-input');
   window.chatFormatState.color = color || null;
-  syncFormatInputStyles();
+
+  // Update color preview UI
+  const preview = document.getElementById('fmt-color-preview');
+  if (preview) {
+    preview.style.borderBottomColor = color || 'var(--accent, #8b6ded)';
+    preview.style.color = color || 'inherit';
+  }
+  const btn = document.getElementById('fmt-color-btn');
+  if (btn) btn.classList.toggle('active', !!color);
+
+  if (textarea) {
+    const selStart = textarea.selectionStart;
+    const selEnd = textarea.selectionEnd;
+    const val = textarea.value;
+    const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+    if (color) {
+      if (hasSelection) {
+        const selected = val.substring(selStart, selEnd);
+        textarea.value = val.substring(0, selStart) + `[color=${color}]${selected}[/color]` + val.substring(selEnd);
+        textarea.focus();
+        const newCursor = selStart + color.length + 8 + selected.length + 8;
+        textarea.setSelectionRange(newCursor, newCursor);
+      } else if (val.trim().length > 0) {
+        const colorRegex = /^\[color=#[a-fA-F0-9]{3,8}\]([\s\S]*?)\[\/color\]$/;
+        if (colorRegex.test(val)) {
+          textarea.value = val.replace(/^\[color=#[a-fA-F0-9]{3,8}\]/, `[color=${color}]`);
+        } else {
+          textarea.value = `[color=${color}]${val}[/color]`;
+        }
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      } else {
+        textarea.value = `[color=${color}][/color]`;
+        const cursor = color.length + 8;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+      }
+    } else {
+      // Reset color to default
+      if (val.trim().length > 0) {
+        textarea.value = val.replace(/\[color=#[a-fA-F0-9]{3,8}\]/gi, '').replace(/\[\/color\]/gi, '');
+      }
+      textarea.focus();
+    }
+  }
+
   closeAllFormatPopovers();
-  document.getElementById('msg-input')?.focus();
 };
 
 window.applyCustomColor = function(color) {
@@ -408,11 +409,54 @@ window.resetColorFormat = function() {
 };
 
 window.applySizeFormat = function(size) {
-  if (!window.chatFormatState) window.chatFormatState = {};
+  const textarea = document.getElementById('msg-input');
   window.chatFormatState.size = size || null;
-  syncFormatInputStyles();
+
+  const label = document.getElementById('fmt-size-label');
+  if (label) {
+    label.textContent = size ? (size + 'px') : 'Size';
+  }
+  const btn = document.getElementById('fmt-size-btn');
+  if (btn) btn.classList.toggle('active', !!size);
+
+  if (textarea) {
+    const selStart = textarea.selectionStart;
+    const selEnd = textarea.selectionEnd;
+    const val = textarea.value;
+    const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+
+    if (size) {
+      if (hasSelection) {
+        const selected = val.substring(selStart, selEnd);
+        textarea.value = val.substring(0, selStart) + `[size=${size}]${selected}[/size]` + val.substring(selEnd);
+        textarea.focus();
+        const newCursor = selStart + size.length + 7 + selected.length + 7;
+        textarea.setSelectionRange(newCursor, newCursor);
+      } else if (val.trim().length > 0) {
+        const sizeRegex = /^\[size=\d{1,2}\]([\s\S]*?)\[\/size\]$/;
+        if (sizeRegex.test(val)) {
+          textarea.value = val.replace(/^\[size=\d{1,2}\]/, `[size=${size}]`);
+        } else {
+          textarea.value = `[size=${size}]${val}[/size]`;
+        }
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      } else {
+        textarea.value = `[size=${size}][/size]`;
+        const cursor = size.length + 7;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+      }
+    } else {
+      // Normal size (Default)
+      if (val.trim().length > 0) {
+        textarea.value = val.replace(/\[size=\d{1,2}\]/gi, '').replace(/\[\/size\]/gi, '');
+      }
+      textarea.focus();
+    }
+  }
+
   closeAllFormatPopovers();
-  document.getElementById('msg-input')?.focus();
 };
 
 window.clearAllFormatting = function() {
@@ -423,48 +467,17 @@ window.clearAllFormatting = function() {
     color: null,
     size: null
   };
-  syncFormatInputStyles();
+  document.querySelectorAll('.fmt-btn').forEach(el => el.classList.remove('active'));
+  const preview = document.getElementById('fmt-color-preview');
+  if (preview) {
+    preview.style.borderBottomColor = 'var(--accent, #8b6ded)';
+    preview.style.color = 'inherit';
+  }
+  const label = document.getElementById('fmt-size-label');
+  if (label) label.textContent = 'Size';
   closeAllFormatPopovers();
   document.getElementById('msg-input')?.focus();
 };
-
-// Fast Enter-to-Send Handler (immediate, reliable, zero delay)
-function onChatInputKeyDown(event) {
-  if (!event) return;
-  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
-    if (event.key === 'b' || event.key === 'B') {
-      event.preventDefault();
-      window.toggleFormatBtn?.('bold');
-      return;
-    }
-    if (event.key === 'i' || event.key === 'I') {
-      event.preventDefault();
-      window.toggleFormatBtn?.('italic');
-      return;
-    }
-    if (event.key === 'u' || event.key === 'U') {
-      event.preventDefault();
-      window.toggleFormatBtn?.('underline');
-      return;
-    }
-  }
-
-  // Enter sends message (Shift+Enter allows newline)
-  if ((event.key === 'Enter' || event.keyCode === 13 || event.which === 13) && !event.shiftKey) {
-    event.preventDefault();
-    event.stopPropagation();
-    sendMessage();
-    return false;
-  }
-}
-window.onChatInputKeyDown = onChatInputKeyDown;
-
-// Initialize formatting styles on load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', loadChatFormatState);
-} else {
-  loadChatFormatState();
-}
 
 function parseSuperEmojisHtml(text) {
   if (typeof text !== 'string') return text;
@@ -667,23 +680,6 @@ let oldestMessageTimestamp = null;
 let isLoadingOlderMessages = false;
 let cachedRooms = [];
 
-const VIRTUAL_ROOM_DEFAULTS = {
-  virtual_iptv_enabled: true,
-  virtual_iptv_category: 'country:pk',
-  virtual_iptv_source: '',
-  virtual_youtube_enabled: true,
-  virtual_youtube_default: '',
-  virtual_spotify_enabled: true,
-  virtual_spotify_default: '',
-  virtual_ludo_enabled: true,
-  virtual_ludo_room: '',
-  virtual_browser_enabled: true,
-  virtual_browser_default: 'https://en.wikipedia.org/wiki/Main_Page',
-  virtual_browser_locked: false,
-  virtual_browser_pin: '1234'
-};
-let _virtualRoomConfig = { ...VIRTUAL_ROOM_DEFAULTS };
-
 let _ytPlayer = null;
 let _isSettingVideoState = false;
 let _bypassPasswordRooms = new Set();
@@ -832,9 +828,8 @@ async function getActiveChatSession() {
   // Check if we're coming from a logout action
   const isLogoutFlag = sessionStorage.getItem('cc_logout_flag') === 'true';
   if (isLogoutFlag) {
-    // Clear the flag and redirect to login page instead of stalling
+    // Clear the flag and don't create guest session
     sessionStorage.removeItem('cc_logout_flag');
-    window.location.replace(AUTH_ENTRY_PAGE_URL);
     return null;
   }
 
@@ -1419,34 +1414,25 @@ function getSortedOnlineUsers(users = Object.values(onlineUsers)) {
   });
 }
 
-let _chatAppInitialized = false;
-async function initChatApp() {
-  if (_chatAppInitialized) return;
-  _chatAppInitialized = true;
+window.addEventListener('DOMContentLoaded', async () => {
+  const session = await getActiveChatSession();
+  if (!session) return;
 
-  try {
-    const session = await getActiveChatSession();
-    if (!session) {
-      console.warn('[initChatApp] No active session found. Redirecting to login...');
-      window.location.replace(AUTH_ENTRY_PAGE_URL);
-      return;
-    }
+  currentUser = session.user;
 
-    currentUser = session.user;
+  // Optimize: Fetch profile, room list, and proxy URL in parallel to reduce sequential database network roundtrips
+  const [profileResult, roomsResult, proxyBaseUrl] = await Promise.all([
+    sbClient.from('profiles').select('*').eq('id', currentUser.id).single(),
+    sbClient.from('rooms').select('*').order('name'),
+    window.ccSecurity ? window.ccSecurity.getAppSettingValue('proxy_base_url').catch(() => null) : Promise.resolve(null)
+  ]);
 
-    // Optimize: Fetch profile, room list, and proxy URL in parallel to reduce sequential database network roundtrips
-    const [profileResult, roomsResult, proxyBaseUrl] = await Promise.all([
-      sbClient.from('profiles').select('*').eq('id', currentUser.id).single(),
-      sbClient.from('rooms').select('*').order('name'),
-      (typeof getAppSettingValue === 'function' ? getAppSettingValue('proxy_base_url').catch(() => null) : Promise.resolve(null))
-    ]);
+  if (proxyBaseUrl) {
+    window._cachedProxyBaseUrl = proxyBaseUrl.trim();
+  }
 
-    if (proxyBaseUrl) {
-      window._cachedProxyBaseUrl = String(proxyBaseUrl).trim();
-    }
-
-    let prof = profileResult?.data;
-    const initialRooms = roomsResult?.data || [];
+  let prof = profileResult.data;
+  const initialRooms = roomsResult.data || [];
 
   if (!prof) {
     prof = currentUser?.is_anonymous
@@ -1546,7 +1532,29 @@ async function initChatApp() {
       autoResizeTextarea(msgInputEl);
     });
     // Enter = send, Shift+Enter = newline, Ctrl+B/I/U = toggle format
-    msgInputEl.addEventListener('keydown', onChatInputKeyDown);
+    msgInputEl.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+        if (event.key === 'b' || event.key === 'B') {
+          event.preventDefault();
+          window.toggleFormatBtn?.('bold');
+          return;
+        }
+        if (event.key === 'i' || event.key === 'I') {
+          event.preventDefault();
+          window.toggleFormatBtn?.('italic');
+          return;
+        }
+        if (event.key === 'u' || event.key === 'U') {
+          event.preventDefault();
+          window.toggleFormatBtn?.('underline');
+          return;
+        }
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
   }
 
   // Scroll-to-bottom button visibility
@@ -1612,17 +1620,6 @@ async function initChatApp() {
 
   // Pass pre-fetched rooms list to avoid duplicate loading queries
   await loadRooms(initialRooms);
-
-  // Safety net: ensure a room is ALWAYS entered and currentRoom is never null
-  if (!currentRoom && Array.isArray(cachedRooms) && cachedRooms.length > 0) {
-    const isGuest = isGuestProfile(currentProfile);
-    const fallbackRoom = isGuest
-      ? (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'guest') || cachedRooms[0])
-      : (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'chatcorner') || cachedRooms[0]);
-    if (fallbackRoom) {
-      await enterRoom(fallbackRoom, true, true);
-    }
-  }
 
   // ── Exponential-Backoff Reconnect Engine ────────────────────────────
   // Prevents the "thundering herd" problem: when hundreds of clients
@@ -1732,12 +1729,9 @@ async function initChatApp() {
     }
   });
 
-  // Expose so channel-error callbacks can use it
+  // Expose so channel-error callbacks (below, outside DOMContentLoaded) can use it
   window._ccReconnect = _reconnect;
-  } catch (initErr) {
-    console.error('[initChatApp] Initialization error:', initErr);
-  }
-}
+});
 
 // ── Global Realtime Room Presence (User Counts Across All Rooms) ──
 let _globalRoomPresenceChannel = null;
@@ -2459,19 +2453,8 @@ async function sendMessage() {
   const isSendingImage = !imagePopover?.classList.contains('hidden') && !!rawImageUrl;
   if (!text && !isSendingImage) return;
   if (!currentRoom) {
-    if (Array.isArray(cachedRooms) && cachedRooms.length > 0) {
-      const isGuest = typeof isGuestProfile === 'function' && isGuestProfile(currentProfile);
-      const targetRoom = isGuest
-        ? (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'guest') || cachedRooms[0])
-        : (cachedRooms.find(r => r.name && r.name.toLowerCase() === 'chatcorner') || cachedRooms[0]);
-      if (targetRoom) {
-        await enterRoom(targetRoom, false, true);
-      }
-    }
-    if (!currentRoom) {
-      appendSystemMessage('No room selected. Please click a room from the Rooms list.');
-      return;
-    }
+    appendSystemMessage('No room selected. Please wait for rooms to load...');
+    return;
   }
   if (currentRoom.is_locked && !isAdminOrOwnerOrMod) {
     appendSystemMessage('This room is locked by admin. Messaging is disabled.');
@@ -2515,22 +2498,21 @@ async function sendMessage() {
     await ensureGuestProfileRecord();
   }
   const safeText = window.ccSanitize ? window.ccSanitize.chatText(text, 500) : text;
-  const cleanText = stripChatBbcodeTags(safeText);
-  let formattedText = cleanText;
+  let formattedText = safeText;
   if (!isSendingImage && window.chatFormatState) {
-    if (window.chatFormatState.bold) {
+    if (window.chatFormatState.bold && !formattedText.includes('[b]')) {
       formattedText = `[b]${formattedText}[/b]`;
     }
-    if (window.chatFormatState.italic) {
+    if (window.chatFormatState.italic && !formattedText.includes('[i]')) {
       formattedText = `[i]${formattedText}[/i]`;
     }
-    if (window.chatFormatState.underline) {
+    if (window.chatFormatState.underline && !formattedText.includes('[u]')) {
       formattedText = `[u]${formattedText}[/u]`;
     }
-    if (window.chatFormatState.color) {
+    if (window.chatFormatState.color && !formattedText.includes('[color=')) {
       formattedText = `[color=${window.chatFormatState.color}]${formattedText}[/color]`;
     }
-    if (window.chatFormatState.size) {
+    if (window.chatFormatState.size && !formattedText.includes('[size=')) {
       formattedText = `[size=${window.chatFormatState.size}]${formattedText}[/size]`;
     }
   }
@@ -2541,15 +2523,6 @@ async function sendMessage() {
   autoResizeTextarea(input);
   const counter = document.getElementById('msg-char-counter');
   if (counter) counter.textContent = '0/500';
-
-  // ── Reset per-message format toggles (bold/italic/underline) after send ──
-  // Color and size are kept as user preferences.
-  if (window.chatFormatState) {
-    window.chatFormatState.bold = false;
-    window.chatFormatState.italic = false;
-    window.chatFormatState.underline = false;
-  }
-  syncFormatInputStyles();
 
   // ── OPTIMISTIC UI: append message node instantly before DB confirms ──
   let optimisticNode = null;
@@ -6274,6 +6247,22 @@ const IPTV_SOURCES = {
   'cat:general':     'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/pk.m3u',
 };
 
+const VIRTUAL_ROOM_DEFAULTS = {
+  virtual_iptv_enabled: true,
+  virtual_iptv_category: 'country:pk',
+  virtual_iptv_source: '',
+  virtual_youtube_enabled: true,
+  virtual_youtube_default: '',
+  virtual_spotify_enabled: true,
+  virtual_spotify_default: '',
+  virtual_ludo_enabled: true,
+  virtual_ludo_room: '',
+  virtual_browser_enabled: true,
+  virtual_browser_default: 'https://en.wikipedia.org/wiki/Main_Page',
+  virtual_browser_locked: false,
+  virtual_browser_pin: '1234'
+};
+let _virtualRoomConfig = { ...VIRTUAL_ROOM_DEFAULTS };
 
 async function loadVirtualRoomConfig() {
   try {
@@ -7715,11 +7704,3 @@ function enterBrowserRoom() {
   }
 }
 window.enterBrowserRoom = enterBrowserRoom;
-
-// ── App Startup: runs ONLY after entire chat-v3.js script has loaded & evaluated ──
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initChatApp);
-} else {
-  // Use setTimeout to ensure all deferred companion scripts have also finished executing
-  setTimeout(initChatApp, 0);
-}
