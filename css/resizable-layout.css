@@ -1680,6 +1680,7 @@
 /* Hide search bar and clear buttons in Ludo mode for clean topbar */
 .page-shell.ludo-active .topbar-search,
 .page-shell.ludo-active .topbar-clears-stack,
+.page-shell.ludo-active .vr-users-btn,
 .page-shell.ludo-active .mobile-tabs {
   display: none !important;
 }
