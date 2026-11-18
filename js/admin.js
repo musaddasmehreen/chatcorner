@@ -1075,7 +1075,7 @@ async function loadBroadcastHistory() {
 
 async function loadSettings() {
   if (!ensureAdminContext()) return;
-  const keys = Object.keys(settingsDefaults);
+  const keys = [...Object.keys(settingsDefaults), 'chat_bg_image', 'chat_bg_opacity'];
   const { data, error } = await sbClient.from('app_settings').select('*').in('key', keys);
   const settingsMap = { ...settingsDefaults };
   if (!error) (data || []).forEach(s => { settingsMap[s.key] = s.value; });
@@ -1084,6 +1084,18 @@ async function loadSettings() {
   document.getElementById('set-allow-register').checked = settingsMap.allow_registrations === 'true';
   document.getElementById('set-max-message').value = Number(settingsMap.max_message_length || 500);
   document.getElementById('set-welcome').value = settingsMap.welcome_message || '';
+
+  // Load custom background settings
+  const bgUrlInput = document.getElementById('set-chat-bg-url');
+  const opacityInput = document.getElementById('set-chat-bg-opacity');
+  if (bgUrlInput) bgUrlInput.value = settingsMap.chat_bg_image || '';
+  if (opacityInput) {
+    const op = settingsMap.chat_bg_opacity ? Math.round(parseFloat(settingsMap.chat_bg_opacity) * 100) : 15;
+    opacityInput.value = op;
+    const opLabel = document.getElementById('bg-opacity-val');
+    if (opLabel) opLabel.textContent = op + '%';
+  }
+  updateAdminBgPreview();
 }
 
 async function loadVirtualRoomSettings() {
@@ -1145,6 +1157,80 @@ async function saveSettings() {
   if (error) return toast(error.message, 'error');
   toast('Settings saved successfully.');
 }
+
+window.adminPendingBgDataUrl = null;
+
+window.onAdminBgFileSelect = function(event) {
+  const file = event.target.files?.[0];
+  if (!file || !file.type.startsWith('image/')) {
+    return toast('Please select a valid image file.', 'error');
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    window.adminPendingBgDataUrl = e.target.result;
+    const urlInput = document.getElementById('set-chat-bg-url');
+    if (urlInput) urlInput.value = '';
+    updateAdminBgPreview();
+    toast('Background image ready! Click "Save Chat Background" to apply.', 'info');
+  };
+  reader.readAsDataURL(file);
+};
+
+window.updateAdminBgPreview = function() {
+  const overlay = document.getElementById('admin-bg-preview-overlay');
+  const text = document.getElementById('admin-bg-preview-text');
+  const urlInput = document.getElementById('set-chat-bg-url');
+  const opacityInput = document.getElementById('set-chat-bg-opacity');
+  if (!overlay) return;
+
+  const bgUrl = window.adminPendingBgDataUrl || (urlInput ? urlInput.value.trim() : '');
+  const opacity = opacityInput ? (Number(opacityInput.value) / 100) : 0.15;
+
+  if (bgUrl) {
+    overlay.style.backgroundImage = `url("${bgUrl}")`;
+    overlay.style.opacity = String(opacity);
+    if (text) text.textContent = 'Custom Wallpaper Active (Preview)';
+  } else {
+    overlay.style.backgroundImage = 'none';
+    overlay.style.opacity = '0';
+    if (text) text.textContent = 'No custom background set (Default theme)';
+  }
+};
+
+window.clearAdminChatBg = async function() {
+  window.adminPendingBgDataUrl = null;
+  const urlInput = document.getElementById('set-chat-bg-url');
+  if (urlInput) urlInput.value = '';
+  updateAdminBgPreview();
+
+  showLoading(true);
+  const rows = [
+    { key: 'chat_bg_image', value: '', updated_at: new Date().toISOString() },
+    { key: 'chat_bg_opacity', value: '0', updated_at: new Date().toISOString() }
+  ];
+  const { error } = await sbClient.from('app_settings').upsert(rows, { onConflict: 'key' });
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('Background removed! Chatroom reverted to simple default theme.');
+};
+
+window.saveChatBackgroundSettings = async function() {
+  if (!ensureAdminContext()) return;
+  const urlInput = document.getElementById('set-chat-bg-url');
+  const opacityInput = document.getElementById('set-chat-bg-opacity');
+  const bgUrl = window.adminPendingBgDataUrl || (urlInput ? urlInput.value.trim() : '');
+  const opacity = opacityInput ? (Number(opacityInput.value) / 100).toFixed(2) : '0.15';
+
+  showLoading(true);
+  const rows = [
+    { key: 'chat_bg_image', value: bgUrl, updated_at: new Date().toISOString() },
+    { key: 'chat_bg_opacity', value: String(opacity), updated_at: new Date().toISOString() }
+  ];
+  const { error } = await sbClient.from('app_settings').upsert(rows, { onConflict: 'key' });
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast('Chat background updated successfully! Live across all rooms.');
+};
 
 async function loadAnalytics(forceRefresh = false) {
   if (!ensureAdminContext()) return;

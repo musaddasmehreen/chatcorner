@@ -354,6 +354,37 @@
 
           <button class="btn" id="save-settings" data-admin-action="save-settings">Save Settings</button>
         </div>
+
+        <div class="card" style="margin-top: 1.2rem;">
+          <h3 style="margin-top:0;">🖼️ Chatroom Writing Area Background</h3>
+          <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.8rem; line-height: 1.4;">
+            Upload or paste an image URL to show as a wallpaper across the full chat message writing area. Adjust opacity so messages stay crystal clear, or click "Keep Simple" to revert to default theme.
+          </p>
+
+          <div style="display: flex; gap: 0.6rem; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap;">
+            <input type="file" id="set-chat-bg-file" accept="image/*" style="display: none;" onchange="onAdminBgFileSelect(event)" />
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('set-chat-bg-file').click()" style="background:#3b82f6;color:#fff;">📁 Upload Background Image</button>
+            <button type="button" class="btn btn-danger" onclick="clearAdminChatBg()" style="background:#ef4444;color:#fff;">Keep Simple (Remove)</button>
+          </div>
+
+          <label for="set-chat-bg-url">Or Background Image URL:</label>
+          <input type="url" id="set-chat-bg-url" placeholder="https://example.com/wallpaper.jpg" oninput="updateAdminBgPreview()" />
+
+          <div style="margin-top: 0.8rem;">
+            <label for="set-chat-bg-opacity" style="display:flex;justify-content:space-between;">
+              <span>Background Opacity:</span>
+              <strong id="bg-opacity-val" style="color:var(--accent,#8b6ded);">15%</strong>
+            </label>
+            <input type="range" id="set-chat-bg-opacity" min="5" max="100" value="15" style="width:100%;margin-top:4px;" oninput="document.getElementById('bg-opacity-val').textContent = this.value + '%'; updateAdminBgPreview();" />
+          </div>
+
+          <div id="admin-bg-preview-wrap" style="margin-top: 0.8rem; height: 110px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; overflow: hidden; background-size: cover; background-position: center; position: relative;">
+            <div id="admin-bg-preview-overlay" style="position:absolute;inset:0;background-size:cover;background-position:center;opacity:0.15;transition:opacity 0.2s;"></div>
+            <span id="admin-bg-preview-text" style="font-size: 0.82rem; color: #94a3b8; position: relative; z-index: 2; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px;">No custom background set</span>
+          </div>
+
+          <button type="button" class="btn" style="margin-top: 1rem; width: 100%;" onclick="saveChatBackgroundSettings()">Save Chat Background</button>
+        </div>
       </section>
 
       <section id="panel-analytics" class="panel">
@@ -404,7 +435,7 @@
   <div id="toast-wrap" class="toast-wrap"></div>
   <div id="session-info" class="session-info hidden"></div>
 
-  <script src="js/admin.js"></script>
+  <script src="js/admin.js?v=2.0"></script>
 
   <script>
     // Logout handler

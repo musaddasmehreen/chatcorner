@@ -3014,16 +3014,66 @@ body.guest-mode .emoji-bar { display: none; }
   margin: auto;
 }
 
+.image-lightbox-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .image-lightbox-img {
-  width: min(440px, 86vw);
-  height: min(440px, 65vh);
+  width: min(460px, 86vw);
+  height: min(460px, 65vh);
   max-height: 65vh;
   max-width: 86vw;
   object-fit: cover;
-  border-radius: 20px;
+  border-radius: 18px;
   border: 3px solid rgba(139, 109, 237, 0.7);
   box-shadow: 0 16px 54px rgba(0, 0, 0, 0.85), 0 0 35px rgba(139, 109, 237, 0.5);
   background: #0d0a14;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  pointer-events: none !important;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+/* Invisible guard overlay: prevents right-clicking, context menus, and drag-to-desktop */
+.lightbox-security-guard {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: transparent;
+  cursor: default;
+}
+
+/* Protected watermark */
+.lightbox-security-watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.16);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-25deg);
+  z-index: 8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Anti-Screenshot Lockdown: blurs image instantly if window loses focus or screen grab is triggered */
+.image-lightbox-modal.secure-blur .image-lightbox-img,
+.image-lightbox-modal.secure-blur .image-lightbox-content {
+  filter: blur(45px) !important;
+  opacity: 0.05 !important;
 }
 
 .image-lightbox-close {
@@ -3514,4 +3564,26 @@ body.guest-mode .emoji-bar { display: none; }
 /* Drawer smooth hover transition */
 .vr-users-drawer {
   transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease !important;
+}
+
+/* ══ Chat Custom Background (Full writing place wallpaper with adjustable opacity) ══ */
+.chat-main {
+  position: relative !important;
+}
+
+.chat-custom-bg {
+  position: absolute !important;
+  inset: 0 !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  opacity: 0;
+  transition: opacity 0.4s ease, background-image 0.4s ease !important;
+}
+
+#messages {
+  position: relative !important;
+  z-index: 2 !important;
 }

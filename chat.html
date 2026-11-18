@@ -56,7 +56,7 @@
   <link rel="preconnect" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=2.3"/>
-  <link rel="stylesheet" href="css/chat-extras-v3.css?v=3.7" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=3.8" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/resizable-layout.css?v=5.1" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -413,6 +413,9 @@
           <a href="login.html" class="btn-guest-register-cta">✨ Register Free / Log In</a>
         </div>
 
+        <!-- Custom Chat Background (Managed by Admin with Opacity) -->
+        <div id="chat-custom-bg" class="chat-custom-bg" aria-hidden="true"></div>
+
         <!-- Messages -->
         <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
 
@@ -696,7 +699,7 @@
   <script src="js/auth.js?v=2.0" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=9.2" defer></script>
+  <script src="js/chat-v3.js?v=9.3" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>

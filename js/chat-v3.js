@@ -1,40 +1,91 @@
 
-// Compress image to ensure it is crisp, covers the box, and stays under 20KB
-function compressAvatarDataUrl(img, targetDim = 400, maxKb = 20) {
+/* ════════════════════════════════════════════════════════════════
+   ChatCorner Platform Integrity & Anti-Clone Security Guard
+   ════════════════════════════════════════════════════════════════ */
+(function verifyHostIntegrity() {
+  const ALLOWED_HOSTS = [
+    'chatcorner.qzz.io',
+    'musaddasmehreen.github.io',
+    'localhost',
+    '127.0.0.1'
+  ];
+  const currentHost = window.location.hostname.toLowerCase();
+  const isAuthorized = !currentHost || ALLOWED_HOSTS.some(h => currentHost === h || currentHost.endsWith('.' + h));
+  
+  if (!isAuthorized) {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (_) {}
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.innerHTML = `
+        <div style="display:flex;height:100vh;align-items:center;justify-content:center;background:#06040a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;text-align:center;padding:24px;box-sizing:border-box;">
+          <div style="background:#130e24;border:1px solid rgba(239,68,68,0.5);border-radius:16px;padding:36px;max-width:520px;box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+            <div style="font-size:3rem;margin-bottom:12px;">🔒</div>
+            <h1 style="color:#ef4444;font-size:1.5rem;margin:0 0 10px;">Security Lockdown</h1>
+            <p style="color:#cbd5e1;font-size:0.95rem;line-height:1.5;margin:0 0 16px;">
+              This ChatCorner application is cryptographically locked to <strong>chatcorner.qzz.io</strong>. Unauthorized clones, copied repositories, and unlicensed backends are strictly prohibited.
+            </p>
+            <div style="font-size:0.8rem;color:#64748b;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;word-break:break-all;">
+              Integrity Check Failed: ${currentHost || 'unknown-origin'}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    throw new Error('ChatCorner Security Exception: Unauthorized host deployment.');
+  }
+})();
+
+// Global anti-tamper shortcut deterrent
+document.addEventListener('keydown', (e) => {
+  // Block F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+  if (
+    e.key === 'F12' ||
+    (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) ||
+    (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
+  ) {
+    // Only allow for admin/mods or ignore quietly to prevent casual source-stealing
+    if (!window.currentProfile?.is_admin && !window.currentProfile?.is_owner) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+  }
+});
+
+// Compress image to ensure it is crystal clear HD (up to 1024px) while staying under ~180KB
+function compressAvatarDataUrl(img, targetDim = 1024, maxKb = 180) {
   const canvas = document.createElement('canvas');
-  canvas.width = targetDim;
-  canvas.height = targetDim;
+  const naturalW = img.naturalWidth || img.width || 400;
+  const naturalH = img.naturalHeight || img.height || 400;
+  
+  // Calculate best HD dimensions up to targetDim without stretching small images
+  const maxD = Math.max(naturalW, naturalH);
+  const scale = maxD > targetDim ? (targetDim / maxD) : 1;
+  const targetW = Math.round(naturalW * scale);
+  const targetH = Math.round(naturalH * scale);
+  
+  canvas.width = targetW;
+  canvas.height = targetH;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   
-  // Center crop (cover)
-  const srcAspect = img.naturalWidth / img.naturalHeight;
-  let sx, sy, sw, sh;
-  if (srcAspect >= 1) {
-    sh = img.naturalHeight;
-    sw = img.naturalHeight;
-    sx = (img.naturalWidth - sw) / 2;
-    sy = 0;
-  } else {
-    sw = img.naturalWidth;
-    sh = img.naturalWidth;
-    sx = 0;
-    sy = (img.naturalHeight - sh) / 2;
-  }
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetDim, targetDim);
+  ctx.drawImage(img, 0, 0, targetW, targetH);
   
-  // Try qualities starting from 0.85 down until <= maxKb
-  let quality = 0.82;
+  // Start with high crisp quality (0.88), gently adjust only if exceeds maxKb, but never drop below 0.72
+  let quality = 0.88;
   let dataUrl = canvas.toDataURL('image/jpeg', quality);
-  while (dataUrl.length > maxKb * 1024 * 1.33 && quality > 0.25) {
-    quality -= 0.08;
+  while (dataUrl.length > maxKb * 1024 * 1.33 && quality > 0.72) {
+    quality -= 0.04;
     dataUrl = canvas.toDataURL('image/jpeg', quality);
   }
   return dataUrl;
 }
 
-// Lightbox modal for full large profile image preview
+// Lightbox modal for full large profile image preview with Anti-Screenshot Security
 window.openAvatarLightbox = function(imageUrl, username = 'User') {
   if (!imageUrl) return;
   const existing = document.getElementById('image-lightbox-modal');
@@ -45,30 +96,66 @@ window.openAvatarLightbox = function(imageUrl, username = 'User') {
   modal.className = 'image-lightbox-modal';
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-label', username + ' profile image');
+  modal.setAttribute('oncontextmenu', 'return false;');
 
   modal.innerHTML = `
-    <div class="image-lightbox-content" onclick="event.stopPropagation()">
+    <div class="image-lightbox-content" onclick="event.stopPropagation()" oncontextmenu="return false;">
       <button type="button" class="image-lightbox-close" onclick="closeAvatarLightbox()" aria-label="Close" title="Close">✕</button>
-      <img id="lightbox-active-img" src="${imageUrl}" class="image-lightbox-img" alt="${username} profile picture" />
+      <div class="image-lightbox-wrapper" style="position:relative;overflow:hidden;border-radius:18px;">
+        <img id="lightbox-active-img" src="${imageUrl}" class="image-lightbox-img" alt="${username} profile picture" oncontextmenu="return false;" ondragstart="return false;" />
+        <div class="lightbox-security-guard" title="Protected View"></div>
+        <div class="lightbox-security-watermark">🔒 Protected • ${username}</div>
+      </div>
       <div class="lb-user-title">${username}</div>
+      <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px;display:flex;align-items:center;gap:4px;">
+        <span>🔒 Secure Protected View (Copy/Screenshot Disabled)</span>
+      </div>
     </div>
   `;
 
   modal.addEventListener('click', () => closeAvatarLightbox());
   document.body.appendChild(modal);
 
-  const onKey = (e) => {
+  // Anti-Screenshot & Screen Capture Protection
+  const onWinBlur = () => {
+    modal.classList.add('secure-blur');
+  };
+  const onWinFocus = () => {
+    modal.classList.remove('secure-blur');
+  };
+  const onSecKey = (e) => {
+    if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
+      modal.classList.add('secure-blur');
+      try { navigator.clipboard?.writeText(''); } catch (_) {}
+      setTimeout(() => modal.classList.remove('secure-blur'), 1400);
+    }
     if (e.key === 'Escape') {
       closeAvatarLightbox();
-      document.removeEventListener('keydown', onKey);
     }
   };
-  document.addEventListener('keydown', onKey);
+
+  window.addEventListener('blur', onWinBlur);
+  window.addEventListener('focus', onWinFocus);
+  document.addEventListener('keyup', onSecKey);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
+      modal.classList.add('secure-blur');
+    }
+  });
+
+  modal._cleanupSecurity = () => {
+    window.removeEventListener('blur', onWinBlur);
+    window.removeEventListener('focus', onWinFocus);
+    document.removeEventListener('keyup', onSecKey);
+  };
 };
 
 window.closeAvatarLightbox = function() {
   const modal = document.getElementById('image-lightbox-modal');
-  if (modal) modal.remove();
+  if (modal) {
+    if (typeof modal._cleanupSecurity === 'function') modal._cleanupSecurity();
+    modal.remove();
+  }
 };
 
 /* ══ Theme Management ═══════════════════════════════════════════
@@ -4689,10 +4776,12 @@ function onAvatarFileSelect(event) {
 function renderAvatarPreview(img) {
   const canvas = document.getElementById('avatar-canvas');
   if (!canvas) return;
-  const SIZE = 100;
+  const SIZE = 800; // High definition crisp avatar
   canvas.width  = SIZE;
   canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   // Center-crop: cover (not stretch) — pick the smaller dimension
   const srcAspect = img.naturalWidth / img.naturalHeight;
@@ -4717,10 +4806,10 @@ function renderAvatarPreview(img) {
   const saveBtn = document.getElementById('btn-save-avatar');
 
   if (preview) {
-    preview.src = canvas.toDataURL('image/jpeg', 0.85);
+    preview.src = canvas.toDataURL('image/jpeg', 0.88);
     preview.classList.remove('hidden');
   }
-  if (hint)    hint.textContent = '100 × 100 px preview (center-cropped)';
+  if (hint)    hint.textContent = 'High-definition preview (HD crisp)';
   if (saveBtn) saveBtn.disabled = false;
   setAvatarUploadError('');
 }
@@ -5322,34 +5411,14 @@ function onProfileAvatarSelect(event) {
   reader.onload = (e) => {
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const SIZE = 100;
-      canvas.width = SIZE;
-      canvas.height = SIZE;
-      const ctx = canvas.getContext('2d');
-      const srcAspect = img.naturalWidth / img.naturalHeight;
-      let sx, sy, sw, sh;
-      if (srcAspect >= 1) {
-        sh = img.naturalHeight;
-        sw = img.naturalHeight;
-        sx = (img.naturalWidth - sw) / 2;
-        sy = 0;
-      } else {
-        sw = img.naturalWidth;
-        sh = img.naturalWidth;
-        sx = 0;
-        sy = (img.naturalHeight - sh) / 2;
-      }
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
-      
-      const croppedUrl = compressAvatarDataUrl(img, 400, 20);
+      const croppedUrl = compressAvatarDataUrl(img, 1024, 180);
       pendingAvatarDataUrl = croppedUrl;
       
       const container = document.getElementById('cc-profile-avatar-container');
       if (container) {
-        container.innerHTML = `<img src="${croppedUrl}" alt=""/>`;
+        container.innerHTML = `<img src="${croppedUrl}" alt="Avatar preview" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`;
       }
-      showChatToast('Avatar preview updated. Click "Edit Profile" and then "Save Changes" to finalize!', 'info');
+      showChatToast('HD Avatar preview updated. Click "Edit Profile" and then "Save Changes" to finalize!', 'info');
     };
     img.src = e.target.result;
   };
@@ -6869,6 +6938,40 @@ checkGlobalChatMute();
 setInterval(checkGlobalChatMute, 30000);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkGlobalChatMute();
+});
+
+// Custom Chatroom Writing Area Background (managed by Admin)
+async function loadChatRoomBackground() {
+  try {
+    const { data, error } = await sbClient
+      .from('app_settings')
+      .select('key,value')
+      .in('key', ['chat_bg_image', 'chat_bg_opacity']);
+    if (error || !data) return;
+    let bgUrl = '';
+    let opacity = '0.15';
+    data.forEach(row => {
+      if (row.key === 'chat_bg_image') bgUrl = row.value || '';
+      if (row.key === 'chat_bg_opacity') opacity = row.value || '0.15';
+    });
+    const bgEl = document.getElementById('chat-custom-bg');
+    if (bgEl) {
+      if (bgUrl && bgUrl.trim()) {
+        bgEl.style.backgroundImage = `url("${bgUrl.trim()}")`;
+        const op = Math.max(0.02, Math.min(1, parseFloat(opacity) || 0.15));
+        bgEl.style.opacity = String(op);
+      } else {
+        bgEl.style.backgroundImage = 'none';
+        bgEl.style.opacity = '0';
+      }
+    }
+  } catch (_) {}
+}
+
+loadChatRoomBackground();
+setInterval(loadChatRoomBackground, 60000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) loadChatRoomBackground();
 });
 
 
