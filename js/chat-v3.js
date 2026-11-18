@@ -1047,9 +1047,10 @@ async function prepareForLogout() {
 
 window.prepareForLogout = prepareForLogout;
 
+// Tab hide: keep session alive when user switches tabs or locks screen
+// (Guest sessions are only cleaned up when explicitly logging out)
 window.addEventListener('pagehide', () => {
-  if (!isGuestProfile()) return;
-  void cleanupGuestSession({ keepalive: true });
+  // Preserved session across tab switches
 });
 
 // Debounce handle for renderUserList
@@ -1762,18 +1763,23 @@ window.addEventListener('DOMContentLoaded', async () => {
     _reconnect.trigger();
   });
 
-  // Re-subscribe after tab was hidden for more than 90 seconds
+  // Smooth reconnect recovery when tab becomes visible again
   let _hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       _hiddenAt = Date.now();
     } else {
-      const gapMs = Date.now() - _hiddenAt;
-      if (_hiddenAt > 0 && gapMs > 90_000 && currentRoom) {
-        showChatToast('🔄 Refreshing connection...', 'info', 2000);
-        _reconnect.trigger();
-      }
+      const gapMs = _hiddenAt > 0 ? (Date.now() - _hiddenAt) : 0;
       _hiddenAt = 0;
+      if (gapMs > 10000 && currentRoom && !currentRoom._virtual) {
+        // Silently refresh presence and verify realtime connection
+        if (typeof trackMyCurrentRoomPresence === 'function') {
+          try { trackMyCurrentRoomPresence(); } catch (_) {}
+        }
+        if (presenceChannel && presenceChannel.state !== 'joined') {
+          enterRoom(currentRoom, true, true).catch(() => {});
+        }
+      }
     }
   });
 
@@ -2356,7 +2362,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         window._ccReconnect?.reset();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (banner) {
-          banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
+          banner.querySelector('.banner-text').textContent = '🔄 Reconnecting to chat…';
           banner.classList.remove('hidden');
         }
         // Use the backoff engine instead of immediately retrying
@@ -2442,7 +2448,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         }
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (banner) {
-          banner.querySelector('.banner-text').textContent = '⚠️ Connection lost or room limit reached. Reconnecting...';
+          banner.querySelector('.banner-text').textContent = '🔄 Reconnecting to chat…';
           banner.classList.remove('hidden');
         }
         window._ccReconnect?.trigger();
@@ -7954,3 +7960,17 @@ function enterBrowserRoom() {
   }
 }
 window.enterBrowserRoom = enterBrowserRoom;
+
+
+window.retryConnectionNow = async function() {
+  const banner = document.getElementById('connection-error-banner');
+  if (banner) {
+    banner.querySelector('.banner-text').textContent = '🔄 Reconnecting...';
+  }
+  if (window._ccReconnect) {
+    window._ccReconnect.reset();
+  }
+  if (currentRoom) {
+    await enterRoom(currentRoom, true, true);
+  }
+};

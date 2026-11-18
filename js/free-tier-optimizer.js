@@ -50,23 +50,15 @@ function startIdleTimer() {
 }
 
 function disconnectPresence() {
-  if (typeof presenceChannel !== 'undefined' && presenceChannel) {
-    presenceChannel.unsubscribe();
-    console.log('[IDLE] User idle for 30 minutes - disconnected from presence channel');
-  }
+  // Safe idle mark: do not unsubscribe presenceChannel to prevent CHANNEL_ERROR / disconnect loops
   updateIdleStatusUI(true);
 }
 
 function reconnectPresence() {
-  if (typeof presenceChannel !== 'undefined' && presenceChannel) {
-    presenceChannel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED' && typeof presenceBaseData !== 'undefined') {
-        try { await presenceChannel.track(presenceBaseData); } catch(e) {}
-      }
-    });
-    console.log('[IDLE] User active - reconnected to presence channel');
-  }
   updateIdleStatusUI(false);
+  if (typeof window.trackMyCurrentRoomPresence === 'function') {
+    try { window.trackMyCurrentRoomPresence(); } catch (_) {}
+  }
 }
 
 function updateIdleStatusUI(isIdle) {
