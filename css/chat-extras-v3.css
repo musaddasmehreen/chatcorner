@@ -3245,6 +3245,101 @@ body.guest-mode .emoji-bar { display: none; }
   pointer-events: auto !important;
 }
 
+/* Color Popover Card (Styled exactly like classic rich text editor palette) */
+#fmt-color-popover {
+  background: #ffffff !important;
+  border: 1px solid #94a3b8 !important;
+  border-radius: 4px !important;
+  padding: 5px !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5) !important;
+  min-width: 146px !important;
+  width: auto !important;
+  right: -12px !important;
+  backdrop-filter: none !important;
+}
+
+.fmt-color-palette {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+.fmt-grayscale-row {
+  display: grid !important;
+  grid-template-columns: repeat(8, 16px) !important;
+  gap: 2px !important;
+  padding-bottom: 3px !important;
+  margin-bottom: 3px !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+  justify-content: center !important;
+}
+
+.fmt-palette-grid {
+  display: grid !important;
+  grid-template-columns: repeat(8, 16px) !important;
+  gap: 2px !important;
+  justify-content: center !important;
+}
+
+.fmt-color-cell {
+  width: 16px !important;
+  height: 13px !important;
+  border-radius: 1px !important;
+  cursor: pointer !important;
+  border: 1px solid rgba(0, 0, 0, 0.22) !important;
+  box-sizing: border-box !important;
+  transition: transform 0.08s ease, outline 0.08s ease !important;
+  display: block !important;
+}
+
+.fmt-color-cell:hover {
+  transform: scale(1.22) !important;
+  outline: 1.5px solid #2563eb !important;
+  outline-offset: -0.5px !important;
+  z-index: 10 !important;
+  position: relative !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+.fmt-color-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  margin-top: 5px !important;
+  padding-top: 4px !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+.fmt-reset-btn {
+  flex: 1 !important;
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 3px !important;
+  color: #334155 !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  padding: 3px 6px !important;
+  cursor: pointer !important;
+  text-align: center !important;
+}
+
+.fmt-reset-btn:hover {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+}
+
+#fmt-custom-color-input {
+  width: 22px !important;
+  height: 20px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 2px !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
 @keyframes fmtPopIn {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }

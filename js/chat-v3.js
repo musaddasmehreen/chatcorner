@@ -279,7 +279,7 @@ window.toggleFormatBtn = function(type) {
   const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
 
   if (hasSelection) {
-    // 1. User selected a range of text -> wrap the selected range
+    // Wrap selected range
     const selected = val.substring(selStart, selEnd);
     const wrapped = `[${tag}]${selected}[/${tag}]`;
     textarea.value = val.substring(0, selStart) + wrapped + val.substring(selEnd);
@@ -287,33 +287,13 @@ window.toggleFormatBtn = function(type) {
     const newCursor = selStart + tag.length + 2 + selected.length + tag.length + 3;
     textarea.setSelectionRange(newCursor, newCursor);
     window.chatFormatState[type] = true;
-  } else if (val.trim().length > 0) {
-    // 2. User has text in textarea but no selection -> wrap or unwrap the whole text
-    const openTag = `[${tag}]`;
-    const closeTag = `[/${tag}]`;
-    if (val.startsWith(openTag) && val.endsWith(closeTag)) {
-      // Unwrap
-      textarea.value = val.slice(openTag.length, -closeTag.length);
-      window.chatFormatState[type] = false;
-    } else {
-      // Wrap whole text
-      textarea.value = `${openTag}${val}${closeTag}`;
-      window.chatFormatState[type] = true;
-    }
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   } else {
-    // 3. Textarea is empty -> insert tags and place cursor in the middle [b]|[/b]
+    // Live toggle without raw code in textarea
     window.chatFormatState[type] = !window.chatFormatState[type];
-    if (window.chatFormatState[type]) {
-      textarea.value = `[${tag}][/${tag}]`;
-      const cursorPos = tag.length + 2;
-      textarea.focus();
-      textarea.setSelectionRange(cursorPos, cursorPos);
-    } else {
-      textarea.value = '';
-      textarea.focus();
-    }
+    if (type === 'bold') textarea.style.fontWeight = window.chatFormatState.bold ? '700' : '';
+    if (type === 'italic') textarea.style.fontStyle = window.chatFormatState.italic ? 'italic' : '';
+    if (type === 'underline') textarea.style.textDecoration = window.chatFormatState.underline ? 'underline' : '';
+    textarea.focus();
   }
 
   // Update button active UI
@@ -351,7 +331,7 @@ window.applyColorFormat = function(color) {
   const textarea = document.getElementById('msg-input');
   window.chatFormatState.color = color || null;
 
-  // Update color preview UI
+  // Update color preview UI on button
   const preview = document.getElementById('fmt-color-preview');
   if (preview) {
     preview.style.borderBottomColor = color || 'var(--accent, #8b6ded)';
@@ -366,31 +346,16 @@ window.applyColorFormat = function(color) {
     const val = textarea.value;
     const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
 
-    if (color) {
-      if (hasSelection) {
-        const selected = val.substring(selStart, selEnd);
-        textarea.value = val.substring(0, selStart) + `[color=${color}]${selected}[/color]` + val.substring(selEnd);
-        textarea.focus();
-        const newCursor = selStart + color.length + 8 + selected.length + 8;
-        textarea.setSelectionRange(newCursor, newCursor);
-      } else if (val.trim().length > 0) {
-        const colorRegex = /^\[color=#[a-fA-F0-9]{3,8}\]([\s\S]*?)\[\/color\]$/;
-        if (colorRegex.test(val)) {
-          textarea.value = val.replace(/^\[color=#[a-fA-F0-9]{3,8}\]/, `[color=${color}]`);
-        } else {
-          textarea.value = `[color=${color}]${val}[/color]`;
-        }
-        textarea.focus();
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      } else {
-        textarea.value = `[color=${color}][/color]`;
-        const cursor = color.length + 8;
-        textarea.focus();
-        textarea.setSelectionRange(cursor, cursor);
-      }
+    if (hasSelection && color) {
+      const selected = val.substring(selStart, selEnd);
+      textarea.value = val.substring(0, selStart) + `[color=${color}]${selected}[/color]` + val.substring(selEnd);
+      textarea.focus();
+      const newCursor = selStart + color.length + 8 + selected.length + 8;
+      textarea.setSelectionRange(newCursor, newCursor);
     } else {
-      // Reset color to default
-      if (val.trim().length > 0) {
+      // Live effect directly on textarea - no raw code!
+      textarea.style.color = color || '';
+      if (!color && val.trim().length > 0) {
         textarea.value = val.replace(/\[color=#[a-fA-F0-9]{3,8}\]/gi, '').replace(/\[\/color\]/gi, '');
       }
       textarea.focus();
@@ -425,31 +390,16 @@ window.applySizeFormat = function(size) {
     const val = textarea.value;
     const hasSelection = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
 
-    if (size) {
-      if (hasSelection) {
-        const selected = val.substring(selStart, selEnd);
-        textarea.value = val.substring(0, selStart) + `[size=${size}]${selected}[/size]` + val.substring(selEnd);
-        textarea.focus();
-        const newCursor = selStart + size.length + 7 + selected.length + 7;
-        textarea.setSelectionRange(newCursor, newCursor);
-      } else if (val.trim().length > 0) {
-        const sizeRegex = /^\[size=\d{1,2}\]([\s\S]*?)\[\/size\]$/;
-        if (sizeRegex.test(val)) {
-          textarea.value = val.replace(/^\[size=\d{1,2}\]/, `[size=${size}]`);
-        } else {
-          textarea.value = `[size=${size}]${val}[/size]`;
-        }
-        textarea.focus();
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      } else {
-        textarea.value = `[size=${size}][/size]`;
-        const cursor = size.length + 7;
-        textarea.focus();
-        textarea.setSelectionRange(cursor, cursor);
-      }
+    if (hasSelection && size) {
+      const selected = val.substring(selStart, selEnd);
+      textarea.value = val.substring(0, selStart) + `[size=${size}]${selected}[/size]` + val.substring(selEnd);
+      textarea.focus();
+      const newCursor = selStart + size.length + 7 + selected.length + 7;
+      textarea.setSelectionRange(newCursor, newCursor);
     } else {
-      // Normal size (Default)
-      if (val.trim().length > 0) {
+      // Live effect directly on textarea
+      textarea.style.fontSize = size ? (size + 'px') : '';
+      if (!size && val.trim().length > 0) {
         textarea.value = val.replace(/\[size=\d{1,2}\]/gi, '').replace(/\[\/size\]/gi, '');
       }
       textarea.focus();
@@ -467,14 +417,22 @@ window.clearAllFormatting = function() {
     color: null,
     size: null
   };
+  const textarea = document.getElementById('msg-input');
+  if (textarea) {
+    textarea.style.fontWeight = '';
+    textarea.style.fontStyle = '';
+    textarea.style.textDecoration = '';
+    textarea.style.color = '';
+    textarea.style.fontSize = '';
+  }
   document.querySelectorAll('.fmt-btn').forEach(el => el.classList.remove('active'));
   const preview = document.getElementById('fmt-color-preview');
   if (preview) {
     preview.style.borderBottomColor = 'var(--accent, #8b6ded)';
     preview.style.color = 'inherit';
   }
-  const label = document.getElementById('fmt-size-label');
-  if (label) label.textContent = 'Size';
+  const sizeLabel = document.getElementById('fmt-size-label');
+  if (sizeLabel) sizeLabel.textContent = 'Size';
   closeAllFormatPopovers();
   document.getElementById('msg-input')?.focus();
 };

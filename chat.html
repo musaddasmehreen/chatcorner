@@ -56,7 +56,7 @@
   <link rel="preconnect" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="dns-prefetch" href="https://zefcqrnhaeounzdmjscc.supabase.co"/>
   <link rel="stylesheet" href="css/style.css?v=2.3"/>
-  <link rel="stylesheet" href="css/chat-extras-v3.css?v=3.6" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="css/chat-extras-v3.css?v=3.7" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/resizable-layout.css?v=5.0" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="css/games.css" media="print" onload="this.media='all'"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -516,22 +516,79 @@
             <span id="fmt-color-preview">A</span> <span class="fmt-caret">▾</span>
           </button>
           <div class="fmt-popover hidden" id="fmt-color-popover">
-            <div class="fmt-popover-title">Message Color</div>
-            <div class="fmt-color-grid">
-              <span class="fmt-color-dot" style="background:#ffffff;" data-color="#ffffff" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ffffff')" title="White"></span>
-              <span class="fmt-color-dot" style="background:#ef4444;" data-color="#ef4444" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ef4444')" title="Red"></span>
-              <span class="fmt-color-dot" style="background:#f97316;" data-color="#f97316" onmousedown="event.preventDefault()" onclick="applyColorFormat('#f97316')" title="Orange"></span>
-              <span class="fmt-color-dot" style="background:#eab308;" data-color="#eab308" onmousedown="event.preventDefault()" onclick="applyColorFormat('#eab308')" title="Yellow"></span>
-              <span class="fmt-color-dot" style="background:#22c55e;" data-color="#22c55e" onmousedown="event.preventDefault()" onclick="applyColorFormat('#22c55e')" title="Green"></span>
-              <span class="fmt-color-dot" style="background:#06b6d4;" data-color="#06b6d4" onmousedown="event.preventDefault()" onclick="applyColorFormat('#06b6d4')" title="Cyan"></span>
-              <span class="fmt-color-dot" style="background:#3b82f6;" data-color="#3b82f6" onmousedown="event.preventDefault()" onclick="applyColorFormat('#3b82f6')" title="Blue"></span>
-              <span class="fmt-color-dot" style="background:#8b5cf6;" data-color="#8b5cf6" onmousedown="event.preventDefault()" onclick="applyColorFormat('#8b5cf6')" title="Purple"></span>
-              <span class="fmt-color-dot" style="background:#ec4899;" data-color="#ec4899" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ec4899')" title="Pink"></span>
-              <span class="fmt-color-dot" style="background:#ffd700;" data-color="#ffd700" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ffd700')" title="Gold"></span>
-            </div>
-            <div class="fmt-custom-color-row">
-              <input type="color" id="fmt-custom-color-input" onchange="applyColorFormat(this.value)" title="Custom color picker"/>
-              <button type="button" class="fmt-reset-btn" onmousedown="event.preventDefault()" onclick="applyColorFormat(null)">Default</button>
+            <div class="fmt-color-palette">
+              <div class="fmt-grayscale-row">
+                <span class="fmt-color-cell" style="background:#000000;" data-color="#000000" onmousedown="event.preventDefault()" onclick="applyColorFormat('#000000')" title="Black"></span>
+                <span class="fmt-color-cell" style="background:#434343;" data-color="#434343" onmousedown="event.preventDefault()" onclick="applyColorFormat('#434343')" title="Dark Charcoal"></span>
+                <span class="fmt-color-cell" style="background:#666666;" data-color="#666666" onmousedown="event.preventDefault()" onclick="applyColorFormat('#666666')" title="Dark Gray"></span>
+                <span class="fmt-color-cell" style="background:#999999;" data-color="#999999" onmousedown="event.preventDefault()" onclick="applyColorFormat('#999999')" title="Medium Gray"></span>
+                <span class="fmt-color-cell" style="background:#cccccc;" data-color="#cccccc" onmousedown="event.preventDefault()" onclick="applyColorFormat('#cccccc')" title="Silver"></span>
+                <span class="fmt-color-cell" style="background:#efefef;" data-color="#efefef" onmousedown="event.preventDefault()" onclick="applyColorFormat('#efefef')" title="Light Gray"></span>
+                <span class="fmt-color-cell" style="background:#f3f3f3;" data-color="#f3f3f3" onmousedown="event.preventDefault()" onclick="applyColorFormat('#f3f3f3')" title="Off White"></span>
+                <span class="fmt-color-cell" style="background:#ffffff;" data-color="#ffffff" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ffffff')" title="White"></span>
+              </div>
+              <div class="fmt-palette-grid">
+                <span class="fmt-color-cell" style="background:#ff0000;" data-color="#ff0000" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ff0000')" title="Red"></span>
+                <span class="fmt-color-cell" style="background:#ff9900;" data-color="#ff9900" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ff9900')" title="Orange"></span>
+                <span class="fmt-color-cell" style="background:#ffff00;" data-color="#ffff00" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ffff00')" title="Yellow"></span>
+                <span class="fmt-color-cell" style="background:#00ff00;" data-color="#00ff00" onmousedown="event.preventDefault()" onclick="applyColorFormat('#00ff00')" title="Green"></span>
+                <span class="fmt-color-cell" style="background:#00ffff;" data-color="#00ffff" onmousedown="event.preventDefault()" onclick="applyColorFormat('#00ffff')" title="Cyan"></span>
+                <span class="fmt-color-cell" style="background:#0000ff;" data-color="#0000ff" onmousedown="event.preventDefault()" onclick="applyColorFormat('#0000ff')" title="Blue"></span>
+                <span class="fmt-color-cell" style="background:#9900ff;" data-color="#9900ff" onmousedown="event.preventDefault()" onclick="applyColorFormat('#9900ff')" title="Purple"></span>
+                <span class="fmt-color-cell" style="background:#ff00ff;" data-color="#ff00ff" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ff00ff')" title="Magenta"></span>
+                <span class="fmt-color-cell" style="background:#f4cccc;" data-color="#f4cccc" onmousedown="event.preventDefault()" onclick="applyColorFormat('#f4cccc')" title="Light Red 3"></span>
+                <span class="fmt-color-cell" style="background:#fce5cd;" data-color="#fce5cd" onmousedown="event.preventDefault()" onclick="applyColorFormat('#fce5cd')" title="Light Orange 3"></span>
+                <span class="fmt-color-cell" style="background:#fff2cc;" data-color="#fff2cc" onmousedown="event.preventDefault()" onclick="applyColorFormat('#fff2cc')" title="Light Yellow 3"></span>
+                <span class="fmt-color-cell" style="background:#d9ead3;" data-color="#d9ead3" onmousedown="event.preventDefault()" onclick="applyColorFormat('#d9ead3')" title="Light Green 3"></span>
+                <span class="fmt-color-cell" style="background:#d0e0e3;" data-color="#d0e0e3" onmousedown="event.preventDefault()" onclick="applyColorFormat('#d0e0e3')" title="Light Cyan 3"></span>
+                <span class="fmt-color-cell" style="background:#cfe2f3;" data-color="#cfe2f3" onmousedown="event.preventDefault()" onclick="applyColorFormat('#cfe2f3')" title="Light Blue 3"></span>
+                <span class="fmt-color-cell" style="background:#d9d2e9;" data-color="#d9d2e9" onmousedown="event.preventDefault()" onclick="applyColorFormat('#d9d2e9')" title="Light Purple 3"></span>
+                <span class="fmt-color-cell" style="background:#ead1dc;" data-color="#ead1dc" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ead1dc')" title="Light Magenta 3"></span>
+                <span class="fmt-color-cell" style="background:#ea9999;" data-color="#ea9999" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ea9999')" title="Light Red 2"></span>
+                <span class="fmt-color-cell" style="background:#f9cb9c;" data-color="#f9cb9c" onmousedown="event.preventDefault()" onclick="applyColorFormat('#f9cb9c')" title="Light Orange 2"></span>
+                <span class="fmt-color-cell" style="background:#ffe599;" data-color="#ffe599" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ffe599')" title="Light Yellow 2"></span>
+                <span class="fmt-color-cell" style="background:#b6d7a8;" data-color="#b6d7a8" onmousedown="event.preventDefault()" onclick="applyColorFormat('#b6d7a8')" title="Light Green 2"></span>
+                <span class="fmt-color-cell" style="background:#a2c4c9;" data-color="#a2c4c9" onmousedown="event.preventDefault()" onclick="applyColorFormat('#a2c4c9')" title="Light Cyan 2"></span>
+                <span class="fmt-color-cell" style="background:#9fc5e8;" data-color="#9fc5e8" onmousedown="event.preventDefault()" onclick="applyColorFormat('#9fc5e8')" title="Light Blue 2"></span>
+                <span class="fmt-color-cell" style="background:#b4a7d6;" data-color="#b4a7d6" onmousedown="event.preventDefault()" onclick="applyColorFormat('#b4a7d6')" title="Light Purple 2"></span>
+                <span class="fmt-color-cell" style="background:#d5a6bd;" data-color="#d5a6bd" onmousedown="event.preventDefault()" onclick="applyColorFormat('#d5a6bd')" title="Light Magenta 2"></span>
+                <span class="fmt-color-cell" style="background:#e06666;" data-color="#e06666" onmousedown="event.preventDefault()" onclick="applyColorFormat('#e06666')" title="Light Red 1"></span>
+                <span class="fmt-color-cell" style="background:#f6b26b;" data-color="#f6b26b" onmousedown="event.preventDefault()" onclick="applyColorFormat('#f6b26b')" title="Light Orange 1"></span>
+                <span class="fmt-color-cell" style="background:#ffd966;" data-color="#ffd966" onmousedown="event.preventDefault()" onclick="applyColorFormat('#ffd966')" title="Light Yellow 1"></span>
+                <span class="fmt-color-cell" style="background:#93c47d;" data-color="#93c47d" onmousedown="event.preventDefault()" onclick="applyColorFormat('#93c47d')" title="Light Green 1"></span>
+                <span class="fmt-color-cell" style="background:#76a5af;" data-color="#76a5af" onmousedown="event.preventDefault()" onclick="applyColorFormat('#76a5af')" title="Light Cyan 1"></span>
+                <span class="fmt-color-cell" style="background:#6fa8dc;" data-color="#6fa8dc" onmousedown="event.preventDefault()" onclick="applyColorFormat('#6fa8dc')" title="Light Blue 1"></span>
+                <span class="fmt-color-cell" style="background:#8e7cc3;" data-color="#8e7cc3" onmousedown="event.preventDefault()" onclick="applyColorFormat('#8e7cc3')" title="Light Purple 1"></span>
+                <span class="fmt-color-cell" style="background:#c27ba0;" data-color="#c27ba0" onmousedown="event.preventDefault()" onclick="applyColorFormat('#c27ba0')" title="Light Magenta 1"></span>
+                <span class="fmt-color-cell" style="background:#cc0000;" data-color="#cc0000" onmousedown="event.preventDefault()" onclick="applyColorFormat('#cc0000')" title="Dark Red 1"></span>
+                <span class="fmt-color-cell" style="background:#e69138;" data-color="#e69138" onmousedown="event.preventDefault()" onclick="applyColorFormat('#e69138')" title="Dark Orange 1"></span>
+                <span class="fmt-color-cell" style="background:#f1c232;" data-color="#f1c232" onmousedown="event.preventDefault()" onclick="applyColorFormat('#f1c232')" title="Dark Yellow 1"></span>
+                <span class="fmt-color-cell" style="background:#6aa84f;" data-color="#6aa84f" onmousedown="event.preventDefault()" onclick="applyColorFormat('#6aa84f')" title="Dark Green 1"></span>
+                <span class="fmt-color-cell" style="background:#45818e;" data-color="#45818e" onmousedown="event.preventDefault()" onclick="applyColorFormat('#45818e')" title="Dark Cyan 1"></span>
+                <span class="fmt-color-cell" style="background:#3d85c6;" data-color="#3d85c6" onmousedown="event.preventDefault()" onclick="applyColorFormat('#3d85c6')" title="Dark Blue 1"></span>
+                <span class="fmt-color-cell" style="background:#674ea7;" data-color="#674ea7" onmousedown="event.preventDefault()" onclick="applyColorFormat('#674ea7')" title="Dark Purple 1"></span>
+                <span class="fmt-color-cell" style="background:#a64d79;" data-color="#a64d79" onmousedown="event.preventDefault()" onclick="applyColorFormat('#a64d79')" title="Dark Magenta 1"></span>
+                <span class="fmt-color-cell" style="background:#990000;" data-color="#990000" onmousedown="event.preventDefault()" onclick="applyColorFormat('#990000')" title="Dark Red 2"></span>
+                <span class="fmt-color-cell" style="background:#b45f06;" data-color="#b45f06" onmousedown="event.preventDefault()" onclick="applyColorFormat('#b45f06')" title="Dark Orange 2"></span>
+                <span class="fmt-color-cell" style="background:#bf9000;" data-color="#bf9000" onmousedown="event.preventDefault()" onclick="applyColorFormat('#bf9000')" title="Dark Yellow 2"></span>
+                <span class="fmt-color-cell" style="background:#38761d;" data-color="#38761d" onmousedown="event.preventDefault()" onclick="applyColorFormat('#38761d')" title="Dark Green 2"></span>
+                <span class="fmt-color-cell" style="background:#134f5c;" data-color="#134f5c" onmousedown="event.preventDefault()" onclick="applyColorFormat('#134f5c')" title="Dark Cyan 2"></span>
+                <span class="fmt-color-cell" style="background:#0b5394;" data-color="#0b5394" onmousedown="event.preventDefault()" onclick="applyColorFormat('#0b5394')" title="Dark Blue 2"></span>
+                <span class="fmt-color-cell" style="background:#351c75;" data-color="#351c75" onmousedown="event.preventDefault()" onclick="applyColorFormat('#351c75')" title="Dark Purple 2"></span>
+                <span class="fmt-color-cell" style="background:#741b47;" data-color="#741b47" onmousedown="event.preventDefault()" onclick="applyColorFormat('#741b47')" title="Dark Magenta 2"></span>
+                <span class="fmt-color-cell" style="background:#660000;" data-color="#660000" onmousedown="event.preventDefault()" onclick="applyColorFormat('#660000')" title="Dark Red 3"></span>
+                <span class="fmt-color-cell" style="background:#783f04;" data-color="#783f04" onmousedown="event.preventDefault()" onclick="applyColorFormat('#783f04')" title="Dark Orange 3"></span>
+                <span class="fmt-color-cell" style="background:#7f6000;" data-color="#7f6000" onmousedown="event.preventDefault()" onclick="applyColorFormat('#7f6000')" title="Dark Yellow 3"></span>
+                <span class="fmt-color-cell" style="background:#274e13;" data-color="#274e13" onmousedown="event.preventDefault()" onclick="applyColorFormat('#274e13')" title="Dark Green 3"></span>
+                <span class="fmt-color-cell" style="background:#0c343d;" data-color="#0c343d" onmousedown="event.preventDefault()" onclick="applyColorFormat('#0c343d')" title="Dark Cyan 3"></span>
+                <span class="fmt-color-cell" style="background:#073763;" data-color="#073763" onmousedown="event.preventDefault()" onclick="applyColorFormat('#073763')" title="Dark Blue 3"></span>
+                <span class="fmt-color-cell" style="background:#20124d;" data-color="#20124d" onmousedown="event.preventDefault()" onclick="applyColorFormat('#20124d')" title="Dark Purple 3"></span>
+                <span class="fmt-color-cell" style="background:#4c1130;" data-color="#4c1130" onmousedown="event.preventDefault()" onclick="applyColorFormat('#4c1130')" title="Dark Magenta 3"></span>
+              </div>
+              <div class="fmt-color-footer">
+                <button type="button" class="fmt-reset-btn" onmousedown="event.preventDefault()" onclick="applyColorFormat(null)">Default</button>
+                <input type="color" id="fmt-custom-color-input" onchange="applyColorFormat(this.value)" title="Custom color"/>
+              </div>
             </div>
           </div>
         </div>
@@ -639,7 +696,7 @@
   <script src="js/auth.js?v=2.0" defer></script>
   <script src="js/permissions.js?v=1.6" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
-  <script src="js/chat-v3.js?v=9.0" defer></script>
+  <script src="js/chat-v3.js?v=9.1" defer></script>
   <script src="js/pm.js?v=3.1" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
