@@ -412,6 +412,9 @@ document.addEventListener('click', function(e) {
   if (!e.target.closest('#chat-format-toolbar')) {
     closeAllFormatPopovers();
   }
+  if (!e.target.closest('#cc-profile-nickcolor-wrap') && !e.target.closest('#cc-profile-msgcolor-wrap')) {
+    document.querySelectorAll('.cc-profile-palette-popover').forEach(p => p.classList.add('hidden'));
+  }
 });
 
 window.applyColorFormat = function(color) {
@@ -5057,10 +5060,16 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
             
             <div class="cc-profile-form-group">
               <label class="cc-profile-label">Nick color (HEX code)</label>
-              <div class="cc-profile-color-row">
-                <input type="text" id="cc-edit-nickcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.nick_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="updateColorPreview(this, 'cc-edit-nickcolor-picker')" />
-                <div class="cc-profile-color-picker-btn">
-                  <input type="color" id="cc-edit-nickcolor-picker" value="${escHtml(profile.nick_color || '#ffffff')}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-nickcolor')" />
+              <div class="cc-profile-color-wrap" id="cc-profile-nickcolor-wrap">
+                <div class="cc-profile-color-row">
+                  <input type="text" id="cc-edit-nickcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.nick_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="onProfileColorInput(this, 'nick')" onfocus="openProfilePalette('nick')" />
+                  <button type="button" class="cc-profile-palette-btn" id="cc-profile-nick-palette-btn" onclick="toggleProfilePalette(event, 'nick')" title="Choose from color palette" ${!checkColumns ? 'disabled' : ''}>
+                    <span class="cc-profile-color-swatch" id="cc-profile-nick-swatch" style="background: ${escHtml(profile.nick_color || '#ffffff')};"></span>
+                    <span class="cc-profile-palette-icon">🎨</span>
+                  </button>
+                </div>
+                <div class="cc-profile-palette-popover hidden" id="cc-profile-nick-popover">
+                  ${generateProfilePaletteHtml('nick')}
                 </div>
               </div>
               <div class="cc-profile-checkbox-row">
@@ -5071,10 +5080,16 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
             
             <div class="cc-profile-form-group">
               <label class="cc-profile-label">Messages color (HEX code)</label>
-              <div class="cc-profile-color-row">
-                <input type="text" id="cc-edit-msgcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.msg_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="updateColorPreview(this, 'cc-edit-msgcolor-picker')" />
-                <div class="cc-profile-color-picker-btn">
-                  <input type="color" id="cc-edit-msgcolor-picker" value="${escHtml(profile.msg_color || '#ffffff')}" ${!checkColumns ? 'disabled' : ''} oninput="updateColorText(this, 'cc-edit-msgcolor')" />
+              <div class="cc-profile-color-wrap" id="cc-profile-msgcolor-wrap">
+                <div class="cc-profile-color-row">
+                  <input type="text" id="cc-edit-msgcolor" class="cc-profile-input" placeholder="#ffffff" value="${escHtml(profile.msg_color || '')}" maxlength="7" ${!checkColumns ? 'disabled' : ''} oninput="onProfileColorInput(this, 'msg')" onfocus="openProfilePalette('msg')" />
+                  <button type="button" class="cc-profile-palette-btn" id="cc-profile-msg-palette-btn" onclick="toggleProfilePalette(event, 'msg')" title="Choose from color palette" ${!checkColumns ? 'disabled' : ''}>
+                    <span class="cc-profile-color-swatch" id="cc-profile-msg-swatch" style="background: ${escHtml(profile.msg_color || '#ffffff')};"></span>
+                    <span class="cc-profile-palette-icon">🎨</span>
+                  </button>
+                </div>
+                <div class="cc-profile-palette-popover hidden" id="cc-profile-msg-popover">
+                  ${generateProfilePaletteHtml('msg')}
                 </div>
               </div>
               <div class="cc-profile-checkbox-row">
@@ -5368,6 +5383,165 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
   }
 }
 
+
+// --- Profile Exact Color Palette System ---
+const PROFILE_PALETTE_GRAYSCALE = [
+  { color: '#000000', title: 'Black' },
+  { color: '#434343', title: 'Dark Charcoal' },
+  { color: '#666666', title: 'Dark Gray' },
+  { color: '#999999', title: 'Medium Gray' },
+  { color: '#cccccc', title: 'Silver' },
+  { color: '#efefef', title: 'Light Gray' },
+  { color: '#f3f3f3', title: 'Off White' },
+  { color: '#ffffff', title: 'White' }
+];
+
+const PROFILE_PALETTE_COLORS = [
+  { color: '#ff0000', title: 'Red' },
+  { color: '#ff9900', title: 'Orange' },
+  { color: '#ffff00', title: 'Yellow' },
+  { color: '#00ff00', title: 'Green' },
+  { color: '#00ffff', title: 'Cyan' },
+  { color: '#0000ff', title: 'Blue' },
+  { color: '#9900ff', title: 'Purple' },
+  { color: '#ff00ff', title: 'Magenta' },
+  { color: '#f4cccc', title: 'Light Red 3' },
+  { color: '#fce5cd', title: 'Light Orange 3' },
+  { color: '#fff2cc', title: 'Light Yellow 3' },
+  { color: '#d9ead3', title: 'Light Green 3' },
+  { color: '#d0e0e3', title: 'Light Cyan 3' },
+  { color: '#cfe2f3', title: 'Light Blue 3' },
+  { color: '#d9d2e9', title: 'Light Purple 3' },
+  { color: '#ead1dc', title: 'Light Magenta 3' },
+  { color: '#ea9999', title: 'Light Red 2' },
+  { color: '#f9cb9c', title: 'Light Orange 2' },
+  { color: '#ffe599', title: 'Light Yellow 2' },
+  { color: '#b6d7a8', title: 'Light Green 2' },
+  { color: '#a2c4c9', title: 'Light Cyan 2' },
+  { color: '#9fc5e8', title: 'Light Blue 2' },
+  { color: '#b4a7d6', title: 'Light Purple 2' },
+  { color: '#d5a6bd', title: 'Light Magenta 2' },
+  { color: '#e06666', title: 'Light Red 1' },
+  { color: '#f6b26b', title: 'Light Orange 1' },
+  { color: '#ffd966', title: 'Light Yellow 1' },
+  { color: '#93c47d', title: 'Light Green 1' },
+  { color: '#76a5af', title: 'Light Cyan 1' },
+  { color: '#6fa8dc', title: 'Light Blue 1' },
+  { color: '#8e7cc3', title: 'Light Purple 1' },
+  { color: '#c27ba0', title: 'Light Magenta 1' },
+  { color: '#cc0000', title: 'Dark Red 1' },
+  { color: '#e69138', title: 'Dark Orange 1' },
+  { color: '#f1c232', title: 'Dark Yellow 1' },
+  { color: '#6aa84f', title: 'Dark Green 1' },
+  { color: '#45818e', title: 'Dark Cyan 1' },
+  { color: '#3d85c6', title: 'Dark Blue 1' },
+  { color: '#674ea7', title: 'Dark Purple 1' },
+  { color: '#a64d79', title: 'Dark Magenta 1' },
+  { color: '#990000', title: 'Dark Red 2' },
+  { color: '#b45f06', title: 'Dark Orange 2' },
+  { color: '#bf9000', title: 'Dark Yellow 2' },
+  { color: '#38761d', title: 'Dark Green 2' },
+  { color: '#134f5c', title: 'Dark Cyan 2' },
+  { color: '#0b5394', title: 'Dark Blue 2' },
+  { color: '#351c75', title: 'Dark Purple 2' },
+  { color: '#741b47', title: 'Dark Magenta 2' },
+  { color: '#660000', title: 'Dark Red 3' },
+  { color: '#783f04', title: 'Dark Orange 3' },
+  { color: '#7f6000', title: 'Dark Yellow 3' },
+  { color: '#274e13', title: 'Dark Green 3' },
+  { color: '#0c343d', title: 'Dark Cyan 3' },
+  { color: '#073763', title: 'Dark Blue 3' },
+  { color: '#20124d', title: 'Dark Purple 3' },
+  { color: '#4c1130', title: 'Dark Magenta 3' }
+];
+
+function generateProfilePaletteHtml(type) {
+  const grayHtml = PROFILE_PALETTE_GRAYSCALE.map(c => 
+    `<span class="fmt-color-cell" style="background:${c.color};" data-color="${c.color}" onmousedown="event.preventDefault()" onclick="selectProfileColor('${type}', '${c.color}')" title="${c.title}"></span>`
+  ).join('');
+
+  const gridHtml = PROFILE_PALETTE_COLORS.map(c => 
+    `<span class="fmt-color-cell" style="background:${c.color};" data-color="${c.color}" onmousedown="event.preventDefault()" onclick="selectProfileColor('${type}', '${c.color}')" title="${c.title}"></span>`
+  ).join('');
+
+  return `
+    <div class="fmt-color-palette">
+      <div class="fmt-grayscale-row">${grayHtml}</div>
+      <div class="fmt-palette-grid">${gridHtml}</div>
+      <div class="fmt-color-footer">
+        <button type="button" class="fmt-reset-btn" onmousedown="event.preventDefault()" onclick="selectProfileColor('${type}', '')">Default</button>
+        <input type="color" id="cc-profile-custom-${type}" onchange="selectProfileColor('${type}', this.value)" title="Custom color" style="width:22px;height:20px;border:1px solid #cbd5e1;cursor:pointer;background:transparent;padding:0;"/>
+      </div>
+    </div>
+  `;
+}
+
+window.toggleProfilePalette = function(e, type) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const popover = document.getElementById(`cc-profile-${type}-popover`);
+  if (!popover) return;
+  const wasHidden = popover.classList.contains('hidden');
+  
+  // Close any open palette popovers first
+  document.querySelectorAll('.cc-profile-palette-popover').forEach(p => p.classList.add('hidden'));
+  
+  if (wasHidden) {
+    popover.classList.remove('hidden');
+  }
+};
+
+window.openProfilePalette = function(type) {
+  const popover = document.getElementById(`cc-profile-${type}-popover`);
+  if (popover) {
+    document.querySelectorAll('.cc-profile-palette-popover').forEach(p => p.classList.add('hidden'));
+    popover.classList.remove('hidden');
+  }
+};
+
+window.selectProfileColor = function(type, hexColor) {
+  const input = document.getElementById(`cc-edit-${type}color`);
+  const swatch = document.getElementById(`cc-profile-${type}-swatch`);
+  const nativePicker = document.getElementById(`cc-profile-custom-${type}`);
+  
+  if (input) {
+    input.value = hexColor ? hexColor.toUpperCase() : '';
+  }
+  if (swatch) {
+    swatch.style.background = hexColor || '#ffffff';
+  }
+  if (nativePicker && hexColor) {
+    nativePicker.value = hexColor;
+  }
+  
+  if (type === 'msg') {
+    applyMessageColorPreview();
+  }
+  
+  const popover = document.getElementById(`cc-profile-${type}-popover`);
+  if (popover) popover.classList.add('hidden');
+};
+
+window.onProfileColorInput = function(input, type) {
+  let val = input.value.trim();
+  if (val && !val.startsWith('#') && /^[0-9A-Fa-f]{3,8}$/.test(val)) {
+    val = '#' + val;
+  }
+  const swatch = document.getElementById(`cc-profile-${type}-swatch`);
+  if (swatch) {
+    swatch.style.background = val || '#ffffff';
+  }
+  const nativePicker = document.getElementById(`cc-profile-custom-${type}`);
+  if (nativePicker && /^#[0-9A-Fa-f]{6}$/.test(val)) {
+    nativePicker.value = val;
+  }
+  if (type === 'msg') {
+    applyMessageColorPreview();
+  }
+};
+
 function updateColorPreview(input, pickerId) {
   const picker = document.getElementById(pickerId);
   if (picker && /^#[0-9A-F]{6}$/i.test(input.value)) {
@@ -5458,10 +5632,25 @@ async function saveProfileChanges(event) {
     payload.country = document.getElementById('cc-edit-country').value;
     payload.relationship_status = document.getElementById('cc-edit-relationship').value;
     payload.bio = document.getElementById('cc-edit-bio').value.trim();
-    payload.nick_color = document.getElementById('cc-edit-nickcolor').value.trim() || null;
-    payload.bold_nick = document.getElementById('cc-edit-boldnick').checked;
-    payload.msg_color = document.getElementById('cc-edit-msgcolor').value.trim() || null;
-    payload.bold_text = document.getElementById('cc-edit-boldtext').checked;
+    const nickInput = document.getElementById('cc-edit-nickcolor');
+    if (nickInput) {
+      let val = nickInput.value.trim();
+      if (val && !val.startsWith('#') && /^[0-9A-Fa-f]{3,8}$/.test(val)) val = '#' + val;
+      payload.nick_color = val || null;
+    } else {
+      payload.nick_color = null;
+    }
+    payload.bold_nick = !!document.getElementById('cc-edit-boldnick')?.checked;
+    
+    const msgInput = document.getElementById('cc-edit-msgcolor');
+    if (msgInput) {
+      let val = msgInput.value.trim();
+      if (val && !val.startsWith('#') && /^[0-9A-Fa-f]{3,8}$/.test(val)) val = '#' + val;
+      payload.msg_color = val || null;
+    } else {
+      payload.msg_color = null;
+    }
+    payload.bold_text = !!document.getElementById('cc-edit-boldtext')?.checked;
   }
   
   try {
