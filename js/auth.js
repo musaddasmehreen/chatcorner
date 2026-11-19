@@ -7,8 +7,12 @@ function markPendingChatRedirect() {
 function showTab(tab) {
   document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(tab + '-tab').classList.add('active');
-  event.currentTarget.classList.add('active');
+  const targetForm = document.getElementById(tab + '-tab');
+  if (targetForm) targetForm.classList.add('active');
+  const targetBtn = (typeof event !== 'undefined' && event && event.currentTarget)
+    ? event.currentTarget
+    : document.querySelector(`.tab-btn[onclick*="${tab}"]`);
+  if (targetBtn) targetBtn.classList.add('active');
 }
 
 async function loginUser() {
@@ -424,12 +428,36 @@ if (isLoginPage) {
     });
   }
 
-  // Only redirect to chat if we have a session AND we're not coming from logout
+  // Only redirect to chat if user is already authenticated with a REAL registered account
+  // (Guests are on login.html specifically to login or register — DO NOT bounce them back!)
   if (!isLogoutRedirect) {
-    sbClient.auth.getSession().then(({ data }) => {
-      if (data.session) window.location.href = 'chat.html';
+    sbClient.auth.getSession().then(async ({ data }) => {
+      if (!data?.session) return;
+      // Do NOT redirect anonymous guest sessions!
+      if (data.session.user && data.session.user.is_anonymous) return;
+
+      try {
+        const { data: prof } = await sbClient
+          .from('profiles')
+          .select('is_registered')
+          .eq('id', data.session.user.id)
+          .maybeSingle();
+        // Only redirect if this account is actually registered
+        if (prof && prof.is_registered) {
+          window.location.href = 'chat.html';
+        }
+      } catch (_) {}
     });
   }
+
+  // Handle URL query param tab selection (e.g. login.html?tab=register)
+  window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || (window.location.hash ? window.location.hash.replace('#', '') : null);
+    if (tab && ['login', 'register', 'guest'].includes(tab)) {
+      showTab(tab);
+    }
+  });
 
   if (isRestoreFailure) {
     window.addEventListener('DOMContentLoaded', () => {

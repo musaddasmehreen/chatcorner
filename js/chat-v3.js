@@ -1252,10 +1252,31 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
 
 function updateCurrentUserBadge() {
   const badge = document.getElementById('user-badge');
+  const authBtn = document.getElementById('btn-topbar-auth');
+  const mobileAuthTab = document.getElementById('mobile-tab-auth');
+  const isRegistered = currentProfile && !!currentProfile.is_registered;
+
   if (badge && currentProfile) {
     const prefix = window._stealthModeActive ? '🔴👁️ ' : '';
-    badge.textContent = prefix + currentProfile.username + (currentProfile.is_registered ? ' ✓' : ' 👤');
+    badge.textContent = prefix + currentProfile.username + (isRegistered ? ' ✓' : ' 👤');
   }
+
+  if (authBtn) {
+    if (isRegistered) {
+      authBtn.textContent = 'Logout';
+      authBtn.title = 'Log out of your account';
+      authBtn.classList.remove('btn-guest-cta');
+    } else {
+      authBtn.textContent = 'Register / Login';
+      authBtn.title = 'Create an account or log in';
+      authBtn.classList.add('btn-guest-cta');
+    }
+  }
+
+  if (mobileAuthTab) {
+    mobileAuthTab.style.display = isRegistered ? 'none' : 'inline-flex';
+  }
+
   const clearAllBtn = document.getElementById('btn-clear-all');
   if (clearAllBtn) {
     if (getViewerRoleLevel() >= 3) {
@@ -1265,6 +1286,14 @@ function updateCurrentUserBadge() {
     }
   }
 }
+
+window.handleAuthAction = function() {
+  if (currentProfile && !currentProfile.is_registered) {
+    window.location.href = 'login.html';
+  } else {
+    logout();
+  }
+};
 
 function disconnectRealtimeChannels() {
   if (messageChannel) {

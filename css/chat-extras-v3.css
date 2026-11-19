@@ -3666,3 +3666,29 @@ body.guest-mode .emoji-bar { display: none; }
 .cc-profile-palette-popover.hidden {
   display: none !important;
 }
+
+
+/* Guest Registration & Login Action Buttons */
+.topbar-btn.btn-guest-cta {
+  background: linear-gradient(135deg, rgba(139, 109, 237, 0.45), rgba(56, 200, 232, 0.45)) !important;
+  border: 1px solid rgba(139, 109, 237, 0.75) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 10px rgba(139, 109, 237, 0.3) !important;
+  animation: guestBtnPulse 2.5s infinite ease-in-out !important;
+}
+
+@keyframes guestBtnPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(139, 109, 237, 0.25); }
+  50% { box-shadow: 0 0 16px rgba(56, 200, 232, 0.55); border-color: rgba(56, 200, 232, 0.9); }
+}
+
+.mobile-tab-btn.mobile-tab-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(139, 109, 237, 0.18);
+  border: 1px solid rgba(139, 109, 237, 0.45);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
