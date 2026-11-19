@@ -1994,7 +1994,7 @@ async function loadRooms(preloadedRooms = null) {
     // Exclude legacy popcorn/cowatch rooms from sidebar
     rooms = rooms.filter(r => r.room_type !== 'cowatch' && !(r.name && r.name.toLowerCase().includes('popcorn')));
 
-    // 1. Rename 'Gaming' to 'ChatCorner'
+    // 1. Rename 'Gaming' to 'ChatCorner', and 'Random' to 'Guest'
     rooms = rooms.map(r => {
       if (r.name && r.name.toLowerCase() === 'gaming') {
         return {
@@ -2003,26 +2003,38 @@ async function loadRooms(preloadedRooms = null) {
           description: 'ChatCorner main lobby 💬'
         };
       }
+      if (r.name && r.name.toLowerCase() === 'random') {
+        return {
+          ...r,
+          name: 'Guest',
+          description: 'Welcome lounge for guests',
+          is_audio_enabled: false,
+          _isGuestRoom: true
+        };
+      }
       return r;
     });
 
-    // 2. Ensure "Guest" proper room exists
+    // 2. Ensure "Guest" proper room exists with a valid DB UUID
     let guestRoom = rooms.find(r => r.name && r.name.toLowerCase() === 'guest');
     if (!guestRoom) {
       guestRoom = {
-        id: 'guest-room-global',
+        id: '314494b6-05aa-42ae-9717-485752283951',
         name: 'Guest',
         description: 'Welcome lounge for guests',
         is_audio_enabled: false,
         _isGuestRoom: true
       };
-      // Place Guest room right after ChatCorner
-      const ccIdx = rooms.findIndex(r => r.name.toLowerCase() === 'chatcorner');
-      if (ccIdx >= 0) {
-        rooms.splice(ccIdx + 1, 0, guestRoom);
-      } else {
-        rooms.unshift(guestRoom);
-      }
+      rooms.push(guestRoom);
+    }
+    // Place Guest room right after ChatCorner
+    const gIdx = rooms.indexOf(guestRoom);
+    if (gIdx > -1) rooms.splice(gIdx, 1);
+    const ccIdx = rooms.findIndex(r => r.name && r.name.toLowerCase() === 'chatcorner');
+    if (ccIdx >= 0) {
+      rooms.splice(ccIdx + 1, 0, guestRoom);
+    } else {
+      rooms.unshift(guestRoom);
     }
 
     cachedRooms = rooms;
