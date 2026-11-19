@@ -428,28 +428,6 @@ if (isLoginPage) {
     });
   }
 
-  // Only redirect to chat if user is already authenticated with a REAL registered account
-  // (Guests are on login.html specifically to login or register — DO NOT bounce them back!)
-  if (!isLogoutRedirect) {
-    sbClient.auth.getSession().then(async ({ data }) => {
-      if (!data?.session) return;
-      // Do NOT redirect anonymous guest sessions!
-      if (data.session.user && data.session.user.is_anonymous) return;
-
-      try {
-        const { data: prof } = await sbClient
-          .from('profiles')
-          .select('is_registered')
-          .eq('id', data.session.user.id)
-          .maybeSingle();
-        // Only redirect if this account is actually registered
-        if (prof && prof.is_registered) {
-          window.location.href = 'chat.html';
-        }
-      } catch (_) {}
-    });
-  }
-
   // Handle URL query param tab selection (e.g. login.html?tab=register)
   window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
