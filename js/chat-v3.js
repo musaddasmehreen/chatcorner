@@ -1262,8 +1262,9 @@ function updateCurrentUserBadge() {
   const isOwner = !!(currentProfile?.is_owner || (currentProfile?.username && currentProfile.username.toLowerCase() === 'sleepyoak'));
 
   if (badge && currentProfile) {
-    const prefix = window._stealthModeActive ? '🔴👁️ ' : (isOwner ? '👑 ' : '');
-    badge.textContent = prefix + currentProfile.username + (isRegistered ? ' ✓' : ' 👤');
+    const ownerImg = isOwner ? '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" style="width:17px;height:14px;margin-right:4px;" />' : '';
+    const prefix = window._stealthModeActive ? '🔴👁️ ' : '';
+    badge.innerHTML = prefix + ownerImg + escHtml(currentProfile.username) + (isRegistered ? ' ✓' : ' 👤');
   }
 
   if (authBtn) {
@@ -4481,7 +4482,7 @@ function getRoleTagHtml(u) {
   if (!u) return '';
   const level = getRoleLevel(u);
   if (level >= 5) {
-    return '<span class="user-role-tag tag-owner" title="Server Owner">👑 OWNER</span>';
+    return '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" />';
   }
   if (level === 4) {
     return '<span class="user-role-tag tag-admin" title="Administrator">🛡️ ADMIN</span>';
@@ -4498,7 +4499,7 @@ function getRoleTagHtml(u) {
 function getRoleBadgeHtml(u) {
   if (!u) return '<span class="role-badge guest" title="Guest">👤</span>';
   const level = getRoleLevel(u);
-  if (level >= 5) return '<span class="role-badge role-tag-owner" title="Server Owner">👑 OWNER</span>';
+  if (level >= 5) return '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" />';
   if (level === 4) return '<span class="role-badge role-tag-admin" title="Admin">🛡️ ADMIN</span>';
   if (level === 3) return '<span class="role-badge role-tag-mod" title="Moderator">🔨 MOD</span>';
   if (level === 2) return '<span class="role-badge role-tag-vip" title="VIP">⭐ VIP</span>';

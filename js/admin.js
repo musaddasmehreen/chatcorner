@@ -706,7 +706,7 @@ function renderUsersTable() {
   body.innerHTML = rows.map(p => {
     const isTargetOwner = Boolean(p.is_owner || (p.username && p.username.toLowerCase() === 'sleepyoak'));
     const typeBadge = isTargetOwner
-      ? '<span class="badge owner" style="background:linear-gradient(135deg,rgba(245,158,11,0.25),rgba(234,179,8,0.25));color:#fbbf24;border-color:#f59e0b;font-weight:700;box-shadow:0 0 10px rgba(245,158,11,0.4);">👑 OWNER</span>'
+      ? '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" style="width:24px;height:19px;vertical-align:middle;filter:drop-shadow(0 0 3px #00f0ff);" title="Server Owner" />'
       : (p.is_admin
         ? '<span class="badge admin" style="background:rgba(99,102,241,0.2);color:#818cf8;border-color:#6366f1;">🛡️ Admin</span>'
         : (p.is_mod
