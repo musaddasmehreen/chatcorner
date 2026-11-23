@@ -825,11 +825,15 @@ function filterDeletedMessages(messages, roomId = currentRoom?.id) {
   return messages.filter(msg => msg && msg.type !== 'system' && !msg.is_deleted && (!msg.id || !tombstones[msg.id]));
 }
 
-function rememberDeletedMessage(messageId, roomId = currentRoom?.id) {
+function rememberDeletedMessage(messageId, roomId = currentRoom?.id, deleterName = null, deleterRoleLevel = null) {
   if (!messageId || !roomId) return;
   try {
     const tombstones = readDeletedMessageTombstones(roomId);
-    tombstones[messageId] = Date.now();
+    tombstones[messageId] = {
+      ts: Date.now(),
+      deleterName: deleterName || null,
+      deleterRoleLevel: typeof deleterRoleLevel === 'number' ? deleterRoleLevel : null
+    };
     localStorage.setItem(getDeletedMessageTombstoneKey(roomId), JSON.stringify(tombstones));
 
     const cacheKey = getRoomMessageCacheKey(roomId);
@@ -1255,9 +1259,10 @@ function updateCurrentUserBadge() {
   const authBtn = document.getElementById('btn-topbar-auth');
   const mobileAuthTab = document.getElementById('mobile-tab-auth');
   const isRegistered = currentProfile && !!currentProfile.is_registered;
+  const isOwner = !!(currentProfile?.is_owner || (currentProfile?.username && currentProfile.username.toLowerCase() === 'sleepyoak'));
 
   if (badge && currentProfile) {
-    const prefix = window._stealthModeActive ? '🔴👁️ ' : '';
+    const prefix = window._stealthModeActive ? '🔴👁️ ' : (isOwner ? '👑 ' : '');
     badge.textContent = prefix + currentProfile.username + (isRegistered ? ' ✓' : ' 👤');
   }
 
@@ -1285,6 +1290,19 @@ function updateCurrentUserBadge() {
       clearAllBtn.classList.add('hidden');
     }
   }
+
+  refreshDeletedMessageNodes();
+}
+
+function refreshDeletedMessageNodes() {
+  document.querySelectorAll('#messages .msg-deleted-line').forEach(line => {
+    const deleterName = line.dataset.deleterName;
+    const roleLevel = line.dataset.deleterRoleLevel ? parseInt(line.dataset.deleterRoleLevel, 10) : null;
+    const textSpan = line.querySelector('.msg-deleted-text');
+    if (textSpan) {
+      textSpan.textContent = formatDeletedMessageText(deleterName, roleLevel);
+    }
+  });
 }
 
 window.handleAuthAction = function() {
@@ -2382,15 +2400,15 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     })
     .on('broadcast', { event: 'message-deleted' }, ({ payload }) => {
       if (payload?.roomId !== room.id) return;
-      rememberDeletedMessage(payload.messageId, room.id);
-      removeMessageNodeById(payload.messageId, payload.deleterName);
+      rememberDeletedMessage(payload.messageId, room.id, payload.deleterName, payload.deleterRoleLevel);
+      removeMessageNodeById(payload.messageId, payload.deleterName, payload.deleterRoleLevel);
     })
     .on('broadcast', { event: 'messages-bulk-deleted' }, ({ payload }) => {
       if (payload?.roomId !== room.id) return;
       const ids = payload.messageIds || [];
       ids.forEach(id => {
-        rememberDeletedMessage(id, room.id);
-        removeMessageNodeById(id, payload.deleterName);
+        rememberDeletedMessage(id, room.id, payload.deleterName, payload.deleterRoleLevel);
+        removeMessageNodeById(id, payload.deleterName, payload.deleterRoleLevel);
       });
     })
     .on('broadcast', { event: 'chat-message' }, async ({ payload }) => {
@@ -2702,14 +2720,26 @@ window.showProfileFromChat = function(ev, userId, username) {
   }
 };
 
-function buildDeletedMessageNode(messageId, createdAt, deleterName = null) {
+function buildDeletedMessageNode(messageId, createdAt, deleterName = null, deleterRoleLevel = null) {
+  if (messageId && (!deleterName || deleterRoleLevel === null) && currentRoom?.id) {
+    const tombstones = readDeletedMessageTombstones(currentRoom.id);
+    const entry = tombstones[messageId];
+    if (entry && typeof entry === 'object') {
+      if (!deleterName) deleterName = entry.deleterName;
+      if (deleterRoleLevel === null && typeof entry.deleterRoleLevel === 'number') deleterRoleLevel = entry.deleterRoleLevel;
+    }
+  }
+
   const time = formatTime(createdAt || new Date().toISOString());
   const div = document.createElement('div');
   div.className = 'msg-deleted-line';
   div.dataset.deletedMessageId = String(messageId || '');
-  const deleterText = deleterName ? ` by ${escHtml(deleterName)}` : '';
+  if (deleterName) div.dataset.deleterName = deleterName;
+  if (typeof deleterRoleLevel === 'number') div.dataset.deleterRoleLevel = String(deleterRoleLevel);
+
+  const text = formatDeletedMessageText(deleterName, deleterRoleLevel);
   div.innerHTML = `
-    <span class="msg-deleted-text">— Message deleted${deleterText} —</span>
+    <span class="msg-deleted-text">${escHtml(text)}</span>
     ${time ? `<span class="msg-deleted-time">${escHtml(time)}</span>` : ''}
   `;
   return div;
@@ -2733,6 +2763,7 @@ function buildMessageNode(msg) {
   if (msg.type === 'voice') {
     const isMe  = msg.user_id === currentUser?.id;
     const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
+    const senderRoleTag = getRoleTagHtml(senderProf);
     const div   = document.createElement('div');
     div.className = 'msg-row' + (isMe ? ' self' : '');
     setMessageRowData(div, msg, sanitizeAudioSource(msg));
@@ -2762,7 +2793,7 @@ function buildMessageNode(msg) {
       <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
       <div class="msg-bubble">
         ${reportButton}
-        <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text">${audioHtml}</span></div>
+        <div class="msg-line">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text">${audioHtml}</span></div>
         <div class="msg-time">${formatTime(msg.created_at)}</div>
       </div>
       <div class="msg-select-wrap">
@@ -2795,6 +2826,7 @@ function buildMessageNode(msg) {
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
   
   const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
+  const senderRoleTag = getRoleTagHtml(senderProf);
   const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || senderProf?.avatarUrl || null);
   const avatarInner = avatarUrl
     ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
@@ -2826,7 +2858,7 @@ function buildMessageNode(msg) {
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
       ${reportButton}
-      <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text" style="${msgStyle}">${window.formatMessageText ? window.formatMessageText(msg.content) : escHtml(msg.content)}</span></div>
+      <div class="msg-line">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text" style="${msgStyle}">${window.formatMessageText ? window.formatMessageText(msg.content) : escHtml(msg.content)}</span></div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
     </div>
     <div class="msg-select-wrap">
@@ -3452,6 +3484,7 @@ function buildImageMessageNode(msg) {
   const initial = (msg.username || '?')[0].toUpperCase();
   const color   = isMe ? (currentProfile?.avatar_color || '#7c3aed') : stringToColor(msg.username);
   const senderProf = onlineUsers[msg.user_id] || senderProfilesCache.get(msg.user_id) || (isMe ? currentProfile : null);
+  const senderRoleTag = getRoleTagHtml(senderProf);
   const avatarUrl = isMe ? currentProfile?.avatar_url : (senderProf?.avatar_url || senderProf?.avatarUrl || null);
   const avatarInner = avatarUrl
     ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(msg.username || '')} avatar"/>`
@@ -3468,6 +3501,7 @@ function buildImageMessageNode(msg) {
   div.innerHTML = `
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
+      <div class="msg-line">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span></div>
       <div class="msg-line"><span class="msg-text">${imageMarkup}</span></div>
     </div>
     <div class="msg-select-wrap">
@@ -3868,7 +3902,7 @@ function showRegisterForVoice() {
   document.body.appendChild(popup);
 }
 
-function removeMessageNodeById(messageId, deleterName = null) {
+function removeMessageNodeById(messageId, deleterName = null, deleterRoleLevel = null) {
   if (!messageId) return;
   const row = document
     .querySelector(`#messages .msg-row[data-message-id="${CSS.escape(String(messageId))}"]`);
@@ -3879,9 +3913,12 @@ function removeMessageNodeById(messageId, deleterName = null) {
   const replacement = document.createElement('div');
   replacement.className = 'msg-deleted-line';
   replacement.dataset.deletedMessageId = String(messageId);
-  const deleterText = deleterName ? ` by ${escHtml(deleterName)}` : '';
+  if (deleterName) replacement.dataset.deleterName = deleterName;
+  if (typeof deleterRoleLevel === 'number') replacement.dataset.deleterRoleLevel = String(deleterRoleLevel);
+
+  const text = formatDeletedMessageText(deleterName, deleterRoleLevel);
   replacement.innerHTML = `
-    <span class="msg-deleted-text">— Message deleted${deleterText} —</span>
+    <span class="msg-deleted-text">${escHtml(text)}</span>
     ${time ? `<span class="msg-deleted-time">${escHtml(time)}</span>` : ''}
   `;
   row.replaceWith(replacement);
@@ -3922,18 +3959,19 @@ function handleRealtimeMessageUpdate(msg) {
 
 async function deleteMessageForEveryone(messageId, targetUserId, targetUsername) {
   const deletingOwn = targetUserId === currentUser?.id;
-  const deletingAsModerator = !deletingOwn && canDeleteAnyMessage();
-  const deleterName = currentProfile?.username || 'Moderator';
+  const deletingAsStaff = !deletingOwn && canDeleteAnyMessage();
+  const deleterName = currentProfile?.username || (currentProfile?.is_owner ? 'Owner' : (currentProfile?.is_admin ? 'Admin' : 'Moderator'));
+  const deleterRoleLevel = getViewerRoleLevel();
   const { error: deleteError } = await sbClient.from('messages').delete().eq('id', messageId);
   if (deleteError) throw deleteError;
 
-  rememberDeletedMessage(messageId, currentRoom?.id);
+  rememberDeletedMessage(messageId, currentRoom?.id, deleterName, deleterRoleLevel);
   if (messageChannel && currentRoom?.id) {
     try {
       await messageChannel.send({
         type: 'broadcast',
         event: 'message-deleted',
-        payload: { roomId: currentRoom.id, messageId, deleterName }
+        payload: { roomId: currentRoom.id, messageId, deleterName, deleterRoleLevel }
       });
     } catch (broadcastError) {
       console.warn('Failed to broadcast message deletion', {
@@ -3944,7 +3982,7 @@ async function deleteMessageForEveryone(messageId, targetUserId, targetUsername)
     }
   }
 
-  removeMessageNodeById(messageId, deleterName);
+  removeMessageNodeById(messageId, deleterName, deleterRoleLevel);
 }
 
 function archiveClearedMessageRows(rows, reason = 'clear-my-messages') {
@@ -4254,12 +4292,13 @@ async function executeBulkDelete(mode = 'everyone') {
     .map(id => document.querySelector(`#messages .msg-row[data-message-id="${CSS.escape(id)}"]`))
     .filter(Boolean);
 
-  const isModOrAdmin = canDeleteAnyMessage();
-  const deleterName = currentProfile?.username || 'Moderator';
+  const isStaff = canDeleteAnyMessage();
+  const deleterName = currentProfile?.username || (currentProfile?.is_owner ? 'Owner' : (currentProfile?.is_admin ? 'Admin' : 'Moderator'));
+  const deleterRoleLevel = getViewerRoleLevel();
 
   if (mode === 'everyone') {
     let eligibleRows = selectedRows;
-    if (!isModOrAdmin) {
+    if (!isStaff) {
       eligibleRows = selectedRows.filter(r => r.dataset.userId === currentUser?.id);
     }
     const eligibleIds = eligibleRows.map(r => r.dataset.messageId).filter(Boolean);
@@ -4281,13 +4320,13 @@ async function executeBulkDelete(mode = 'everyone') {
         messageChannel.send({
           type: 'broadcast',
           event: 'messages-bulk-deleted',
-          payload: { roomId: currentRoom.id, messageIds: eligibleIds, deleterName }
+          payload: { roomId: currentRoom.id, messageIds: eligibleIds, deleterName, deleterRoleLevel }
         }).catch(() => {});
       }
 
       eligibleIds.forEach(id => {
-        rememberDeletedMessage(id, currentRoom?.id);
-        removeMessageNodeById(id, deleterName);
+        rememberDeletedMessage(id, currentRoom?.id, deleterName, deleterRoleLevel);
+        removeMessageNodeById(id, deleterName, deleterRoleLevel);
       });
 
       showChatToast(`Deleted ${eligibleIds.length} message${eligibleIds.length === 1 ? '' : 's'} for everyone.`, 'success');
@@ -4301,7 +4340,7 @@ async function executeBulkDelete(mode = 'everyone') {
       const id = r.dataset.messageId;
       if (id) {
         rememberLocallyDeletedMessage(id);
-        removeMessageNodeById(id, 'You');
+        removeMessageNodeById(id, 'You', 1);
       }
     });
     showChatToast(`Deleted ${selectedRows.length} message${selectedRows.length === 1 ? '' : 's'} for yourself.`, 'success');
@@ -4425,7 +4464,8 @@ document.addEventListener('click', async (event) => {
 
 /* Role level: Guest=0, User=1, VIP=2, Mod=3, Admin=4, Owner=5 */
 function getRoleLevel(u) {
-  if (u.isOwner || u.is_owner) return 5;
+  if (!u) return 0;
+  if (u.isOwner || u.is_owner || (u.username && u.username.toLowerCase() === 'sleepyoak')) return 5;
   if (u.isAdmin || u.is_admin) return 4;
   if (u.isMod   || u.is_mod)   return 3;
   if (u.isVip   || u.is_vip)   return 2;
@@ -4437,22 +4477,95 @@ function getViewerRoleLevel() {
   return getRoleLevel(currentProfile || {});
 }
 
+function getRoleTagHtml(u) {
+  if (!u) return '';
+  const level = getRoleLevel(u);
+  if (level >= 5) {
+    return '<span class="user-role-tag tag-owner" title="Server Owner">👑 OWNER</span>';
+  }
+  if (level === 4) {
+    return '<span class="user-role-tag tag-admin" title="Administrator">🛡️ ADMIN</span>';
+  }
+  if (level === 3) {
+    return '<span class="user-role-tag tag-mod" title="Moderator">🔨 MOD</span>';
+  }
+  if (level === 2) {
+    return '<span class="user-role-tag tag-vip" title="VIP Member">⭐ VIP</span>';
+  }
+  return '';
+}
+
 function getRoleBadgeHtml(u) {
-  if (u.isOwner || u.is_owner) return '<span class="role-badge owner" title="Owner">👑</span>';
-  if (u.isAdmin || u.is_admin) return '<span class="role-badge admin" title="Admin">🛡️</span>';
-  if (u.isMod   || u.is_mod)   return '<span class="role-badge mod" title="Moderator">🔨</span>';
-  if (u.isVip   || u.is_vip)   return '<span class="role-badge vip" title="VIP">⭐</span>';
+  if (!u) return '<span class="role-badge guest" title="Guest">👤</span>';
+  const level = getRoleLevel(u);
+  if (level >= 5) return '<span class="role-badge role-tag-owner" title="Server Owner">👑 OWNER</span>';
+  if (level === 4) return '<span class="role-badge role-tag-admin" title="Admin">🛡️ ADMIN</span>';
+  if (level === 3) return '<span class="role-badge role-tag-mod" title="Moderator">🔨 MOD</span>';
+  if (level === 2) return '<span class="role-badge role-tag-vip" title="VIP">⭐ VIP</span>';
   if (u.registered || u.is_registered) return '<span class="role-badge user" title="User">✅</span>';
   return '<span class="role-badge guest" title="Guest">👤</span>';
 }
 
 function getRoleLabel(u) {
-  if (u.isOwner || u.is_owner) return 'Owner';
-  if (u.isAdmin || u.is_admin) return 'Admin';
-  if (u.isMod   || u.is_mod)   return 'Moderator';
-  if (u.isVip   || u.is_vip)   return 'VIP';
-  if (u.registered || u.is_registered) return 'User';
+  const level = getRoleLevel(u);
+  if (level >= 5) return 'Server Owner';
+  if (level === 4) return 'Admin';
+  if (level === 3) return 'Moderator';
+  if (level === 2) return 'VIP';
+  if (u?.registered || u?.is_registered) return 'User';
   return 'Guest';
+}
+
+function formatDeletedMessageText(deleterName, deleterRoleLevel) {
+  const viewerLevel = getViewerRoleLevel();
+  
+  // Normal & VIP users (level <= 2: guest, registered, vip) NEVER see who deleted it:
+  if (viewerLevel < 3) {
+    return '— Message deleted —';
+  }
+
+  // If deleted locally for myself:
+  if (deleterName === 'You') {
+    return '— Message deleted by You —';
+  }
+
+  if (!deleterName) {
+    return '— Message deleted —';
+  }
+
+  const dLevel = (typeof deleterRoleLevel === 'number') ? deleterRoleLevel : 3;
+
+  // Case 1: Deleted by Owner (level 5)
+  // Super power: Only Owner can see that an Owner deleted it.
+  // Admins & Mods do NOT see who deleted it.
+  if (dLevel >= 5) {
+    if (viewerLevel >= 5) {
+      return `— Message deleted by Owner ${deleterName} —`;
+    }
+    return '— Message deleted —';
+  }
+
+  // Case 2: Deleted by Admin (level 4)
+  // "if deleted by admins this should not be seen by moderators. admins must know its deleted by admins"
+  if (dLevel === 4) {
+    if (viewerLevel >= 4) {
+      return `— Message deleted by Admin ${deleterName} —`;
+    }
+    // Moderator (level 3) does NOT see it:
+    return '— Message deleted —';
+  }
+
+  // Case 3: Deleted by Moderator (level 3)
+  // "moderators must know its deleted by moderators"
+  if (dLevel === 3) {
+    if (viewerLevel >= 3) {
+      return `— Message deleted by Mod ${deleterName} —`;
+    }
+    return '— Message deleted —';
+  }
+
+  // Fallback (e.g. standard user deleted own message)
+  return '— Message deleted —';
 }
 
 let _pcTimer  = null;
@@ -4582,10 +4695,10 @@ async function showProfileCard(u, anchor, pinned = false) {
     : `<button class="pc-profile-btn" type="button" data-uid="${escHtml(u.userId)}">👤 View Profile</button>`;
 
   // Feature 6 — Promote button: owner-only, shows for other users
-  const isCurrentUserOwner = !!(currentProfile?.is_owner);
+  const isCurrentUserOwner = !!(currentProfile?.is_owner || (currentProfile?.username && currentProfile.username.toLowerCase() === 'sleepyoak'));
   const isTargetSelf = u.userId === currentUser?.id;
-  const targetIsOwner = !!(profile?.is_owner);
-  const promoteBtn = isCurrentUserOwner && !isTargetSelf && !targetIsOwner
+  const targetIsOwner = !!(profile?.is_owner || userMerged?.is_owner || (userMerged?.username && userMerged.username.toLowerCase() === 'sleepyoak'));
+  const promoteBtn = isCurrentUserOwner && !isTargetSelf
     ? `<button class="pc-promote-btn" type="button" data-uid="${escHtml(u.userId)}" data-uname="${escHtml(u.username || profile.username || '')}">🏅 Promote/Demote</button>`
     : '';
 
@@ -4596,10 +4709,13 @@ async function showProfileCard(u, anchor, pinned = false) {
     ? `<div class="pc-actions">${row1Html}${row2Html}${row3Html}${vipBtn}</div>`
     : '';
 
-  const promoteSectionHtml = isCurrentUserOwner && !isTargetSelf && !targetIsOwner
+  const promoteSectionHtml = isCurrentUserOwner && !isTargetSelf
     ? `
       <div class="pc-promote-section" style="display: none; flex-direction: column; gap: 0.38rem; margin-top: 0.7rem;">
         <div style="font-size: 0.72rem; font-weight: 700; color: var(--muted); margin-bottom: 0.2rem; text-align: center; text-transform: uppercase; letter-spacing: 0.05em;">🏅 Promote / Demote</div>
+        <button class="pc-role-opt-btn ${targetIsOwner ? 'active' : ''}" type="button" data-role="owner" style="border-color:#f59e0b;background:rgba(245,158,11,0.15);color:#fbbf24;">
+          👑 Owner ${targetIsOwner ? '(Active)' : ''}
+        </button>
         <button class="pc-role-opt-btn ${isAdmin ? 'active' : ''}" type="button" data-role="admin">
           🛡️ Admin ${isAdmin ? '(Active)' : ''}
         </button>
@@ -4769,8 +4885,9 @@ async function showProfileCard(u, anchor, pinned = false) {
       const role = btn.dataset.role;
       let updates = {};
       let label = '';
-      if (role === 'admin')  { updates = { is_admin: !isAdmin, is_mod: false }; label = isAdmin ? 'demoted from Admin' : 'promoted to Admin'; }
-      if (role === 'mod')    { updates = { is_mod: !isMod, is_admin: false };   label = isMod   ? 'demoted from Moderator' : 'promoted to Moderator'; }
+      if (role === 'owner')  { updates = { is_owner: !targetIsOwner, is_admin: true, is_mod: false }; label = targetIsOwner ? 'demoted from Owner' : 'promoted to Server Owner'; }
+      if (role === 'admin')  { updates = { is_admin: !isAdmin, is_mod: false, is_owner: false }; label = isAdmin ? 'demoted from Admin' : 'promoted to Admin'; }
+      if (role === 'mod')    { updates = { is_mod: !isMod, is_admin: false, is_owner: false };   label = isMod   ? 'demoted from Moderator' : 'promoted to Moderator'; }
       if (role === 'vip')    { updates = { is_vip: !isVip };                     label = isVip   ? 'VIP removed' : 'granted VIP'; }
       
       const { error } = await sbClient.from('profiles').update(updates).eq('id', u.userId);
@@ -4779,6 +4896,7 @@ async function showProfileCard(u, anchor, pinned = false) {
       if (error) { showChatToast('Promote failed: ' + error.message, 'error'); return; }
       
       if (onlineUsers[u.userId]) {
+        if ('is_owner' in updates) onlineUsers[u.userId].isOwner = updates.is_owner;
         if ('is_admin' in updates) onlineUsers[u.userId].isAdmin = updates.is_admin;
         if ('is_mod'   in updates) onlineUsers[u.userId].isMod   = updates.is_mod;
         if ('is_vip'   in updates) onlineUsers[u.userId].isVip   = updates.is_vip;

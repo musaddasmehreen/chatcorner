@@ -3112,17 +3112,20 @@ body.guest-mode .emoji-bar { display: none; }
   text-align: center;
 }
 
-/* ══ UNIFIED LEFT-ALIGNED CHAT MESSAGES & AVATAR IMAGE BOX ══ */
+/* ══ UNIFIED FULL-WIDTH CHAT MESSAGES & AVATAR IMAGE BOX ══ */
 .msg-row,
 .msg-row.self {
   display: flex !important;
   flex-direction: row !important;
   align-items: flex-start !important;
-  align-self: flex-start !important;
+  align-self: stretch !important;
   justify-content: flex-start !important;
   gap: 0.65rem !important;
-  max-width: 88% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   margin-bottom: 0.55rem !important;
+  position: relative !important;
 }
 
 /* Avatar Box on Left Side */

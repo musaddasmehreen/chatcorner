@@ -692,20 +692,26 @@ function renderUsersTable() {
   if (filter === 'registered') rows = rows.filter(p => p.is_registered);
   if (filter === 'guest') rows = rows.filter(p => !p.is_registered);
   if (filter === 'banned') rows = rows.filter(p => p.is_banned);
-  if (filter === 'admins') rows = rows.filter(p => p.is_admin);
-  if (filter === 'mods') rows = rows.filter(p => p.is_mod && !p.is_admin);
+  if (filter === 'owners') rows = rows.filter(p => p.is_owner || (p.username && p.username.toLowerCase() === 'sleepyoak'));
+  if (filter === 'admins') rows = rows.filter(p => p.is_admin && !p.is_owner && (p.username && p.username.toLowerCase() !== 'sleepyoak'));
+  if (filter === 'mods') rows = rows.filter(p => p.is_mod && !p.is_admin && !p.is_owner);
 
   if (!rows.length) {
     body.innerHTML = '<tr><td colspan="8">No users match your current filter.</td></tr>';
     return;
   }
 
+  const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
+
   body.innerHTML = rows.map(p => {
-    const typeBadge = p.is_admin
-      ? '<span class="badge admin">👑 Admin</span>'
-      : (p.is_mod
-        ? '<span class="badge registered" style="background:rgba(56,200,232,0.15);color:#38c8e8;border-color:rgba(56,200,232,0.3);">🛡️ Mod</span>'
-        : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'Registered' : 'Guest'}</span>`);
+    const isTargetOwner = Boolean(p.is_owner || (p.username && p.username.toLowerCase() === 'sleepyoak'));
+    const typeBadge = isTargetOwner
+      ? '<span class="badge owner" style="background:linear-gradient(135deg,rgba(245,158,11,0.25),rgba(234,179,8,0.25));color:#fbbf24;border-color:#f59e0b;font-weight:700;box-shadow:0 0 10px rgba(245,158,11,0.4);">👑 OWNER</span>'
+      : (p.is_admin
+        ? '<span class="badge admin" style="background:rgba(99,102,241,0.2);color:#818cf8;border-color:#6366f1;">🛡️ Admin</span>'
+        : (p.is_mod
+          ? '<span class="badge registered" style="background:rgba(56,200,232,0.15);color:#38c8e8;border-color:rgba(56,200,232,0.3);">🔨 Mod</span>'
+          : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'Registered' : 'Guest'}</span>`));
 
     const vipBadge = p.is_vip ? ' <span class="badge" style="background:rgba(236,72,153,0.15);color:#f472b6;border-color:rgba(236,72,153,0.3);">🌟 VIP</span>' : '';
     
@@ -718,20 +724,46 @@ function renderUsersTable() {
       statusBadge = `<span class="badge warning" style="background:rgba(245,158,11,0.15);color:#f59e0b;border-color:rgba(245,158,11,0.3);"><span class="status-dot orange"></span>Kicked (${minsLeft}m left)</span>`;
     }
 
-    const roleActions = p.is_admin || p.is_mod
-      ? `<button class="btn" title="Remove admin/mod privileges" onclick="demoteUser('${p.id}')">⬇️ Demote</button>`
-      : `<button class="btn" title="Promote to admin" onclick="promoteToAdmin('${p.id}')">👑 Admin</button>
-         <button class="btn" title="Grant moderator role" onclick="makeMod('${p.id}')">🛡️ Mod</button>`;
+    let roleActions = '';
+    if (isTargetOwner) {
+      if (isCurrentAdminOwner && p.id !== adminUser?.id) {
+        roleActions = `<button class="btn" style="border-color:#f59e0b;color:#fbbf24;" onclick="toggleOwner('${p.id}', false)">Demote Owner</button>`;
+      } else {
+        roleActions = `<span style="font-size:0.75rem;color:#fbbf24;font-weight:700;">👑 Protected Owner</span>`;
+      }
+    } else if (p.is_admin) {
+      if (isCurrentAdminOwner) {
+        roleActions = `<button class="btn" style="border-color:#f59e0b;color:#fbbf24;" onclick="toggleOwner('${p.id}', true)">👑 Owner</button>
+                       <button class="btn" onclick="demoteUser('${p.id}')">Demote</button>`;
+      } else {
+        roleActions = `<span style="font-size:0.75rem;color:#818cf8;">Admin</span>`;
+      }
+    } else {
+      roleActions = `
+        ${isCurrentAdminOwner ? `<button class="btn" style="border-color:#f59e0b;color:#fbbf24;" onclick="toggleOwner('${p.id}', true)">👑 Owner</button>` : ''}
+        <button class="btn" title="Promote to admin" onclick="promoteToAdmin('${p.id}')">🛡️ Admin</button>
+        <button class="btn" title="Grant moderator role" onclick="makeMod('${p.id}')">🔨 Mod</button>
+        ${p.is_mod ? `<button class="btn" onclick="demoteUser('${p.id}')">Demote</button>` : ''}
+      `;
+    }
 
     const kickAction = isKicked
       ? `<button class="btn" title="Unkick user" onclick="unkickUser('${p.id}')">🔓 Unkick</button>`
-      : `<button class="btn" title="Kick user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>`;
+      : (isTargetOwner && !isCurrentAdminOwner ? '' : `<button class="btn" title="Kick user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>`);
 
     const vipAction = `<button class="btn" title="${p.is_vip ? 'Revoke VIP status' : 'Grant VIP status'}" onclick="toggleVip('${p.id}')">${p.is_vip ? '💔 Revoke VIP' : '🌟 Make VIP'}</button>`;
 
+    const deleteBtn = (isTargetOwner && !isCurrentAdminOwner)
+      ? ''
+      : `<button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>`;
+
+    const banBtn = (isTargetOwner && !isCurrentAdminOwner)
+      ? ''
+      : `<button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>`;
+
     return `
       <tr>
-        <td><input type="checkbox" class="user-select" value="${p.id}" /></td>
+        <td><input type="checkbox" class="user-select" value="${p.id}" ${isTargetOwner && !isCurrentAdminOwner ? 'disabled' : ''} /></td>
         <td><strong>${escHtml(p.username || 'Unknown')}</strong>${vipBadge}</td>
         <td>${escHtml(p.email || '—')}</td>
         <td>${typeBadge}</td>
@@ -740,11 +772,11 @@ function renderUsersTable() {
         <td>${statusBadge}</td>
         <td class="inline-row">
           <button class="btn" title="View full profile details" onclick="viewProfile('${p.id}')">👁️ Details</button>
-          <button class="btn" title="Ban or unban this user" onclick="toggleBan('${p.id}')">🚫 ${p.is_banned ? 'Unban' : 'Ban'}</button>
+          ${banBtn}
           ${kickAction}
           ${vipAction}
           ${roleActions}
-          <button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>
+          ${deleteBtn}
         </td>
       </tr>
     `;
@@ -801,7 +833,29 @@ async function toggleBan(userId) {
   await setUserBan(userId, !p.is_banned, reason, duration);
 }
 
+async function toggleOwner(userId, status) {
+  const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
+  if (!isCurrentAdminOwner) {
+    alert('Permission Denied: Only a Server Owner can grant or revoke Owner status.');
+    return;
+  }
+  const promptText = status ? 'Grant Server Owner role to this user? They will hold highest authority above all admins.' : 'Demote this user from Server Owner?';
+  if (!confirm(promptText)) return;
+  showLoading(true);
+  const { error } = await sbClient.from('profiles').update({ is_owner: status, is_admin: true, is_mod: false }).eq('id', userId);
+  showLoading(false);
+  if (error) return toast(error.message, 'error');
+  toast(status ? 'User promoted to Server Owner.' : 'User demoted from Server Owner.');
+  await Promise.all([loadUsers(), loadStats(true)]);
+}
+
 async function deleteUser(userId) {
+  const target = profilesCache.find(x => x.id === userId);
+  const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
+  if (target?.is_owner && !isCurrentAdminOwner) {
+    alert('Access Denied: You cannot delete a Server Owner.');
+    return;
+  }
   if (!confirm('WARNING: Delete this user profile? This action cannot be undone.')) return;
   showLoading(true);
   const { error } = await sbClient.from('profiles').delete().eq('id', userId);
@@ -812,6 +866,12 @@ async function deleteUser(userId) {
 }
 
 async function promoteToAdmin(userId) {
+  const target = profilesCache.find(x => x.id === userId);
+  const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
+  if (target?.is_owner && !isCurrentAdminOwner) {
+    alert('Access Denied: You cannot modify a Server Owner.');
+    return;
+  }
   if (!confirm('Promote this user to admin?')) return;
   showLoading(true);
   const { error } = await sbClient.from('profiles').update({ is_admin: true, is_mod: false }).eq('id', userId);
@@ -822,6 +882,12 @@ async function promoteToAdmin(userId) {
 }
 
 async function makeMod(userId) {
+  const target = profilesCache.find(x => x.id === userId);
+  const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
+  if (target?.is_owner && !isCurrentAdminOwner) {
+    alert('Access Denied: You cannot modify a Server Owner.');
+    return;
+  }
   if (!confirm('Grant moderator role to this user?')) return;
   showLoading(true);
   const { error } = await sbClient.from('profiles').update({ is_mod: true, is_admin: false }).eq('id', userId);
@@ -832,9 +898,15 @@ async function makeMod(userId) {
 }
 
 async function demoteUser(userId) {
+  const target = profilesCache.find(x => x.id === userId);
+  const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
+  if (target?.is_owner && !isCurrentAdminOwner) {
+    alert('Access Denied: You cannot demote a Server Owner.');
+    return;
+  }
   if (!confirm('Remove elevated role from this user?')) return;
   showLoading(true);
-  const { error } = await sbClient.from('profiles').update({ is_admin: false, is_mod: false }).eq('id', userId);
+  const { error } = await sbClient.from('profiles').update({ is_admin: false, is_mod: false, is_owner: false }).eq('id', userId);
   showLoading(false);
   if (error) return toast(error.message, 'error');
   toast('User role removed.');

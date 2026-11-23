@@ -628,14 +628,16 @@
 /* ── MESSAGE BUBBLES ── */
 .msg-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 0.5rem;
-  max-width: 80%;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   animation: msgIn 0.16s ease both;
 }
 .msg-row.self {
   flex-direction: row;
-  align-self: flex-start;
+  align-self: stretch;
 }
 .msg-bubble {
   background: transparent !important;
