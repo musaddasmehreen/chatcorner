@@ -976,6 +976,123 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   filter: drop-shadow(0 0 3px #00f0ff) drop-shadow(0 0 8px rgba(0, 240, 255, 0.85));
 }
 
+/* ── Glowing Neon Red Shield for Admin ── */
+.admin-badge-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 18px;
+  height: 22px;
+  object-fit: contain;
+  margin-right: 5px;
+  filter: drop-shadow(0 0 2px #ef4444) drop-shadow(0 0 5px rgba(239, 68, 68, 0.75));
+  animation: delicateAdminGlow 2.5s ease-in-out infinite alternate;
+  pointer-events: none;
+  user-select: none;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+@keyframes delicateAdminGlow {
+  0% {
+    filter: drop-shadow(0 0 1.5px #ef4444) drop-shadow(0 0 4px rgba(239, 68, 68, 0.65));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 3px #ff2222) drop-shadow(0 0 8px rgba(255, 34, 34, 0.95)) drop-shadow(0 0 12px rgba(239, 68, 68, 0.5));
+    transform: scale(1.05);
+  }
+  100% {
+    filter: drop-shadow(0 0 2px #ef4444) drop-shadow(0 0 6px rgba(239, 68, 68, 0.8));
+    transform: scale(1.02);
+  }
+}
+
+.admin-badge-card {
+  width: 24px;
+  height: 28px;
+  margin-right: 6px;
+  filter: drop-shadow(0 0 3px #ff2222) drop-shadow(0 0 8px rgba(255, 34, 34, 0.85));
+}
+
+/* ── Glowing Neon Blue/Cyan Shield for Moderator ── */
+.mod-badge-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 18px;
+  height: 22px;
+  object-fit: contain;
+  margin-right: 5px;
+  filter: drop-shadow(0 0 2px #00e5ff) drop-shadow(0 0 5px rgba(0, 229, 255, 0.75));
+  animation: delicateModGlow 2.5s ease-in-out infinite alternate;
+  pointer-events: none;
+  user-select: none;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+@keyframes delicateModGlow {
+  0% {
+    filter: drop-shadow(0 0 1.5px #00e5ff) drop-shadow(0 0 4px rgba(0, 229, 255, 0.65));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 3px #38bdf8) drop-shadow(0 0 8px rgba(56, 189, 248, 0.95)) drop-shadow(0 0 12px rgba(0, 229, 255, 0.5));
+    transform: scale(1.05);
+  }
+  100% {
+    filter: drop-shadow(0 0 2px #00e5ff) drop-shadow(0 0 6px rgba(0, 229, 255, 0.8));
+    transform: scale(1.02);
+  }
+}
+
+.mod-badge-card {
+  width: 24px;
+  height: 28px;
+  margin-right: 6px;
+  filter: drop-shadow(0 0 3px #00e5ff) drop-shadow(0 0 8px rgba(0, 229, 255, 0.85));
+}
+
+/* ── Glowing Golden Crown for VIP ── */
+.vip-crown-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 22px;
+  height: 16px;
+  object-fit: contain;
+  margin-right: 5px;
+  filter: drop-shadow(0 0 2px #f59e0b) drop-shadow(0 0 5px rgba(245, 158, 11, 0.75));
+  animation: delicateVipGlow 2.5s ease-in-out infinite alternate;
+  pointer-events: none;
+  user-select: none;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+@keyframes delicateVipGlow {
+  0% {
+    filter: drop-shadow(0 0 1.5px #f59e0b) drop-shadow(0 0 4px rgba(245, 158, 11, 0.65));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 3px #fbbf24) drop-shadow(0 0 8px rgba(251, 191, 36, 0.95)) drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));
+    transform: scale(1.05);
+  }
+  100% {
+    filter: drop-shadow(0 0 2px #f59e0b) drop-shadow(0 0 6px rgba(245, 158, 11, 0.8));
+    transform: scale(1.02);
+  }
+}
+
+.vip-crown-card {
+  width: 26px;
+  height: 18px;
+  margin-right: 6px;
+  filter: drop-shadow(0 0 3px #fbbf24) drop-shadow(0 0 8px rgba(251, 191, 36, 0.85));
+}
+
 .user-role-tag.tag-admin,
 .role-badge.role-tag-admin {
   background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;

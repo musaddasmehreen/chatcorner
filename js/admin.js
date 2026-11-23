@@ -723,14 +723,14 @@ function renderUsersTable() {
   body.innerHTML = rows.map(p => {
     const isTargetOwner = Boolean(p.is_owner || (p.username && p.username.toLowerCase() === 'sleepyoak'));
     const typeBadge = isTargetOwner
-      ? '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" style="width:24px;height:19px;vertical-align:middle;filter:drop-shadow(0 0 3px #00f0ff);" title="Server Owner" />'
+      ? '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" />'
       : (p.is_admin
-        ? '<span class="badge admin" style="background:rgba(99,102,241,0.2);color:#818cf8;border-color:#6366f1;">🛡️ Admin</span>'
+        ? '<img src="img/admin-badge.png" alt="🛡️" class="admin-badge-icon" title="Administrator" />'
         : (p.is_mod
-          ? '<span class="badge registered" style="background:rgba(56,200,232,0.15);color:#38c8e8;border-color:rgba(56,200,232,0.3);">🔨 Mod</span>'
+          ? '<img src="img/mod-badge.png" alt="🔨" class="mod-badge-icon" title="Moderator" />'
           : `<span class="badge ${p.is_registered ? 'registered' : 'guest'}">${p.is_registered ? 'Registered' : 'Guest'}</span>`));
 
-    const vipBadge = p.is_vip ? ' <span class="badge" style="background:rgba(236,72,153,0.15);color:#f472b6;border-color:rgba(236,72,153,0.3);">🌟 VIP</span>' : '';
+    const vipBadge = p.is_vip ? ' <img src="img/vip-crown.png" alt="⭐" class="vip-crown-icon" title="VIP Member" />' : '';
     
     const isKicked = p.kicked_until && new Date(p.kicked_until) > new Date();
     let statusBadge = '<span class="badge registered"><span class="status-dot green"></span>Active</span>';

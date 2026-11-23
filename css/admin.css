@@ -447,3 +447,68 @@ thead th { font-size: 0.7rem; }
   .security-banner { margin-left: 0.9rem; margin-right: 0.9rem; }
   .inline-row input { min-width: 150px; flex: 1; }
 }
+
+/* ── Glowing Role Icons for Admin Panel ── */
+.owner-crown-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 22px;
+  height: 18px;
+  object-fit: contain;
+  margin-right: 5px;
+  filter: drop-shadow(0 0 2px #38bdf8) drop-shadow(0 0 5px rgba(56, 189, 248, 0.75));
+  animation: delicateCrownGlow 2.5s ease-in-out infinite alternate;
+}
+@keyframes delicateCrownGlow {
+  0% { filter: drop-shadow(0 0 1.5px #38bdf8) drop-shadow(0 0 4px rgba(14, 165, 233, 0.65)); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 3px #00f0ff) drop-shadow(0 0 8px rgba(56, 189, 248, 0.9)); transform: scale(1.05); }
+  100% { filter: drop-shadow(0 0 2px #38bdf8) drop-shadow(0 0 6px rgba(14, 165, 233, 0.8)); transform: scale(1.02); }
+}
+
+.admin-badge-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 20px;
+  height: 24px;
+  object-fit: contain;
+  margin-right: 5px;
+  filter: drop-shadow(0 0 2px #ef4444) drop-shadow(0 0 5px rgba(239, 68, 68, 0.75));
+  animation: delicateAdminGlow 2.5s ease-in-out infinite alternate;
+}
+@keyframes delicateAdminGlow {
+  0% { filter: drop-shadow(0 0 1.5px #ef4444) drop-shadow(0 0 4px rgba(239, 68, 68, 0.65)); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 3px #ff2222) drop-shadow(0 0 8px rgba(255, 34, 34, 0.95)); transform: scale(1.05); }
+  100% { filter: drop-shadow(0 0 2px #ef4444) drop-shadow(0 0 6px rgba(239, 68, 68, 0.8)); transform: scale(1.02); }
+}
+
+.mod-badge-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 20px;
+  height: 24px;
+  object-fit: contain;
+  margin-right: 5px;
+  filter: drop-shadow(0 0 2px #00e5ff) drop-shadow(0 0 5px rgba(0, 229, 255, 0.75));
+  animation: delicateModGlow 2.5s ease-in-out infinite alternate;
+}
+@keyframes delicateModGlow {
+  0% { filter: drop-shadow(0 0 1.5px #00e5ff) drop-shadow(0 0 4px rgba(0, 229, 255, 0.65)); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 3px #38bdf8) drop-shadow(0 0 8px rgba(56, 189, 248, 0.95)); transform: scale(1.05); }
+  100% { filter: drop-shadow(0 0 2px #00e5ff) drop-shadow(0 0 6px rgba(0, 229, 255, 0.8)); transform: scale(1.02); }
+}
+
+.vip-crown-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 24px;
+  height: 17px;
+  object-fit: contain;
+  margin-right: 5px;
+  filter: drop-shadow(0 0 2px #f59e0b) drop-shadow(0 0 5px rgba(245, 158, 11, 0.75));
+  animation: delicateVipGlow 2.5s ease-in-out infinite alternate;
+}
+@keyframes delicateVipGlow {
+  0% { filter: drop-shadow(0 0 1.5px #f59e0b) drop-shadow(0 0 4px rgba(245, 158, 11, 0.65)); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 3px #fbbf24) drop-shadow(0 0 8px rgba(251, 191, 36, 0.95)); transform: scale(1.05); }
+  100% { filter: drop-shadow(0 0 2px #f59e0b) drop-shadow(0 0 6px rgba(245, 158, 11, 0.8)); transform: scale(1.02); }
+}

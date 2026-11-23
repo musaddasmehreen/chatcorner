@@ -1262,9 +1262,18 @@ function updateCurrentUserBadge() {
   const isOwner = !!(currentProfile?.is_owner || (currentProfile?.username && currentProfile.username.toLowerCase() === 'sleepyoak'));
 
   if (badge && currentProfile) {
-    const ownerImg = isOwner ? '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" style="width:17px;height:14px;margin-right:4px;" />' : '';
+    let roleImg = '';
+    if (isOwner) {
+      roleImg = '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" style="width:17px;height:14px;margin-right:4px;" />';
+    } else if (currentProfile.is_admin) {
+      roleImg = '<img src="img/admin-badge.png" alt="🛡️" class="admin-badge-icon" title="Administrator" style="width:16px;height:19px;margin-right:4px;" />';
+    } else if (currentProfile.is_mod) {
+      roleImg = '<img src="img/mod-badge.png" alt="🔨" class="mod-badge-icon" title="Moderator" style="width:16px;height:19px;margin-right:4px;" />';
+    } else if (currentProfile.is_vip) {
+      roleImg = '<img src="img/vip-crown.png" alt="⭐" class="vip-crown-icon" title="VIP Member" style="width:18px;height:14px;margin-right:4px;" />';
+    }
     const prefix = window._stealthModeActive ? '🔴👁️ ' : '';
-    badge.innerHTML = prefix + ownerImg + escHtml(currentProfile.username) + (isRegistered ? ' ✓' : ' 👤');
+    badge.innerHTML = prefix + roleImg + escHtml(currentProfile.username) + (isRegistered ? ' ✓' : ' 👤');
   }
 
   if (authBtn) {
@@ -4516,13 +4525,13 @@ function getRoleTagHtml(u) {
     return '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" />';
   }
   if (level === 4) {
-    return '<span class="user-role-tag tag-admin" title="Administrator">🛡️ ADMIN</span>';
+    return '<img src="img/admin-badge.png" alt="🛡️" class="admin-badge-icon" title="Administrator" />';
   }
   if (level === 3) {
-    return '<span class="user-role-tag tag-mod" title="Moderator">🔨 MOD</span>';
+    return '<img src="img/mod-badge.png" alt="🔨" class="mod-badge-icon" title="Moderator" />';
   }
   if (level === 2) {
-    return '<span class="user-role-tag tag-vip" title="VIP Member">⭐ VIP</span>';
+    return '<img src="img/vip-crown.png" alt="⭐" class="vip-crown-icon" title="VIP Member" />';
   }
   return '';
 }
@@ -4531,9 +4540,9 @@ function getRoleBadgeHtml(u) {
   if (!u) return '<span class="role-badge guest" title="Guest">👤</span>';
   const level = getRoleLevel(u);
   if (level >= 5) return '<img src="img/owner-crown.png" alt="👑" class="owner-crown-icon" title="Server Owner" />';
-  if (level === 4) return '<span class="role-badge role-tag-admin" title="Admin">🛡️ ADMIN</span>';
-  if (level === 3) return '<span class="role-badge role-tag-mod" title="Moderator">🔨 MOD</span>';
-  if (level === 2) return '<span class="role-badge role-tag-vip" title="VIP">⭐ VIP</span>';
+  if (level === 4) return '<img src="img/admin-badge.png" alt="🛡️" class="admin-badge-icon" title="Administrator" />';
+  if (level === 3) return '<img src="img/mod-badge.png" alt="🔨" class="mod-badge-icon" title="Moderator" />';
+  if (level === 2) return '<img src="img/vip-crown.png" alt="⭐" class="vip-crown-icon" title="VIP Member" />';
   if (u.registered || u.is_registered) return '<span class="role-badge user" title="User">✅</span>';
   return '<span class="role-badge guest" title="Guest">👤</span>';
 }
@@ -4692,7 +4701,7 @@ async function showProfileCard(u, anchor, pinned = false) {
 
   const roleLabel = getRoleLabel(userMerged);
   const roleBadge = getRoleBadgeHtml(userMerged);
-  const vipBadge  = isVip ? '<span class="role-badge vip" title="VIP">⭐</span>' : '';
+  const vipBadge  = isVip ? '<img src="img/vip-crown.png" alt="⭐" class="vip-crown-icon" title="VIP Member" style="width:20px;height:15px;vertical-align:middle;margin-left:3px;" />' : '';
   const joinDate  = profile.created_at
     ? new Date(profile.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
     : 'Unknown';
