@@ -4879,6 +4879,11 @@ async function showProfileCard(u, anchor, pinned = false) {
 
   card.querySelector('.pc-vip-btn')?.addEventListener('click', async (ev) => {
     ev.stopPropagation();
+    const isDemoAdmin = Boolean(currentProfile?.username && currentProfile.username.toLowerCase() === 'demo-admin');
+    if (isDemoAdmin) {
+      showChatToast('Demo-Admin Restriction: You cannot grant or revoke VIP status.', 'warning');
+      return;
+    }
     const grant = ev.currentTarget.dataset.action === 'grant';
     await toggleVip(u.userId, u.username, grant);
     hideProfileCard();
@@ -4914,6 +4919,11 @@ async function showProfileCard(u, anchor, pinned = false) {
   card.querySelectorAll('.pc-role-opt-btn').forEach(btn => {
     btn.addEventListener('click', async (ev) => {
       ev.stopPropagation();
+      const isDemoAdmin = Boolean(currentProfile?.username && currentProfile.username.toLowerCase() === 'demo-admin');
+      if (isDemoAdmin) {
+        showChatToast('Demo-Admin Restriction: You cannot change user roles or promote users.', 'warning');
+        return;
+      }
       const role = btn.dataset.role;
       let updates = {};
       let label = '';
@@ -5070,6 +5080,11 @@ function showActionSheet({ title = '', message = '', actions = [] } = {}) {
    Feature 4 — VIP Management
 ════════════════════════════════════════════════════════════════ */
 async function toggleVip(userId, username, grant) {
+  const isDemoAdmin = Boolean(currentProfile?.username && currentProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    showChatToast('Demo-Admin Restriction: You cannot grant or revoke VIP status.', 'warning');
+    return;
+  }
   const { error } = await sbClient.from('profiles')
     .update({ is_vip: grant })
     .eq('id', userId);
@@ -5087,6 +5102,11 @@ async function toggleVip(userId, username, grant) {
    Feature 6 — Owner-only Promote/Demote menu
 ════════════════════════════════════════════════════════════════ */
 async function showPromoteMenu(userId, username, profile) {
+  const isDemoAdmin = Boolean(currentProfile?.username && currentProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    showChatToast('Demo-Admin Restriction: You cannot promote users or change roles.', 'warning');
+    return;
+  }
   // Remove any existing promote menu
   document.getElementById('cc-promote-menu')?.remove();
 

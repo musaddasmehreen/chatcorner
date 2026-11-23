@@ -86,3 +86,27 @@ window.cameraStates = {};
 
 var POST_LOGIN_REDIRECT_KEY = 'cc_post_login_redirect';
 window.POST_LOGIN_REDIRECT_KEY = POST_LOGIN_REDIRECT_KEY;
+
+// Restrict Demo-Admin account from creating real users
+if (window.sbClient?.auth && typeof window.sbClient.auth.signUp === 'function') {
+  const _origSignUp = window.sbClient.auth.signUp.bind(window.sbClient.auth);
+  window.sbClient.auth.signUp = async function(...args) {
+    try {
+      const { data: { session } } = await window.sbClient.auth.getSession();
+      if (session?.user) {
+        const { data: prof } = await window.sbClient
+          .from('profiles')
+          .select('username')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (prof?.username && prof.username.toLowerCase() === 'demo-admin') {
+          return {
+            data: { user: null, session: null },
+            error: { message: 'Demo account is restricted from creating new users.' }
+          };
+        }
+      }
+    } catch (_) {}
+    return _origSignUp(...args);
+  };
+}

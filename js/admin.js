@@ -741,8 +741,13 @@ function renderUsersTable() {
       statusBadge = `<span class="badge warning" style="background:rgba(245,158,11,0.15);color:#f59e0b;border-color:rgba(245,158,11,0.3);"><span class="status-dot orange"></span>Kicked (${minsLeft}m left)</span>`;
     }
 
+    const isTargetProtectedFromDemo = Boolean(p.is_vip || p.is_mod || p.is_admin || p.is_owner || (p.username && p.username.toLowerCase() === 'sleepyoak'));
+    const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+
     let roleActions = '';
-    if (isTargetOwner) {
+    if (isDemoAdmin) {
+      roleActions = `<span style="font-size:0.75rem;color:var(--muted);opacity:0.6;" title="Demo-Admin cannot change roles">🔒 Role locked</span>`;
+    } else if (isTargetOwner) {
       if (isCurrentAdminOwner && p.id !== adminUser?.id) {
         roleActions = `<button class="btn" style="border-color:#f59e0b;color:#fbbf24;" onclick="toggleOwner('${p.id}', false)">Demote Owner</button>`;
       } else {
@@ -768,10 +773,9 @@ function renderUsersTable() {
       ? `<button class="btn" title="Unkick user" onclick="unkickUser('${p.id}')">🔓 Unkick</button>`
       : (isTargetOwner && !isCurrentAdminOwner ? '' : `<button class="btn" title="Kick user for 30 minutes" onclick="kickUser('${p.id}')">⚡ Kick</button>`);
 
-    const vipAction = `<button class="btn" title="${p.is_vip ? 'Revoke VIP status' : 'Grant VIP status'}" onclick="toggleVip('${p.id}')">${p.is_vip ? '💔 Revoke VIP' : '🌟 Make VIP'}</button>`;
-
-    const isTargetProtectedFromDemo = Boolean(p.is_vip || p.is_mod || p.is_admin || p.is_owner || (p.username && p.username.toLowerCase() === 'sleepyoak'));
-    const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+    const vipAction = isDemoAdmin
+      ? `<button class="btn" style="opacity:0.5;cursor:not-allowed;" title="Demo-Admin cannot change VIP status" onclick="alert('Demo-Admin Restriction: You cannot grant or revoke VIP status.')">${p.is_vip ? '💔 VIP' : '🌟 VIP'}</button>`
+      : `<button class="btn" title="${p.is_vip ? 'Revoke VIP status' : 'Grant VIP status'}" onclick="toggleVip('${p.id}')">${p.is_vip ? '💔 Revoke VIP' : '🌟 Make VIP'}</button>`;
 
     const deleteBtn = (isTargetOwner && !isCurrentAdminOwner)
       ? ''
@@ -856,6 +860,11 @@ async function toggleBan(userId) {
 }
 
 async function toggleOwner(userId, status) {
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    alert('Demo-Admin Restriction: You cannot modify owner roles.');
+    return;
+  }
   const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
   if (!isCurrentAdminOwner) {
     alert('Permission Denied: Only a Server Owner can grant or revoke Owner status.');
@@ -896,6 +905,11 @@ async function deleteUser(userId) {
 }
 
 async function promoteToAdmin(userId) {
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    alert('Demo-Admin Restriction: You cannot promote users to admin.');
+    return;
+  }
   const target = profilesCache.find(x => x.id === userId);
   const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
   if (target?.is_owner && !isCurrentAdminOwner) {
@@ -912,6 +926,11 @@ async function promoteToAdmin(userId) {
 }
 
 async function makeMod(userId) {
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    alert('Demo-Admin Restriction: You cannot grant moderator role to users.');
+    return;
+  }
   const target = profilesCache.find(x => x.id === userId);
   const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
   if (target?.is_owner && !isCurrentAdminOwner) {
@@ -928,6 +947,11 @@ async function makeMod(userId) {
 }
 
 async function demoteUser(userId) {
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    alert('Demo-Admin Restriction: You cannot change user roles.');
+    return;
+  }
   const target = profilesCache.find(x => x.id === userId);
   const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
   if (target?.is_owner && !isCurrentAdminOwner) {
@@ -966,6 +990,11 @@ async function unkickUser(userId) {
 }
 
 async function toggleVip(userId) {
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    alert('Demo-Admin Restriction: You cannot grant or revoke VIP status.');
+    return;
+  }
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
   const newVip = !p.is_vip;
@@ -980,6 +1009,11 @@ async function toggleVip(userId) {
 
 // FIX 5E — Toggle moderator role
 async function toggleMod(userId) {
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    alert('Demo-Admin Restriction: You cannot modify moderator roles.');
+    return;
+  }
   const p = profilesCache.find(x => x.id === userId);
   if (!p) return;
   if (!confirm((p.is_mod ? 'Remove mod from ' : 'Make mod: ') + p.username)) return;

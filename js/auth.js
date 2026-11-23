@@ -184,6 +184,18 @@ async function registerUser() {
   const msg      = document.getElementById('reg-msg');
   const btn      = document.querySelector('#register-tab .btn-primary');
 
+  // Restrict Demo-Admin session from registering real users
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (session?.user) {
+      const { data: curProf } = await sbClient.from('profiles').select('username').eq('id', session.user.id).maybeSingle();
+      if (curProf?.username && curProf.username.toLowerCase() === 'demo-admin') {
+        showMsg(msg, 'Demo account is restricted from creating real user accounts.', 'error');
+        return;
+      }
+    }
+  } catch (_) {}
+
   if (!username || !email || !password) { showMsg(msg, 'Fill in all fields.', 'error'); return; }
   if (password.length < 6)  { showMsg(msg, 'Password must be at least 6 characters.', 'error'); return; }
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
