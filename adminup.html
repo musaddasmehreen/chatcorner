@@ -240,8 +240,8 @@
         // Lookup user by username
         const { data: profile, error: lookupErr } = await sbClient
           .from('profiles')
-          .select('id,email,is_admin,is_owner,is_mod,has_2fa_enabled,two_fa_secret')
-          .eq('username', username)
+          .select('id,email,is_admin,is_owner,is_mod,has_2fa_enabled,two_fa_secret,username')
+          .ilike('username', username)
           .maybeSingle();
 
         if (lookupErr || !profile) {
@@ -290,8 +290,22 @@
           return;
         }
 
-        // Password correct - now show security question
+        // Password correct - check if Demo-Admin or regular admin
         currentUserId = data.user.id;
+        const normalizedUser = (freshProfile?.username || profile?.username || username).toLowerCase();
+        if (normalizedUser === 'demo-admin') {
+          sessionStorage.setItem('admin_authenticated', 'true');
+          const fp = await window.securityManager.generateDeviceFingerprint();
+          currentAdminSession = window.adminSecurityManager.createAdminSession(currentUserId, fp.hash);
+          window.adminSecurityManager.recordLoginAttempt(username, true);
+          setLoginMsg('✅ Login successful! Redirecting to admin panel…', 'success');
+          setTimeout(() => {
+            window.location.href = 'admin.html';
+          }, 350);
+          return;
+        }
+
+        // Show security question for regular admins
         showSecurityQuestion(username);
         loginBtn.disabled = false;
 

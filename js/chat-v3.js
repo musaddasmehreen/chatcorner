@@ -3449,6 +3449,11 @@ function setMessageRowData(row, msg, content) {
   row.dataset.messageType = msg?.type || 'text';
   row.dataset.messageContent = content || '';
   row.dataset.createdAt = msg?.created_at || '';
+  const prof = onlineUsers[msg?.user_id] || (typeof senderProfilesCache !== 'undefined' ? senderProfilesCache.get(msg?.user_id) : null);
+  if (prof?.is_vip || msg?.is_vip) row.dataset.isVip = 'true';
+  if (prof?.is_mod || msg?.is_mod) row.dataset.isMod = 'true';
+  if (prof?.is_admin || msg?.is_admin) row.dataset.isAdmin = 'true';
+  if (prof?.is_owner || msg?.is_owner || (prof?.username && prof.username.toLowerCase() === 'sleepyoak')) row.dataset.isOwner = 'true';
 }
 
 function normalizeImageUrl(value) {
@@ -3959,6 +3964,16 @@ function handleRealtimeMessageUpdate(msg) {
 }
 
 async function deleteMessageForEveryone(messageId, targetUserId, targetUsername) {
+  const isDemoAdmin = Boolean(currentProfile?.username && currentProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin && targetUserId !== currentUser?.id) {
+    const targetProf = onlineUsers[targetUserId] || (typeof senderProfilesCache !== 'undefined' ? senderProfilesCache.get(targetUserId) : null);
+    const isTargetProtected = Boolean(targetProf?.is_vip || targetProf?.is_mod || targetProf?.is_admin || targetProf?.is_owner || (targetProf?.username && targetProf.username.toLowerCase() === 'sleepyoak'));
+    if (isTargetProtected) {
+      showChatToast('Demo-Admin Restriction: You cannot delete messages of VIPs, Moderators, Admins, or Owners.', 'warning');
+      return;
+    }
+  }
+
   const deletingOwn = targetUserId === currentUser?.id;
   const deletingAsStaff = !deletingOwn && canDeleteAnyMessage();
   const deleterName = currentProfile?.username || (currentProfile?.is_owner ? 'Owner' : (currentProfile?.is_admin ? 'Admin' : 'Moderator'));
@@ -4301,6 +4316,22 @@ async function executeBulkDelete(mode = 'everyone') {
     let eligibleRows = selectedRows;
     if (!isStaff) {
       eligibleRows = selectedRows.filter(r => r.dataset.userId === currentUser?.id);
+    }
+    const isDemoAdmin = Boolean(currentProfile?.username && currentProfile.username.toLowerCase() === 'demo-admin');
+    if (isDemoAdmin) {
+      const origCount = eligibleRows.length;
+      eligibleRows = eligibleRows.filter(r => {
+        const uid = r.dataset.userId;
+        if (uid === currentUser?.id) return true;
+        const prof = onlineUsers[uid] || (typeof senderProfilesCache !== 'undefined' ? senderProfilesCache.get(uid) : null);
+        const isProtected = Boolean(prof?.is_vip || prof?.is_mod || prof?.is_admin || prof?.is_owner || (prof?.username && prof.username.toLowerCase() === 'sleepyoak') || r.dataset.isVip === 'true' || r.dataset.isMod === 'true' || r.dataset.isAdmin === 'true' || r.dataset.isOwner === 'true');
+        return !isProtected;
+      });
+      if (!eligibleRows.length && origCount > 0) {
+        showChatToast('Demo-Admin Restriction: You cannot delete messages of VIPs, Moderators, Admins, or Owners.', 'warning');
+        clearMessageSelection();
+        return;
+      }
     }
     const eligibleIds = eligibleRows.map(r => r.dataset.messageId).filter(Boolean);
 

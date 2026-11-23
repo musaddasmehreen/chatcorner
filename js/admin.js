@@ -625,6 +625,18 @@ function renderLogsTable() {
 }
 
 async function deleteMessage(messageId) {
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    const msg = messageCache.find(m => m.id === messageId);
+    if (msg) {
+      const author = profilesCache.find(p => p.id === msg.user_id) || {};
+      const isAuthorProtected = Boolean(author.is_vip || author.is_mod || author.is_admin || author.is_owner || (author.username && author.username.toLowerCase() === 'sleepyoak') || msg.is_vip || msg.is_mod || msg.is_admin || msg.is_owner);
+      if (isAuthorProtected) {
+        alert('Demo-Admin Restriction: You cannot delete messages of VIPs, Moderators, Admins, or Owners.');
+        return;
+      }
+    }
+  }
   if (!confirm('Delete this message permanently? This cannot be undone.')) return;
   showLoading(true);
   const { error } = await sbClient.from('messages').delete().eq('id', messageId);
@@ -638,6 +650,11 @@ async function clearRoomMessages() {
   const roomId = document.getElementById('logs-room-select').value;
   const roomName = roomsCache.find(r => r.id === roomId)?.name || 'this room';
   if (!roomId) return toast('Select a room first.', 'error');
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  if (isDemoAdmin) {
+    alert('Demo-Admin Restriction: Clearing all room messages is restricted to protect VIP, Moderator, Admin, and Owner records.');
+    return;
+  }
   if (!confirm(`Delete ALL messages in "${roomName}"? This affects all users and cannot be undone.`)) return;
   showLoading(true);
   const { error } = await sbClient.from('messages').delete().eq('room_id', roomId);
@@ -753,9 +770,14 @@ function renderUsersTable() {
 
     const vipAction = `<button class="btn" title="${p.is_vip ? 'Revoke VIP status' : 'Grant VIP status'}" onclick="toggleVip('${p.id}')">${p.is_vip ? '💔 Revoke VIP' : '🌟 Make VIP'}</button>`;
 
+    const isTargetProtectedFromDemo = Boolean(p.is_vip || p.is_mod || p.is_admin || p.is_owner || (p.username && p.username.toLowerCase() === 'sleepyoak'));
+    const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+
     const deleteBtn = (isTargetOwner && !isCurrentAdminOwner)
       ? ''
-      : `<button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>`;
+      : (isDemoAdmin && isTargetProtectedFromDemo
+        ? `<button class="btn danger" style="opacity:0.5;cursor:not-allowed;" title="Demo-Admin cannot delete VIP, Moderator, Admin, or Owner" onclick="alert('Demo-Admin Restriction: You cannot delete VIPs, Moderators, Admins, or Owners.')">🚫 Delete</button>`
+        : `<button class="btn danger" title="Delete this user profile" onclick="deleteUser('${p.id}')">🗑️ Delete</button>`);
 
     const banBtn = (isTargetOwner && !isCurrentAdminOwner)
       ? ''
@@ -851,6 +873,14 @@ async function toggleOwner(userId, status) {
 
 async function deleteUser(userId) {
   const target = profilesCache.find(x => x.id === userId);
+  const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+  const isTargetProtectedFromDemo = Boolean(target?.is_vip || target?.is_mod || target?.is_admin || target?.is_owner || (target?.username && target.username.toLowerCase() === 'sleepyoak'));
+
+  if (isDemoAdmin && isTargetProtectedFromDemo) {
+    alert('Demo-Admin Restriction: You cannot delete VIPs, Moderators, Admins, or Owners.');
+    return;
+  }
+
   const isCurrentAdminOwner = Boolean(adminProfile?.is_owner || (adminProfile?.username && adminProfile.username.toLowerCase() === 'sleepyoak'));
   if (target?.is_owner && !isCurrentAdminOwner) {
     alert('Access Denied: You cannot delete a Server Owner.');
@@ -997,6 +1027,17 @@ async function runBulkAction() {
   }
 
   if (action === 'delete') {
+    const isDemoAdmin = Boolean(adminProfile?.username && adminProfile.username.toLowerCase() === 'demo-admin');
+    if (isDemoAdmin) {
+      const hasProtected = ids.some(id => {
+        const u = profilesCache.find(x => x.id === id);
+        return u?.is_vip || u?.is_mod || u?.is_admin || u?.is_owner || (u?.username && u.username.toLowerCase() === 'sleepyoak');
+      });
+      if (hasProtected) {
+        alert('Demo-Admin Restriction: You cannot delete VIPs, Moderators, Admins, or Owners.');
+        return;
+      }
+    }
     if (!confirm(`WARNING: Delete ${ids.length} selected user profiles permanently?`)) return;
     showLoading(true);
     const { error } = await sbClient.from('profiles').delete().in('id', ids);

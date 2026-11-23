@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   checkIfAlreadyLoggedIn();
 });
 
-// If already logged in as owner, redirect to admin
+// If already logged in as owner or admin, redirect to admin
 async function checkIfAlreadyLoggedIn() {
   try {
     const { data: { session } } = await sbClient.auth.getSession();
@@ -25,11 +25,11 @@ async function checkIfAlreadyLoggedIn() {
 
     const { data: profile } = await sbClient
       .from('profiles')
-      .select('id,is_owner')
+      .select('id,is_owner,is_admin')
       .eq('id', session.user.id)
       .maybeSingle();
 
-    if (profile?.is_owner) {
+    if (profile?.is_owner || profile?.is_admin) {
       // Mark session as admin-authenticated
       sessionStorage.setItem('admin_authenticated', 'true');
       window.location.href = 'admin.html';
@@ -56,8 +56,8 @@ async function handleAdminLogin() {
     // Lookup user by username to get their email
     const { data: profile, error: lookupErr } = await sbClient
       .from('profiles')
-      .select('id,email,is_owner')
-      .eq('username', username)
+      .select('id,email,is_owner,is_admin')
+      .ilike('username', username)
       .maybeSingle();
 
     if (lookupErr || !profile) {
@@ -91,7 +91,7 @@ async function handleAdminLogin() {
       .eq('id', data.user.id)
       .maybeSingle();
 
-    if (profileErr || !freshProfile?.is_owner) {
+    if (profileErr || (!freshProfile?.is_owner && !freshProfile?.is_admin)) {
       await sbClient.auth.signOut();
       setLoginMsg('Access denied. Admin privileges required.', 'error');
       loginBtn.disabled = false;
