@@ -2383,7 +2383,15 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     .on('broadcast', { event: 'message-deleted' }, ({ payload }) => {
       if (payload?.roomId !== room.id) return;
       rememberDeletedMessage(payload.messageId, room.id);
-      removeMessageNodeById(payload.messageId);
+      removeMessageNodeById(payload.messageId, payload.deleterName);
+    })
+    .on('broadcast', { event: 'messages-bulk-deleted' }, ({ payload }) => {
+      if (payload?.roomId !== room.id) return;
+      const ids = payload.messageIds || [];
+      ids.forEach(id => {
+        rememberDeletedMessage(id, room.id);
+        removeMessageNodeById(id, payload.deleterName);
+      });
     })
     .on('broadcast', { event: 'chat-message' }, async ({ payload }) => {
       if (!payload || payload.room_id !== room.id) return;
@@ -2694,11 +2702,27 @@ window.showProfileFromChat = function(ev, userId, username) {
   }
 };
 
+function buildDeletedMessageNode(messageId, createdAt, deleterName = null) {
+  const time = formatTime(createdAt || new Date().toISOString());
+  const div = document.createElement('div');
+  div.className = 'msg-deleted-line';
+  div.dataset.deletedMessageId = String(messageId || '');
+  const deleterText = deleterName ? ` by ${escHtml(deleterName)}` : '';
+  div.innerHTML = `
+    <span class="msg-deleted-text">— Message deleted${deleterText} —</span>
+    ${time ? `<span class="msg-deleted-time">${escHtml(time)}</span>` : ''}
+  `;
+  return div;
+}
+
 /* Builds a message DOM node without appending it (used for batch & single) */
 function buildMessageNode(msg) {
   if (msg?.user_id && !canProcessIncomingPayload(msg.user_id)) return null;
   if (msg.type === 'system') {
     return buildSystemMessageNode(msg.content, msg.created_at);
+  }
+  if (msg?.id && (isDeletedMessage(msg.id, currentRoom?.id) || isLocallyDeletedMessage(msg.id))) {
+    return buildDeletedMessageNode(msg.id, msg.created_at);
   }
 
   if (msg.type === 'image') {
@@ -2732,16 +2756,17 @@ function buildMessageNode(msg) {
     
     const audioHtml = currentProfile?.is_registered
       ? `<audio controls src="${escHtml(msg.content)}"></audio>`
-      : '<span class="vn-locked">\ud83d\udd12 Register to hear voice notes</span>';
-    const deleteButton = buildDeleteButtonHtml(msg.user_id);
+      : '<span class="vn-locked">🔒 Register to hear voice notes</span>';
     const reportButton = buildReportButtonHtml(msg);
     div.innerHTML = `
       <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
       <div class="msg-bubble">
-        ${deleteButton}
         ${reportButton}
         <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text">${audioHtml}</span></div>
-          <div class="msg-time">${formatTime(msg.created_at)}</div>
+        <div class="msg-time">${formatTime(msg.created_at)}</div>
+      </div>
+      <div class="msg-select-wrap">
+        <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
       </div>`;
 
     const audio = div.querySelector('audio');
@@ -2795,16 +2820,17 @@ function buildMessageNode(msg) {
     }
   }
 
-  const deleteButton = buildDeleteButtonHtml(msg.user_id);
   const reportButton = buildReportButtonHtml(msg);
 
   div.innerHTML = `
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
-      ${deleteButton}
       ${reportButton}
       <div class="msg-line"><span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text" style="${msgStyle}">${window.formatMessageText ? window.formatMessageText(msg.content) : escHtml(msg.content)}</span></div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
+    </div>
+    <div class="msg-select-wrap">
+      <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
     </div>`;
 
   return div;
@@ -3266,11 +3292,7 @@ function canDeleteMessageForUserId(userId) {
 }
 
 function buildDeleteButtonHtml(userId, label = '🗑️') {
-  if (!canDeleteMessageForUserId(userId)) return '';
-  const title = userId === currentUser?.id
-    ? 'Delete permanently for everyone'
-    : 'Delete this message as admin/moderator';
-  return `<button type="button" class="msg-local-delete" title="${escHtml(title)}">${label}</button>`;
+  return '';
 }
 
 function buildReportButtonHtml(msg) {
@@ -3446,8 +3468,10 @@ function buildImageMessageNode(msg) {
   div.innerHTML = `
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
-      ${deleteButton ? `<div class="image-delete-row">${deleteButton}</div>` : ''}
       <div class="msg-line"><span class="msg-text">${imageMarkup}</span></div>
+    </div>
+    <div class="msg-select-wrap">
+      <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
     </div>`;
 
   const image = div.querySelector('.msg-inline-image');
@@ -3482,9 +3506,11 @@ function appendVoiceNoteMessage(msg, isMe) {
   div.innerHTML = `
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
-      ${deleteButton}
       <div class="msg-line"><span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-voice">${voiceMarkup}</span></div>
       <div class="msg-time">${formatTime(msg.created_at)}</div>
+    </div>
+    <div class="msg-select-wrap">
+      <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
     </div>`;
 
   return div;
@@ -3842,13 +3868,23 @@ function showRegisterForVoice() {
   document.body.appendChild(popup);
 }
 
-function removeMessageNodeById(messageId) {
+function removeMessageNodeById(messageId, deleterName = null) {
   if (!messageId) return;
   const row = document
     .querySelector(`#messages .msg-row[data-message-id="${CSS.escape(String(messageId))}"]`);
   if (!row) return;
-  row.classList.add('is-deleting');
-  setTimeout(() => row.remove(), 220);
+
+  const createdAt = row.dataset.createdAt || new Date().toISOString();
+  const time = row.querySelector('.msg-time')?.textContent || formatTime(createdAt);
+  const replacement = document.createElement('div');
+  replacement.className = 'msg-deleted-line';
+  replacement.dataset.deletedMessageId = String(messageId);
+  const deleterText = deleterName ? ` by ${escHtml(deleterName)}` : '';
+  replacement.innerHTML = `
+    <span class="msg-deleted-text">— Message deleted${deleterText} —</span>
+    ${time ? `<span class="msg-deleted-time">${escHtml(time)}</span>` : ''}
+  `;
+  row.replaceWith(replacement);
 }
 
 function buildSystemMessageNode(content, createdAt) {
@@ -3887,6 +3923,7 @@ function handleRealtimeMessageUpdate(msg) {
 async function deleteMessageForEveryone(messageId, targetUserId, targetUsername) {
   const deletingOwn = targetUserId === currentUser?.id;
   const deletingAsModerator = !deletingOwn && canDeleteAnyMessage();
+  const deleterName = currentProfile?.username || 'Moderator';
   const { error: deleteError } = await sbClient.from('messages').delete().eq('id', messageId);
   if (deleteError) throw deleteError;
 
@@ -3896,7 +3933,7 @@ async function deleteMessageForEveryone(messageId, targetUserId, targetUsername)
       await messageChannel.send({
         type: 'broadcast',
         event: 'message-deleted',
-        payload: { roomId: currentRoom.id, messageId }
+        payload: { roomId: currentRoom.id, messageId, deleterName }
       });
     } catch (broadcastError) {
       console.warn('Failed to broadcast message deletion', {
@@ -3907,11 +3944,7 @@ async function deleteMessageForEveryone(messageId, targetUserId, targetUsername)
     }
   }
 
-  if (deletingAsModerator && currentRoom?.id) {
-    const deleterName = currentProfile?.username || 'Admin';
-    // Show deletion notice locally only — NOT stored in DB to keep history clean
-    appendSystemMessage(`🗑️ Message deleted by ${deleterName}`);
-  }
+  removeMessageNodeById(messageId, deleterName);
 }
 
 function archiveClearedMessageRows(rows, reason = 'clear-my-messages') {
@@ -4010,112 +4043,335 @@ function clearMyMessages() {
   return clearMyMessagesFromScreen();
 }
 
-document.addEventListener('click', async (event) => {
-  const deleteBtn = event.target.closest('.msg-local-delete');
-  if (!deleteBtn) return;
-  const row = deleteBtn.closest('.msg-row');
-  if (!row) return;
-  const targetUserId = row.dataset.userId || '';
-  const messageId = row.dataset.messageId || '';
-  const targetUsername = row.querySelector('.msg-username')?.textContent || 'Unknown';
+/* ════════════════════════════════════════════════════════════════
+   Message Selection & Multi-Delete System
+════════════════════════════════════════════════════════════════ */
+const LOCAL_DELETED_MSGS_KEY = 'cc_local_deleted_messages';
+
+function getLocallyDeletedIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(LOCAL_DELETED_MSGS_KEY) || '[]'));
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function rememberLocallyDeletedMessage(messageId) {
   if (!messageId) return;
-  if (!canDeleteMessageForUserId(targetUserId)) {
-    showChatToast('You do not have permission to delete this message.', 'warning', 3200);
-    console.warn('Blocked unauthorized message deletion attempt', {
-      actorId: currentUser?.id,
-      actorName: currentProfile?.username,
-      targetUserId,
-      targetUsername,
-      messageId,
-      roomId: currentRoom?.id
+  try {
+    const set = getLocallyDeletedIds();
+    set.add(String(messageId));
+    const arr = Array.from(set).slice(-500);
+    localStorage.setItem(LOCAL_DELETED_MSGS_KEY, JSON.stringify(arr));
+  } catch (_) {}
+}
+
+function isLocallyDeletedMessage(messageId) {
+  if (!messageId) return false;
+  return getLocallyDeletedIds().has(String(messageId));
+}
+
+let _selectedMessageIds = new Set();
+let _deleteMenuEl = null;
+
+function hideDeleteFloatingMenu() {
+  if (_deleteMenuEl) {
+    _deleteMenuEl.remove();
+    _deleteMenuEl = null;
+  }
+}
+
+function clearMessageSelection() {
+  _selectedMessageIds.clear();
+  const container = document.getElementById('messages');
+  if (container) {
+    container.classList.remove('has-selected-messages');
+    container.querySelectorAll('.msg-row.msg-row--selected').forEach(r => {
+      r.classList.remove('msg-row--selected');
+      const cb = r.querySelector('.msg-select-check');
+      if (cb) cb.checked = false;
     });
+  }
+  hideDeleteFloatingMenu();
+}
+
+function toggleMessageSelection(messageId, forceState = null, sourceRow = null) {
+  if (!messageId) return;
+  const isSelected = forceState !== null ? Boolean(forceState) : !_selectedMessageIds.has(messageId);
+  if (isSelected) {
+    _selectedMessageIds.add(messageId);
+  } else {
+    _selectedMessageIds.delete(messageId);
+  }
+
+  const container = document.getElementById('messages');
+  if (!container) return;
+
+  const count = _selectedMessageIds.size;
+  container.classList.toggle('has-selected-messages', count > 0);
+
+  container.querySelectorAll('.msg-row').forEach(row => {
+    const id = row.dataset.messageId;
+    if (id === messageId) {
+      row.classList.toggle('msg-row--selected', isSelected);
+      const cb = row.querySelector('.msg-select-check');
+      if (cb && cb.checked !== isSelected) cb.checked = isSelected;
+    }
+  });
+
+  if (count === 0) {
+    hideDeleteFloatingMenu();
+  } else {
+    showDeleteFloatingMenu(sourceRow);
+  }
+}
+
+function positionFloatingMenu(anchorRow) {
+  if (!_deleteMenuEl || !anchorRow) return;
+  const rect = anchorRow.getBoundingClientRect();
+  const menuWidth = 205;
+  const menuHeight = _deleteMenuEl.offsetHeight || 135;
+
+  let left = rect.right - menuWidth - 8;
+  if (left < 10) left = 10;
+  if (left + menuWidth > window.innerWidth - 10) left = window.innerWidth - menuWidth - 10;
+
+  let top = rect.top - menuHeight - 8;
+  if (top < 65) {
+    top = rect.bottom + 8;
+  }
+  if (top + menuHeight > window.innerHeight - 10) {
+    top = window.innerHeight - menuHeight - 10;
+  }
+
+  _deleteMenuEl.style.left = `${Math.round(left)}px`;
+  _deleteMenuEl.style.top = `${Math.round(top)}px`;
+}
+
+function showDeleteFloatingMenu(anchorRow = null) {
+  const count = _selectedMessageIds.size;
+  if (count === 0) {
+    hideDeleteFloatingMenu();
     return;
   }
-  deleteBtn.disabled = true;
-  deleteBtn.textContent = '…';
-  row.classList.add('is-deleting');
-  archiveClearedMessageRows([row], 'single-message-remove');
-  try {
-    await deleteMessageForEveryone(messageId, targetUserId, targetUsername);
-    removeMessageNodeById(messageId);
-  } catch (error) {
-    row.classList.remove('is-deleting');
-    deleteBtn.disabled = false;
-    deleteBtn.textContent = '🗑️';
-    showChatToast(`Could not delete message: ${error.message || 'Please try again.'}`, 'warning', 3200);
-    console.warn('Message deletion failed', {
-      actorId: currentUser?.id,
-      actorName: currentProfile?.username,
-      targetUserId,
-      targetUsername,
-      messageId,
-      roomId: currentRoom?.id,
-      error: error?.message || error
+
+  if (!_deleteMenuEl) {
+    _deleteMenuEl = document.createElement('div');
+    _deleteMenuEl.className = 'msg-delete-floating-menu';
+    document.body.appendChild(_deleteMenuEl);
+  }
+
+  const selectedRows = Array.from(_selectedMessageIds)
+    .map(id => document.querySelector(`#messages .msg-row[data-message-id="${CSS.escape(id)}"]`))
+    .filter(Boolean);
+
+  const targetAnchor = anchorRow || selectedRows[selectedRows.length - 1] || selectedRows[0];
+
+  const isModOrAdmin = canDeleteAnyMessage();
+  let hasOwnMessages = false;
+  selectedRows.forEach(row => {
+    if (row.dataset.userId === currentUser?.id) {
+      hasOwnMessages = true;
+    }
+  });
+
+  let buttonsHtml = '';
+  if (isModOrAdmin) {
+    buttonsHtml = `
+      <button type="button" class="btn-del-danger" id="btn-del-act-everyone">
+        <span>🗑️</span> Delete for Everyone
+      </button>
+      <button type="button" class="btn-del-myself" id="btn-del-act-myself">
+        <span>👁️</span> Delete for Myself
+      </button>
+    `;
+  } else {
+    if (hasOwnMessages) {
+      buttonsHtml = `
+        <button type="button" class="btn-del-danger" id="btn-del-act-everyone">
+          <span>🗑️</span> Delete for Everyone
+        </button>
+        <button type="button" class="btn-del-myself" id="btn-del-act-myself">
+          <span>👁️</span> Delete for Myself
+        </button>
+      `;
+    } else {
+      buttonsHtml = `
+        <button type="button" class="btn-del-myself" id="btn-del-act-myself">
+          <span>👁️</span> Delete for Myself
+        </button>
+      `;
+    }
+  }
+
+  _deleteMenuEl.innerHTML = `
+    <div class="del-menu-header">
+      <span>Delete Message</span>
+      <span class="del-count-badge">${count} selected</span>
+    </div>
+    ${buttonsHtml}
+    <button type="button" class="btn-del-cancel" id="btn-del-act-cancel">
+      <span>✕</span> Cancel
+    </button>
+  `;
+
+  const btnEveryone = _deleteMenuEl.querySelector('#btn-del-act-everyone');
+  if (btnEveryone) {
+    btnEveryone.onclick = (e) => {
+      e.stopPropagation();
+      executeBulkDelete('everyone');
+    };
+  }
+
+  const btnMyself = _deleteMenuEl.querySelector('#btn-del-act-myself');
+  if (btnMyself) {
+    btnMyself.onclick = (e) => {
+      e.stopPropagation();
+      executeBulkDelete('myself');
+    };
+  }
+
+  const btnCancel = _deleteMenuEl.querySelector('#btn-del-act-cancel');
+  if (btnCancel) {
+    btnCancel.onclick = (e) => {
+      e.stopPropagation();
+      clearMessageSelection();
+    };
+  }
+
+  if (targetAnchor) {
+    positionFloatingMenu(targetAnchor);
+  }
+}
+
+async function executeBulkDelete(mode = 'everyone') {
+  const ids = Array.from(_selectedMessageIds);
+  if (!ids.length) return;
+
+  hideDeleteFloatingMenu();
+
+  const selectedRows = ids
+    .map(id => document.querySelector(`#messages .msg-row[data-message-id="${CSS.escape(id)}"]`))
+    .filter(Boolean);
+
+  const isModOrAdmin = canDeleteAnyMessage();
+  const deleterName = currentProfile?.username || 'Moderator';
+
+  if (mode === 'everyone') {
+    let eligibleRows = selectedRows;
+    if (!isModOrAdmin) {
+      eligibleRows = selectedRows.filter(r => r.dataset.userId === currentUser?.id);
+    }
+    const eligibleIds = eligibleRows.map(r => r.dataset.messageId).filter(Boolean);
+
+    if (!eligibleIds.length) {
+      showChatToast('You can only delete your own messages for everyone.', 'warning');
+      clearMessageSelection();
+      return;
+    }
+
+    eligibleRows.forEach(r => r.classList.add('is-deleting'));
+    archiveClearedMessageRows(eligibleRows, 'bulk-message-delete');
+
+    try {
+      const { error: deleteError } = await sbClient.from('messages').delete().in('id', eligibleIds);
+      if (deleteError) throw deleteError;
+
+      if (messageChannel && currentRoom?.id) {
+        messageChannel.send({
+          type: 'broadcast',
+          event: 'messages-bulk-deleted',
+          payload: { roomId: currentRoom.id, messageIds: eligibleIds, deleterName }
+        }).catch(() => {});
+      }
+
+      eligibleIds.forEach(id => {
+        rememberDeletedMessage(id, currentRoom?.id);
+        removeMessageNodeById(id, deleterName);
+      });
+
+      showChatToast(`Deleted ${eligibleIds.length} message${eligibleIds.length === 1 ? '' : 's'} for everyone.`, 'success');
+    } catch (err) {
+      eligibleRows.forEach(r => r.classList.remove('is-deleting'));
+      showChatToast(`Could not delete: ${err.message || 'Please try again.'}`, 'warning');
+    }
+  } else {
+    // Mode === 'myself'
+    selectedRows.forEach(r => {
+      const id = r.dataset.messageId;
+      if (id) {
+        rememberLocallyDeletedMessage(id);
+        removeMessageNodeById(id, 'You');
+      }
     });
+    showChatToast(`Deleted ${selectedRows.length} message${selectedRows.length === 1 ? '' : 's'} for yourself.`, 'success');
+  }
+
+  clearMessageSelection();
+}
+
+// Global click delegation for selection
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.msg-delete-floating-menu')) return;
+
+  if (e.target.classList.contains('msg-select-check')) {
+    const row = e.target.closest('.msg-row');
+    if (!row) return;
+    const msgId = row.dataset.messageId;
+    toggleMessageSelection(msgId, e.target.checked, row);
+    return;
+  }
+
+  const row = e.target.closest('.msg-row');
+  if (row) {
+    if (e.target.closest('a, button, audio, video, img.msg-inline-image, .avatar, input')) {
+      return;
+    }
+    const cb = row.querySelector('.msg-select-check');
+    const msgId = row.dataset.messageId;
+    if (cb && msgId) {
+      cb.checked = !cb.checked;
+      toggleMessageSelection(msgId, cb.checked, row);
+      return;
+    }
+  }
+
+  if (_selectedMessageIds.size > 0 && !e.target.closest('.msg-row')) {
+    clearMessageSelection();
   }
 });
 
-/* ════════════════════════════════════════════════════════════════
-   Context Menu for Messages — Right-click to Delete
-════════════════════════════════════════════════════════════════ */
-(function initMessageContextMenu() {
-  let ctxMenu = null;
-
-  function removeContextMenu() {
-    if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+// Right-click on message row opens selection & menu
+document.addEventListener('contextmenu', (e) => {
+  const row = e.target.closest('.msg-row');
+  if (!row) return;
+  e.preventDefault();
+  const cb = row.querySelector('.msg-select-check');
+  const msgId = row.dataset.messageId;
+  if (msgId) {
+    if (cb) cb.checked = true;
+    toggleMessageSelection(msgId, true, row);
   }
+});
 
-  document.addEventListener('click', removeContextMenu);
-  document.addEventListener('scroll', removeContextMenu, true);
+// Escape key dismisses selection & menu
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _selectedMessageIds.size > 0) {
+    clearMessageSelection();
+  }
+});
 
-  document.addEventListener('contextmenu', (e) => {
-    const row = e.target.closest('.msg-row');
-    if (!row) return;
-
-    const targetUserId = row.dataset.userId || '';
-    const messageId = row.dataset.messageId || '';
-    if (!messageId) return;
-    if (!canDeleteMessageForUserId(targetUserId)) return;
-
-    e.preventDefault();
-    removeContextMenu();
-
-    ctxMenu = document.createElement('div');
-    ctxMenu.className = 'msg-context-menu';
-
-    const targetUsername = row.querySelector('.msg-username')?.textContent || 'Unknown';
-    const isOwn = targetUserId === currentUser?.id;
-
-    ctxMenu.innerHTML = `
-      <button type="button" class="msg-ctx-delete" data-msg-id="${escHtml(messageId)}" data-user-id="${escHtml(targetUserId)}">
-        🗑️ ${isOwn ? 'Delete Message' : 'Delete (Mod)'}
-      </button>
-    `;
-
-    ctxMenu.style.position = 'fixed';
-    ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
-    ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 50) + 'px';
-    ctxMenu.style.zIndex = '9999';
-
-    document.body.appendChild(ctxMenu);
-
-    ctxMenu.querySelector('.msg-ctx-delete').onclick = async () => {
-      removeContextMenu();
-      const deleteBtn = row.querySelector('.msg-local-delete');
-      row.classList.add('is-deleting');
-      if (deleteBtn) { deleteBtn.disabled = true; deleteBtn.textContent = '…'; }
-      archiveClearedMessageRows([row], 'single-message-remove');
-      try {
-        await deleteMessageForEveryone(messageId, targetUserId, targetUsername);
-        removeMessageNodeById(messageId);
-      } catch (error) {
-        row.classList.remove('is-deleting');
-        if (deleteBtn) { deleteBtn.disabled = false; deleteBtn.textContent = '🗑️'; }
-        showChatToast(`Could not delete message: ${error.message || 'Please try again.'}`, 'warning', 3200);
-      }
-    };
-  });
-})();
+// Keep menu positioned properly during scroll
+document.addEventListener('scroll', () => {
+  if (_selectedMessageIds.size > 0 && _deleteMenuEl) {
+    const selectedRows = Array.from(_selectedMessageIds)
+      .map(id => document.querySelector(`#messages .msg-row[data-message-id="${CSS.escape(id)}"]`))
+      .filter(Boolean);
+    if (selectedRows.length) {
+      positionFloatingMenu(selectedRows[selectedRows.length - 1]);
+    }
+  }
+}, true);
 
 document.addEventListener('click', async (event) => {
   const reportBtn = event.target.closest('.msg-local-report');
