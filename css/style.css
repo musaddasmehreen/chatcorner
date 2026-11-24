@@ -1390,6 +1390,34 @@ body:not(.rooms-unpinned) .btn-pin-rooms:hover { background: rgba(34,197,94,0.12
   opacity: 0.95;
 }
 
+/* Animated GIF Emoticons inside chat & PM messages (42px = 1.5x, Click-to-Paste) */
+.chat-emoticon,
+.msg-text img.chat-emoticon,
+.msg-row .msg-text img.chat-emoticon,
+.pm-bubble img.chat-emoticon {
+  display: inline-block !important;
+  width: 42px !important;
+  height: 42px !important;
+  max-width: 42px !important;
+  max-height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  vertical-align: -10px !important;
+  object-fit: contain !important;
+  margin: 0 4px !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: transform 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28), filter 0.15s ease !important;
+}
+
+.chat-emoticon:hover,
+.msg-text img.chat-emoticon:hover,
+.msg-row .msg-text img.chat-emoticon:hover {
+  transform: scale(1.28) !important;
+  filter: drop-shadow(0 0 8px rgba(139, 109, 237, 0.8)) !important;
+}
+
 .msg-inline-image,
 .pm-inline-image {
   display: block;
