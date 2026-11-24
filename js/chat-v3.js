@@ -336,6 +336,9 @@ function formatMessageContent(rawContent) {
     str = window.parseYouTubeEmbedHtml(str);
   }
   str = parseSuperEmojisHtml(str);
+  if (window.ChatEmoticons && typeof window.ChatEmoticons.parseEmoticonsHtml === 'function') {
+    str = window.ChatEmoticons.parseEmoticonsHtml(str);
+  }
   str = parseMovingEmojisHtml(str);
   str = parseChatBbcodeHtml(str);
   return str;
@@ -654,30 +657,113 @@ function renderEmojiPicker() {
   if (!picker) return;
   picker.innerHTML = '';
 
-  EMOJI_GROUPS.forEach(group => {
-    const header = document.createElement('div');
-    header.className = 'emoji-group-label';
-    header.textContent = group.label;
-    picker.appendChild(header);
+  const emoticons = window.ChatEmoticons?.LIST;
+  if (!emoticons || !emoticons.length) {
+    // Fallback if emoticons data is somehow missing
+    EMOJI_GROUPS.forEach(group => {
+      const header = document.createElement('div');
+      header.className = 'emoji-group-label';
+      header.textContent = group.label;
+      picker.appendChild(header);
 
-    group.items.forEach(item => {
-      const config = typeof item === 'string' ? { emoji: item, title: item } : item;
+      group.items.forEach(item => {
+        const config = typeof item === 'string' ? { emoji: item, title: item } : item;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'emoji-btn' + (config.live ? ` ${config.live}` : '');
+        btn.textContent = config.emoji;
+        btn.title = config.title || config.emoji;
+        btn.onclick = () => insertEmoji(config.emoji);
+        picker.appendChild(btn);
+      });
+    });
+    return;
+  }
+
+  // Categories Navigation Bar
+  const categories = [
+    { id: 'all', label: 'All', icon: '🌟' },
+    { id: 'faces', label: 'Faces', icon: '😀' },
+    { id: 'people', label: 'People', icon: '👋' },
+    { id: 'nature', label: 'Animals', icon: '🦋' },
+    { id: 'food', label: 'Food', icon: '🍔' },
+    { id: 'activity', label: 'Activity', icon: '🚀' },
+    { id: 'symbols', label: 'Symbols', icon: '💖' }
+  ];
+
+  const topNav = document.createElement('div');
+  topNav.className = 'emoji-picker-nav';
+
+  const searchBox = document.createElement('div');
+  searchBox.className = 'emoji-picker-search-wrap';
+  searchBox.innerHTML = '<input type="text" class="emoji-picker-search" placeholder="Search 199 animated emojis..." aria-label="Search emojis" autocomplete="off" />';
+
+  const gridContainer = document.createElement('div');
+  gridContainer.className = 'emoji-picker-grid';
+
+  let currentCategory = 'all';
+  let searchQuery = '';
+
+  function updateGrid() {
+    gridContainer.innerHTML = '';
+
+    let filtered = emoticons;
+    if (currentCategory !== 'all') {
+      filtered = filtered.filter(e => e.category === currentCategory);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(e => e.name.includes(q) || e.title.toLowerCase().includes(q));
+    }
+
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'emoji-picker-empty';
+      empty.textContent = 'No matching emojis found';
+      gridContainer.appendChild(empty);
+      return;
+    }
+
+    filtered.forEach(item => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'emoji-btn' + (config.live ? ` ${config.live}` : '');
-      if (/^\[super-[a-z]+\]$/.test(config.emoji)) {
-        // static preview from the trusted built-in map (no user input)
-        btn.innerHTML = parseSuperEmojisHtml(config.emoji);
-        btn.classList.add('emoji-btn-super');
-      } else {
-        btn.textContent = config.emoji;
-      }
-      btn.title = config.title || config.emoji;
-      btn.setAttribute('aria-label', config.title || config.emoji);
-      btn.onclick = () => insertEmoji(config.emoji);
-      picker.appendChild(btn);
+      btn.className = 'emoticon-btn';
+      btn.title = `${item.title} (${item.shortcode})`;
+      btn.setAttribute('aria-label', item.title);
+      btn.innerHTML = `<img src="img/emoticons/${item.file}" alt="${item.name}" loading="lazy" />`;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        insertEmoji(item.shortcode + ' ');
+      };
+      gridContainer.appendChild(btn);
     });
+  }
+
+  categories.forEach(cat => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'emoji-nav-pill' + (cat.id === 'all' ? ' active' : '');
+    pill.innerHTML = `<span>${cat.icon}</span> <span>${cat.label}</span>`;
+    pill.onclick = (e) => {
+      e.stopPropagation();
+      topNav.querySelectorAll('.emoji-nav-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      currentCategory = cat.id;
+      updateGrid();
+    };
+    topNav.appendChild(pill);
   });
+
+  const searchInput = searchBox.querySelector('input');
+  searchInput?.addEventListener('input', (e) => {
+    searchQuery = e.target.value.trim();
+    updateGrid();
+  });
+
+  picker.appendChild(searchBox);
+  picker.appendChild(topNav);
+  picker.appendChild(gridContainer);
+  updateGrid();
 }
 
 function toggleRoomImageUrlInput(event) {
@@ -1202,6 +1288,8 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     window._stealthModeActive = false;
   }
 
+  const myStatus = window.BehavioralStatus?.getActiveStatus ? window.BehavioralStatus.getActiveStatus(currentUser?.id) : null;
+
   presenceBaseData = {
     userId: currentUser?.id,
     username: profile?.username,
@@ -1219,7 +1307,11 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     boldText: !!profile?.bold_text,
     avatarUrl: profile?.avatar_url,
     totalOnlineTime: profile?.total_online_time || 0,
-    isStealth: _stealthModeActive
+    isStealth: _stealthModeActive,
+    statusText: myStatus?.label || null,
+    statusEmoji: myStatus?.emoji || null,
+    statusKey: myStatus?.id || null,
+    statusMotion: myStatus?.motion || null
   };
 
   // Toggle visibility of stealth mode checkbox based on permissions
@@ -2459,6 +2551,14 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       Object.values(state).forEach(arr => arr.forEach(u => {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
+        if (u.statusText && window.BehavioralStatus?.userStatusCache) {
+          window.BehavioralStatus.userStatusCache.set(u.userId, {
+            id: u.statusKey || 'status',
+            label: u.statusText,
+            emoji: u.statusEmoji || '✨',
+            motion: u.statusMotion || 'motion-bounce'
+          });
+        }
       }));
       const currentRoomCount = Object.keys(onlineUsers).length;
       updateRoomTabCount(currentRoom.id, currentRoomCount);
@@ -2473,6 +2573,14 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       newPresences.forEach(u => {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
+        if (u.statusText && window.BehavioralStatus?.userStatusCache) {
+          window.BehavioralStatus.userStatusCache.set(u.userId, {
+            id: u.statusKey || 'status',
+            label: u.statusText,
+            emoji: u.statusEmoji || '✨',
+            motion: u.statusMotion || 'motion-bounce'
+          });
+        }
       });
       updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
       scheduleRenderUserList();
@@ -2483,6 +2591,37 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         delete cameraStates[u.userId];
       });
       updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
+      scheduleRenderUserList();
+    })
+    .on('broadcast', { event: 'status-updated' }, ({ payload }) => {
+      if (!payload?.userId) return;
+      if (window.BehavioralStatus?.userStatusCache) {
+        window.BehavioralStatus.userStatusCache.set(payload.userId, {
+          id: payload.statusKey,
+          label: payload.statusText,
+          emoji: payload.statusEmoji,
+          motion: payload.statusMotion
+        });
+      }
+      if (onlineUsers[payload.userId]) {
+        onlineUsers[payload.userId].statusText = payload.statusText;
+        onlineUsers[payload.userId].statusEmoji = payload.statusEmoji;
+        onlineUsers[payload.userId].statusKey = payload.statusKey;
+        onlineUsers[payload.userId].statusMotion = payload.statusMotion;
+      }
+      scheduleRenderUserList();
+    })
+    .on('broadcast', { event: 'status-cleared' }, ({ payload }) => {
+      if (!payload?.userId) return;
+      if (window.BehavioralStatus?.userStatusCache) {
+        window.BehavioralStatus.userStatusCache.delete(payload.userId);
+      }
+      if (onlineUsers[payload.userId]) {
+        delete onlineUsers[payload.userId].statusText;
+        delete onlineUsers[payload.userId].statusEmoji;
+        delete onlineUsers[payload.userId].statusKey;
+        delete onlineUsers[payload.userId].statusMotion;
+      }
       scheduleRenderUserList();
     })
     .on('broadcast', { event: 'cam-view' }, ({ payload }) => {
@@ -2972,7 +3111,42 @@ function renderUserList() {
     const displayName = escHtml(u.username) + (isRecording ? ' (Recording...)' : '');
     
     const isRegistered = !!(u.registered || u.is_registered || u.isRegistered);
-    const dotHtml = `<span class="dot${isRegistered ? '' : ' guest'}" title="${isRegistered ? 'Online' : 'Guest'}" style="margin-right:6px;flex-shrink:0;"></span>`;
+    const isMe = u.userId === currentUser?.id;
+
+    // Retrieve active behavioral status (12 shared + exclusive)
+    let activeStatus = null;
+    if (window.BehavioralStatus?.getActiveStatus) {
+      activeStatus = window.BehavioralStatus.getActiveStatus(u.userId);
+    }
+    if (!activeStatus && (u.statusText || onlineUsers[u.userId]?.statusText)) {
+      activeStatus = {
+        id: u.statusKey || onlineUsers[u.userId]?.statusKey || 'status',
+        label: u.statusText || onlineUsers[u.userId]?.statusText,
+        emoji: u.statusEmoji || onlineUsers[u.userId]?.statusEmoji || '✨',
+        motion: u.statusMotion || onlineUsers[u.userId]?.statusMotion || 'motion-bounce'
+      };
+    }
+
+    let dotHtml = '';
+    if (activeStatus && activeStatus.label) {
+      dotHtml = `
+        <span class="user-status-indicator has-status${isMe ? ' is-me' : ''}" 
+              data-status-label="${escHtml(activeStatus.label)}"
+              data-status-emoji="${escHtml(activeStatus.emoji)}"
+              data-status-motion="${escHtml(activeStatus.motion)}"
+              title="${isMe ? 'Click to change status (' + escHtml(activeStatus.label) + ')' : escHtml(u.username || 'User') + ' ' + escHtml(activeStatus.label)}">
+          <span class="status-motion-emoji ${escHtml(activeStatus.motion)}">${escHtml(activeStatus.emoji)}</span>
+          <span class="status-mini-dot"></span>
+        </span>
+      `;
+    } else {
+      dotHtml = `
+        <span class="user-status-indicator${isMe ? ' is-me' : ''}" 
+              title="${isMe ? 'Click to set status (What are you doing?)' : (isRegistered ? 'Online' : 'Guest')}">
+          <span class="dot${isRegistered ? '' : ' guest'}"></span>
+        </span>
+      `;
+    }
 
     li.innerHTML = `
       ${dotHtml}
@@ -2980,6 +3154,24 @@ function renderUserList() {
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${escHtml(u.userId)}" title="View camera">\ud83d\udcf7</button>
     `;
+
+    const indicatorEl = li.querySelector('.user-status-indicator');
+    if (indicatorEl) {
+      if (activeStatus && activeStatus.label) {
+        indicatorEl.addEventListener('mouseenter', () => {
+          window.BehavioralStatus?.showStatusTooltip(indicatorEl, u.username, activeStatus.label, activeStatus.emoji, activeStatus.motion);
+        });
+        indicatorEl.addEventListener('mouseleave', () => {
+          window.BehavioralStatus?.hideStatusTooltip();
+        });
+      }
+      if (isMe) {
+        indicatorEl.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          window.BehavioralStatus?.openStatusPicker();
+        });
+      }
+    }
 
     const nameBtn = li.querySelector('.user-name-btn');
     bindRosterInteraction(li, nameBtn, u, isGuest);
@@ -3005,7 +3197,9 @@ function renderUserList() {
       mDiv.className = 'mobile-user-avatar-wrap';
       mDiv.dataset.userId = u.userId;
       
-      const activeDot = `<span class="mobile-user-status-dot${u.registered ? '' : ' guest'}"></span>`;
+      const activeDot = activeStatus && activeStatus.label
+        ? `<span class="mobile-user-status-emoji ${escHtml(activeStatus.motion)}" style="position:absolute;bottom:-4px;right:-4px;font-size:0.85rem;line-height:1;background:rgba(0,0,0,0.6);border-radius:50%;padding:1px;">${escHtml(activeStatus.emoji)}</span>`
+        : `<span class="mobile-user-status-dot${u.registered ? '' : ' guest'}"></span>`;
       mDiv.innerHTML = `
         <div class="mobile-user-avatar-container">
           ${avatarHtml}
@@ -5614,6 +5808,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
       const sessionSecs = isMe ? Math.floor((Date.now() - sessionStart) / 1000) : 0;
       const totalSecs = profile.total_online_time || 0;
       const monthlySecs = profile.monthly_online_time || 0;
+      const userStatusObj = (window.BehavioralStatus?.getActiveStatus ? window.BehavioralStatus.getActiveStatus(profile.id) : null) || (isMe && window.BehavioralStatus?.getActiveStatus ? window.BehavioralStatus.getActiveStatus(currentUser?.id) : null);
 
       container.innerHTML = `
         <div class="cc-profile-view-layout">
@@ -5629,6 +5824,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
                   <input type="file" accept="image/*" onchange="onProfileAvatarSelect(event)" />
                 </label>
                 <button class="btn-edit" onclick="renderProfileTab('profile', currentProfile, true, true)">🔧 Edit profile</button>
+                <button type="button" class="btn-edit" style="background:rgba(139,109,237,0.18);border:1px solid rgba(139,109,237,0.4);" onclick="window.BehavioralStatus?.openStatusPicker()">⚡ Change Status</button>
               </div>
             ` : (getViewerRoleLevel() >= 3 ? `
               <div class="cc-profile-btn-vertical">
@@ -5640,7 +5836,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
           <div class="cc-profile-view-right">
             <div class="cc-profile-view-header">
               <span class="cc-profile-view-name">${escHtml(profile.username || 'Unknown')}</span>
-              <span class="cc-profile-status-badge">ONLINE</span>
+              ${userStatusObj ? `<span class="cc-profile-status-badge has-status" style="display:inline-flex;align-items:center;gap:4px;background:rgba(139,109,237,0.22);border:1px solid rgba(139,109,237,0.5);"><span class="status-motion-emoji ${escHtml(userStatusObj.motion)}">${escHtml(userStatusObj.emoji)}</span> ${escHtml(userStatusObj.label)}</span>` : '<span class="cc-profile-status-badge">ONLINE</span>'}
             </div>
             <div class="cc-profile-view-role">
               ${roleBadge} <span>${escHtml(roleLabel)}</span>
