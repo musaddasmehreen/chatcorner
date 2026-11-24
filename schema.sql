@@ -23,10 +23,6 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     kicked_until TIMESTAMP WITH TIME ZONE,
     has_2fa_enabled BOOLEAN DEFAULT false,
     two_fa_secret TEXT,
-    status_text TEXT,
-    status_emoji TEXT,
-    status_key TEXT,
-    status_motion TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

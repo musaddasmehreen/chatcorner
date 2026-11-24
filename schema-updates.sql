@@ -215,13 +215,4 @@ CREATE INDEX IF NOT EXISTS idx_profiles_is_registered ON public.profiles(is_regi
 
 -- Add is_read and is_listened columns to public.private_messages
 ALTER TABLE public.private_messages ADD COLUMN IF NOT EXISTS is_read boolean DEFAULT false;
-ALTER TABLE public.private_messages ADD COLUMN IF NOT EXISTS is_listened boolean DEFAULT false;
-
--- =====================================================================
--- UPDATE: BEHAVIORAL STATUS SYSTEM (12 SHARED + GENDER EXCLUSIVES)
--- =====================================================================
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status_text text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status_emoji text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status_key text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status_motion text;
-
+ALTER TABLE public.private_messages ADD COLUMN IF NOT EXISTS is_listened boolean DEFAULT false;
