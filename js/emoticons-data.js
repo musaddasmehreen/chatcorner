@@ -2051,7 +2051,7 @@
       const file = SHORTCODE_TO_FILE[lower];
       if (file) {
         const title = lower.slice(1, -1).replace(/_/g, ' ');
-        return `<img src="img/emoticons/${file}" class="chat-emoticon" style="width:42px;height:42px;min-width:42px;min-height:42px;vertical-align:-10px;object-fit:contain;margin:0 3px;cursor:pointer;display:inline-block;" alt="${match}" data-code="${match}" title="${title} (${match}) — Click to paste" />`;
+        return `<img src="img/emoticons/${file}" class="chat-emoticon" width="42" height="42" style="width:42px;height:42px;min-width:42px;min-height:42px;vertical-align:-10px;object-fit:contain;margin:0 3px;cursor:pointer;display:inline-block;" alt="${match}" data-code="${match}" title="${title} (${match}) — Click to paste" />`;
       }
       return match;
     });
@@ -2067,7 +2067,7 @@
             const name = file.replace('.gif', '');
             const shortcode = `:${name}:`;
             const title = name.replace(/_/g, ' ');
-            const imgTag = `<img src="img/emoticons/${file}" class="chat-emoticon" style="width:42px;height:42px;min-width:42px;min-height:42px;vertical-align:-10px;object-fit:contain;margin:0 3px;cursor:pointer;display:inline-block;" alt="${shortcode}" data-code="${shortcode}" title="${title} (${shortcode}) — Click to paste" />`;
+            const imgTag = `<img src="img/emoticons/${file}" class="chat-emoticon" width="42" height="42" style="width:42px;height:42px;min-width:42px;min-height:42px;vertical-align:-10px;object-fit:contain;margin:0 3px;cursor:pointer;display:inline-block;" alt="${shortcode}" data-code="${shortcode}" title="${title} (${shortcode}) — Click to paste" />`;
             p = p.split(em).join(imgTag);
           }
         }

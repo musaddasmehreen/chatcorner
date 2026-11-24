@@ -2943,6 +2943,13 @@ async function sendMessage() {
     optimisticNode.dataset.tempId = tempId;
     document.getElementById('messages').appendChild(optimisticNode);
     scrollToBottom();
+    const imgs = optimisticNode.querySelectorAll('img');
+    imgs.forEach(img => {
+      if (!img.complete) {
+        img.addEventListener('load', () => scrollToBottom(), { once: true });
+        img.addEventListener('error', () => scrollToBottom(), { once: true });
+      }
+    });
     pruneMessageDom();
     _optimisticPending.set(tempId, { content: finalContent, userId: currentUser.id, ts: Date.now(), node: optimisticNode });
   }
@@ -2974,9 +2981,11 @@ async function sendMessage() {
     _optimisticPending.set(insertedMsgs[0].id, _optimisticPending.get(tempId) || {});
     _optimisticPending.delete(tempId);
     setTimeout(() => _optimisticPending.delete(insertedMsgs[0].id), 5000);
+    scrollToBottom();
   } else if (optimisticNode) {
     optimisticNode.classList.remove('msg-row--pending');
     _optimisticPending.delete(tempId);
+    scrollToBottom();
   }
 
   if (isSendingImage) {
@@ -3073,8 +3082,8 @@ function buildMessageNode(msg) {
       <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
       <div class="msg-bubble">
         ${reportButton}
-        <div class="msg-line">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text">${audioHtml}</span></div>
-        <div class="msg-time">${formatTime(msg.created_at)}</div>
+        <div class="msg-header">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</span> <span class="msg-time">${formatTime(msg.created_at)}</span></div>
+        <div class="msg-text">${audioHtml}</div>
       </div>
       <div class="msg-select-wrap">
         <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
@@ -3138,8 +3147,8 @@ function buildMessageNode(msg) {
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
       ${reportButton}
-      <div class="msg-line">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-text" style="${msgStyle}">${window.formatMessageText ? window.formatMessageText(msg.content) : escHtml(msg.content)}</span></div>
-      <div class="msg-time">${formatTime(msg.created_at)}</div>
+      <div class="msg-header">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username" style="${nickStyle}">${escHtml(msg.username || 'Unknown')}</span> <span class="msg-time">${formatTime(msg.created_at)}</span></div>
+      <div class="msg-text" style="${msgStyle}">${window.formatMessageText ? window.formatMessageText(msg.content) : escHtml(msg.content)}</div>
     </div>
     <div class="msg-select-wrap">
       <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
@@ -3152,6 +3161,14 @@ function appendMessage(msg) {
   const node = buildMessageNode(msg);
   if (!node) return;
   document.getElementById('messages').appendChild(node);
+  scrollToBottom();
+  const imgs = node.querySelectorAll('img');
+  imgs.forEach(img => {
+    if (!img.complete) {
+      img.addEventListener('load', () => scrollToBottom(), { once: true });
+      img.addEventListener('error', () => scrollToBottom(), { once: true });
+    }
+  });
   scheduleMessageScroll();
   pruneMessageDom();
   // Deletion notices (type=system) auto-disappear after 5 minutes for live users
@@ -3400,26 +3417,36 @@ function renderUserList() {
   }
 }
 
-/* Instant scroll — bypasses CSS scroll-behavior for real-time feel */
-function scrollToBottom() {
+/* Instant scroll — ensures the latest message is fully visible and not hidden under composer */
+function scrollToBottom(force = true) {
   const el = document.getElementById('messages');
   if (!el) return;
-  el.scrollTop = el.scrollHeight;
-  requestAnimationFrame(() => {
-    if (el.isConnected) el.scrollTop = el.scrollHeight;
-  });
+
+  const performScroll = () => {
+    if (!el.isConnected) return;
+    el.scrollTop = el.scrollHeight;
+    const last = el.lastElementChild;
+    if (last && typeof last.scrollIntoView === 'function') {
+      try {
+        last.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'auto' });
+      } catch (_) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }
+  };
+
+  performScroll();
+  requestAnimationFrame(performScroll);
+  setTimeout(performScroll, 30);
+  setTimeout(performScroll, 80);
+  setTimeout(performScroll, 200);
 }
 
 let _messageScrollFrame = 0;
 function scheduleMessageScroll() {
   cancelAnimationFrame(_messageScrollFrame);
   _messageScrollFrame = requestAnimationFrame(() => {
-    const el = document.getElementById('messages');
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    requestAnimationFrame(() => {
-      if (el.isConnected) el.scrollTop = el.scrollHeight;
-    });
+    scrollToBottom();
   });
 }
 
@@ -3841,8 +3868,9 @@ function buildImageMessageNode(msg) {
   div.innerHTML = `
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
-      <div class="msg-line">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span></div>
-      <div class="msg-line"><span class="msg-text">${imageMarkup}</span></div>
+      ${deleteButton}
+      <div class="msg-header">${senderRoleTag ? senderRoleTag + ' ' : ''}<span class="msg-username">${escHtml(msg.username || 'Unknown')}</span> <span class="msg-time">${formatTime(msg.created_at)}</span></div>
+      <div class="msg-text">${imageMarkup}</div>
     </div>
     <div class="msg-select-wrap">
       <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
@@ -3880,8 +3908,9 @@ function appendVoiceNoteMessage(msg, isMe) {
   div.innerHTML = `
     <div class="avatar" style="background:${color}" onclick="showProfileFromChat(event, '${escHtml(msg.user_id)}', '${escHtml(msg.username || 'User')}')" title="Click to view profile">${avatarInner}</div>
     <div class="msg-bubble">
-      <div class="msg-line"><span class="msg-username">${escHtml(msg.username || 'Unknown')}:</span> <span class="msg-voice">${voiceMarkup}</span></div>
-      <div class="msg-time">${formatTime(msg.created_at)}</div>
+      ${deleteButton}
+      <div class="msg-header"><span class="msg-username">${escHtml(msg.username || 'Unknown')}</span> <span class="msg-time">${formatTime(msg.created_at)}</span></div>
+      <div class="msg-text"><span class="msg-voice">${voiceMarkup}</span></div>
     </div>
     <div class="msg-select-wrap">
       <input type="checkbox" class="msg-select-check" title="Select message to delete" aria-label="Select message" />
