@@ -798,17 +798,22 @@ function readDeletedMessageTombstones(roomId) {
     const now = Date.now();
     const tombstones = {};
     let changed = false;
-    Object.entries(raw || {}).forEach(([messageId, ts]) => {
+    Object.entries(raw || {}).forEach(([messageId, val]) => {
       if (!messageId) {
         changed = true;
         return;
       }
-      const stamp = Number(ts);
+      let stamp = 0;
+      if (typeof val === 'number') {
+        stamp = val;
+      } else if (val && typeof val === 'object') {
+        stamp = Number(val.ts || 0);
+      }
       if (!Number.isFinite(stamp) || now - stamp > MESSAGE_CACHE_TTL_MS) {
         changed = true;
         return;
       }
-      tombstones[messageId] = stamp;
+      tombstones[messageId] = val;
     });
     if (changed) {
       localStorage.setItem(storageKey, JSON.stringify(tombstones));
@@ -1219,7 +1224,11 @@ function updatePresenceBaseFromProfile(profile = currentProfile) {
     boldText: !!profile?.bold_text,
     avatarUrl: profile?.avatar_url,
     totalOnlineTime: profile?.total_online_time || 0,
-    isStealth: _stealthModeActive
+    isStealth: _stealthModeActive,
+    statusText: profile?.status_text || null,
+    statusEmoji: profile?.status_emoji || null,
+    statusKey: profile?.status_key || null,
+    statusMotion: profile?.status_motion || null
   };
 
   // Toggle visibility of stealth mode checkbox based on permissions
@@ -2421,6 +2430,37 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         removeMessageNodeById(id, payload.deleterName, payload.deleterRoleLevel);
       });
     })
+    .on('broadcast', { event: 'status-updated' }, ({ payload }) => {
+      if (!payload?.userId) return;
+      if (window.BehavioralStatus?.userStatusCache) {
+        window.BehavioralStatus.userStatusCache.set(payload.userId, {
+          id: payload.statusKey,
+          label: payload.statusText,
+          emoji: payload.statusEmoji,
+          motion: payload.statusMotion
+        });
+      }
+      if (onlineUsers[payload.userId]) {
+        onlineUsers[payload.userId].statusText = payload.statusText;
+        onlineUsers[payload.userId].statusEmoji = payload.statusEmoji;
+        onlineUsers[payload.userId].statusKey = payload.statusKey;
+        onlineUsers[payload.userId].statusMotion = payload.statusMotion;
+      }
+      scheduleRenderUserList();
+    })
+    .on('broadcast', { event: 'status-cleared' }, ({ payload }) => {
+      if (!payload?.userId) return;
+      if (window.BehavioralStatus?.userStatusCache) {
+        window.BehavioralStatus.userStatusCache.delete(payload.userId);
+      }
+      if (onlineUsers[payload.userId]) {
+        delete onlineUsers[payload.userId].statusText;
+        delete onlineUsers[payload.userId].statusEmoji;
+        delete onlineUsers[payload.userId].statusKey;
+        delete onlineUsers[payload.userId].statusMotion;
+      }
+      scheduleRenderUserList();
+    })
     .on('broadcast', { event: 'chat-message' }, async ({ payload }) => {
       if (!payload || payload.room_id !== room.id) return;
       if (payload.user_id === currentUser?.id) return;
@@ -2459,6 +2499,14 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       Object.values(state).forEach(arr => arr.forEach(u => {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
+        if (u.statusText && window.BehavioralStatus?.userStatusCache) {
+          window.BehavioralStatus.userStatusCache.set(u.userId, {
+            id: u.statusKey || 'status',
+            label: u.statusText,
+            emoji: u.statusEmoji || '✨',
+            motion: u.statusMotion || 'motion-bounce'
+          });
+        }
       }));
       const currentRoomCount = Object.keys(onlineUsers).length;
       updateRoomTabCount(currentRoom.id, currentRoomCount);
@@ -2473,6 +2521,14 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       newPresences.forEach(u => {
         onlineUsers[u.userId] = u;
         cameraStates[u.userId] = !!u.cameraOn;
+        if (u.statusText && window.BehavioralStatus?.userStatusCache) {
+          window.BehavioralStatus.userStatusCache.set(u.userId, {
+            id: u.statusKey || 'status',
+            label: u.statusText,
+            emoji: u.statusEmoji || '✨',
+            motion: u.statusMotion || 'motion-bounce'
+          });
+        }
       });
       updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
       scheduleRenderUserList();
@@ -2971,15 +3027,70 @@ function renderUserList() {
     
     const displayName = escHtml(u.username) + (isRecording ? ' (Recording...)' : '');
     
+    const isMe = u.userId === currentUser?.id;
     const isRegistered = !!(u.registered || u.is_registered || u.isRegistered);
-    const dotHtml = `<span class="dot${isRegistered ? '' : ' guest'}" title="${isRegistered ? 'Online' : 'Guest'}" style="margin-right:6px;flex-shrink:0;"></span>`;
+
+    // Retrieve active behavioral status (12 shared + exclusive)
+    let activeStatus = null;
+    if (window.BehavioralStatus?.getActiveStatus) {
+      activeStatus = window.BehavioralStatus.getActiveStatus(u.userId);
+    }
+    if (!activeStatus && (u.statusText || onlineUsers[u.userId]?.statusText)) {
+      activeStatus = {
+        id: u.statusKey || onlineUsers[u.userId]?.statusKey || 'custom',
+        label: u.statusText || onlineUsers[u.userId]?.statusText,
+        emoji: u.statusEmoji || onlineUsers[u.userId]?.statusEmoji || '✨',
+        motion: u.statusMotion || onlineUsers[u.userId]?.statusMotion || 'motion-bounce'
+      };
+    }
+
+    let indicatorHtml = '';
+    if (activeStatus && activeStatus.label) {
+      indicatorHtml = `
+        <span class="user-status-indicator has-status${isMe ? ' is-me' : ''}" 
+              data-user-id="${escHtml(u.userId)}"
+              data-status-label="${escHtml(activeStatus.label)}"
+              data-status-emoji="${escHtml(activeStatus.emoji)}"
+              data-status-motion="${escHtml(activeStatus.motion)}"
+              title="${isMe ? 'Click to change status (' + escHtml(activeStatus.label) + ')' : escHtml(u.username) + ' ' + escHtml(activeStatus.label)}">
+          <span class="status-motion-emoji ${escHtml(activeStatus.motion)}">${escHtml(activeStatus.emoji)}</span>
+          <span class="status-mini-dot"></span>
+        </span>
+      `;
+    } else {
+      indicatorHtml = `
+        <span class="user-status-indicator${isMe ? ' is-me' : ''}" 
+              data-user-id="${escHtml(u.userId)}"
+              title="${isMe ? 'Click to set status (What are you doing?)' : (isRegistered ? 'Online' : 'Guest')}">
+          <span class="dot${isRegistered ? '' : ' guest'}"></span>
+        </span>
+      `;
+    }
 
     li.innerHTML = `
-      ${dotHtml}
+      ${indicatorHtml}
       <button type="button" class="user-name-btn${nameClass}${isGuest ? ' locked-action' : ''}" title="${isGuest ? '\ud83d\udd12 Register to start private chats' : 'Click for options'}">${roleBadge ? roleBadge + ' ' : ''}${displayName}</button>
       ${viewerEye}
       <button type="button" class="camera-user-btn${cameraStates[u.userId] ? '' : ' hidden'}" data-user-id="${escHtml(u.userId)}" title="View camera">\ud83d\udcf7</button>
     `;
+
+    const indicatorEl = li.querySelector('.user-status-indicator');
+    if (indicatorEl) {
+      if (activeStatus && activeStatus.label) {
+        indicatorEl.addEventListener('mouseenter', () => {
+          window.BehavioralStatus?.showStatusTooltip(indicatorEl, u.username, activeStatus.label, activeStatus.emoji, activeStatus.motion);
+        });
+        indicatorEl.addEventListener('mouseleave', () => {
+          window.BehavioralStatus?.hideStatusTooltip();
+        });
+      }
+      if (isMe) {
+        indicatorEl.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          window.BehavioralStatus?.openStatusPicker();
+        });
+      }
+    }
 
     const nameBtn = li.querySelector('.user-name-btn');
     bindRosterInteraction(li, nameBtn, u, isGuest);
@@ -4581,7 +4692,7 @@ function formatDeletedMessageText(deleterName, deleterRoleLevel) {
   // Admins & Mods do NOT see who deleted it.
   if (dLevel >= 5) {
     if (viewerLevel >= 5) {
-      return `— Message deleted by Owner ${deleterName} —`;
+      return `— Message deleted by ${deleterName} —`;
     }
     return '— Message deleted —';
   }
@@ -4590,7 +4701,7 @@ function formatDeletedMessageText(deleterName, deleterRoleLevel) {
   // "if deleted by admins this should not be seen by moderators. admins must know its deleted by admins"
   if (dLevel === 4) {
     if (viewerLevel >= 4) {
-      return `— Message deleted by Admin ${deleterName} —`;
+      return `— Message deleted by ${deleterName} —`;
     }
     // Moderator (level 3) does NOT see it:
     return '— Message deleted —';
@@ -4600,7 +4711,7 @@ function formatDeletedMessageText(deleterName, deleterRoleLevel) {
   // "moderators must know its deleted by moderators"
   if (dLevel === 3) {
     if (viewerLevel >= 3) {
-      return `— Message deleted by Mod ${deleterName} —`;
+      return `— Message deleted by ${deleterName} —`;
     }
     return '— Message deleted —';
   }
@@ -5580,6 +5691,14 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
               </div>
             </div>
             
+            <div class="cc-profile-form-group full-width">
+              <label class="cc-profile-label">Behavioral Status</label>
+              <button type="button" class="cc-profile-btn secondary" onclick="window.BehavioralStatus?.openStatusPicker(() => renderProfileTab('profile', currentProfile, true, true))" style="width:100%;text-align:left;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;">
+                <span>${currentProfile?.status_text ? `<span class="status-motion-emoji ${escHtml(currentProfile.status_motion || 'motion-bounce')}">${escHtml(currentProfile.status_emoji || '✨')}</span> <strong>${escHtml(currentProfile.status_text)}</strong>` : '✨ Select what you are doing...'}</span>
+                <span>✏️ Change</span>
+              </button>
+            </div>
+            
             <div class="cc-profile-actions full-width">
               <button type="button" class="cc-profile-btn secondary" onclick="renderProfileTab('profile', currentProfile, true, false)">Cancel</button>
               <button type="submit" class="cc-profile-btn primary" id="btn-save-profile">Save changes</button>
@@ -5610,6 +5729,7 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
         : `<span style="font-size:3.5rem;font-weight:700;">${(profile.username || '?')[0].toUpperCase()}</span>`;
       
       const bioText = profile.bio ? escHtml(profile.bio) : '<em style="color:var(--muted)">No biography set.</em>';
+      const activeStatus = (window.BehavioralStatus?.getActiveStatus ? window.BehavioralStatus.getActiveStatus(profile.id) : null) || (profile.status_text ? { label: profile.status_text, emoji: profile.status_emoji || '✨', motion: profile.status_motion || 'motion-bounce' } : null);
       
       const sessionSecs = isMe ? Math.floor((Date.now() - sessionStart) / 1000) : 0;
       const totalSecs = profile.total_online_time || 0;
@@ -5647,6 +5767,13 @@ function renderProfileTab(tab, profile, isMe, editMode = false) {
             </div>
             
             <table class="cc-profile-details-table">
+              <tr>
+                <td class="label-col">✨ Doing</td>
+                <td class="val-col">
+                  ${activeStatus ? `<span class="status-motion-emoji ${escHtml(activeStatus.motion)}" style="margin-right:6px;">${escHtml(activeStatus.emoji)}</span> <strong>${escHtml(activeStatus.label)}</strong>` : '<span style="color:var(--muted)">Online</span>'}
+                  ${isMe ? `<button type="button" class="cc-profile-status-pick-btn" onclick="window.BehavioralStatus?.openStatusPicker(() => renderProfileTab('profile', currentProfile, true, false))" style="margin-left:8px;padding:3px 10px;font-size:0.75rem;background:rgba(139,109,237,0.2);border:1px solid rgba(139,109,237,0.4);color:#c4b5fd;border-radius:6px;cursor:pointer;">✏️ Set Status</button>` : ''}
+                </td>
+              </tr>
               <tr>
                 <td class="label-col">📅 Joined</td>
                 <td class="val-col">${escHtml(joinDate)}</td>
