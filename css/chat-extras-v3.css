@@ -75,21 +75,23 @@
 .btn-emoji:hover { transform: scale(1.06); background: rgba(var(--accent-rgb),0.2); }
 .btn-emoji:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
-/* Animated GIF Emoticon within chat & PM messages */
+/* Animated GIF Emoticon within chat & PM messages (1.5x Size = 42px, Click-to-Paste) */
 .chat-emoticon {
   display: inline-block;
-  width: 28px;
-  height: 28px;
-  vertical-align: -6px;
+  width: 42px;
+  height: 42px;
+  vertical-align: -10px;
   object-fit: contain;
-  margin: 0 2px;
+  margin: 0 3px;
   pointer-events: auto;
+  cursor: pointer;
   user-select: none;
-  transition: transform 0.12s ease;
+  transition: transform 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28), filter 0.15s ease;
 }
 
 .chat-emoticon:hover {
-  transform: scale(1.22);
+  transform: scale(1.28);
+  filter: drop-shadow(0 0 8px rgba(139, 109, 237, 0.75));
 }
 
 /* Emoji / Emoticon Picker Container (Ultra-Clean, Fast, Responsive) */
@@ -97,8 +99,8 @@
   position: absolute;
   left: 0.8rem;
   bottom: calc(100% + 0.5rem);
-  width: min(450px, calc(100vw - 1rem)) !important;
-  height: 420px !important;
+  width: min(480px, calc(100vw - 1rem)) !important;
+  height: 440px !important;
   max-height: 80vh !important;
   display: flex !important;
   flex-direction: column !important;
@@ -267,8 +269,8 @@
 
 .emoji-category-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
   margin-top: 4px;
 }
 
@@ -278,10 +280,11 @@
   justify-content: center;
   width: 100%;
   aspect-ratio: 1;
-  padding: 2px;
+  min-height: 52px;
+  padding: 4px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   transition: transform 0.1s ease, background 0.1s ease, border-color 0.1s ease;
   user-select: none;
@@ -297,8 +300,8 @@
 }
 
 .emoticon-btn img {
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
   pointer-events: none;
   display: block;

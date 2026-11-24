@@ -1927,6 +1927,23 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Click-to-Paste: Clicking any emoticon in the chat or PM stream pastes its code into writing box
+  document.addEventListener('click', (event) => {
+    const emoticon = event.target.closest('.chat-emoticon');
+    if (!emoticon) return;
+    if (emoticon.closest('.emoticon-btn') || emoticon.closest('.emoji-picker-footer')) return;
+
+    const code = emoticon.dataset.code || emoticon.getAttribute('alt');
+    if (code) {
+      event.preventDefault();
+      event.stopPropagation();
+      insertEmoji(code + ' ');
+      if (typeof showChatToast === 'function') {
+        showChatToast(`Pasted ${code} into writing box`, 'info', 1400);
+      }
+    }
+  });
+
   // Feature 2 — VPN check (non-blocking; shows overlay if VPN detected)
   checkVpnOnEntry();
 
@@ -4712,7 +4729,7 @@ document.addEventListener('click', (e) => {
 
   const row = e.target.closest('.msg-row');
   if (row) {
-    if (e.target.closest('a, button, audio, video, img.msg-inline-image, .avatar, input')) {
+    if (e.target.closest('a, button, audio, video, img.msg-inline-image, .avatar, input, .chat-emoticon')) {
       return;
     }
     const cb = row.querySelector('.msg-select-check');

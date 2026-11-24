@@ -2051,7 +2051,7 @@
       const file = SHORTCODE_TO_FILE[lower];
       if (file) {
         const title = lower.slice(1, -1).replace(/_/g, ' ');
-        return `<img src="img/emoticons/${file}" class="chat-emoticon" alt="${match}" title="${title}" loading="lazy" />`;
+        return `<img src="img/emoticons/${file}" class="chat-emoticon" alt="${match}" data-code="${match}" title="${title} (${match}) — Click to paste" />`;
       }
       return match;
     });
@@ -2064,8 +2064,10 @@
         for (const em of SORTED_EMOJIS) {
           if (p.includes(em)) {
             const file = EMOJI_TO_FILE[em];
-            const title = file.replace('.gif', '').replace(/_/g, ' ');
-            const imgTag = `<img src="img/emoticons/${file}" class="chat-emoticon" alt="${em}" title="${title}" loading="lazy" />`;
+            const name = file.replace('.gif', '');
+            const shortcode = `:${name}:`;
+            const title = name.replace(/_/g, ' ');
+            const imgTag = `<img src="img/emoticons/${file}" class="chat-emoticon" alt="${shortcode}" data-code="${shortcode}" title="${title} (${shortcode}) — Click to paste" />`;
             p = p.split(em).join(imgTag);
           }
         }
