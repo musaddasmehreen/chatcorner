@@ -634,6 +634,12 @@ function toggleEmojiPicker(event, targetInput = null) {
   if (typeof window.closeInputExtras === 'function') {
     window.closeInputExtras();
   }
+
+  // Smooth search auto-focus on desktop
+  const search = picker.querySelector('.emoji-picker-search');
+  if (search && window.innerWidth > 640) {
+    setTimeout(() => { search.focus(); }, 30);
+  }
 }
 
 function closeEmojiPicker() {
@@ -680,90 +686,198 @@ function renderEmojiPicker() {
     return;
   }
 
-  // Categories Navigation Bar
-  const categories = [
+  // Pre-load images to ensure instantaneous display
+  if (typeof window.ChatEmoticons?.preloadAllEmoticons === 'function') {
+    window.ChatEmoticons.preloadAllEmoticons();
+  }
+
+  // Category Configuration
+  const CATEGORIES = [
     { id: 'all', label: 'All', icon: '🌟' },
     { id: 'faces', label: 'Faces', icon: '😀' },
-    { id: 'people', label: 'People', icon: '👋' },
-    { id: 'nature', label: 'Animals', icon: '🦋' },
+    { id: 'people', label: 'People', icon: '👥' },
+    { id: 'nature', label: 'Animals', icon: '🦊' },
     { id: 'food', label: 'Food', icon: '🍔' },
     { id: 'activity', label: 'Activity', icon: '🚀' },
     { id: 'symbols', label: 'Symbols', icon: '💖' }
   ];
 
+  const CATEGORY_META = {
+    faces:    { title: 'Faces & Expressions', icon: '😀' },
+    people:   { title: 'People & Gestures', icon: '👥' },
+    nature:   { title: 'Animals & Nature', icon: '🦊' },
+    food:     { title: 'Food & Drinks', icon: '🍔' },
+    activity: { title: 'Activities & Sports', icon: '🚀' },
+    symbols:  { title: 'Symbols & Hearts', icon: '💖' }
+  };
+
+  // 1. Header with Search and Count
+  const header = document.createElement('div');
+  header.className = 'emoji-picker-header';
+  header.innerHTML = `
+    <div class="emoji-picker-search-wrap">
+      <span class="emoji-search-icon">🔍</span>
+      <input type="text" class="emoji-picker-search" placeholder="Search 199 animated emojis..." aria-label="Search emojis" autocomplete="off" />
+    </div>
+    <span class="emoji-picker-count">199 Emojis</span>
+  `;
+
+  // 2. Navigation Pills Bar
   const topNav = document.createElement('div');
   topNav.className = 'emoji-picker-nav';
 
-  const searchBox = document.createElement('div');
-  searchBox.className = 'emoji-picker-search-wrap';
-  searchBox.innerHTML = '<input type="text" class="emoji-picker-search" placeholder="Search 199 animated emojis..." aria-label="Search emojis" autocomplete="off" />';
-
-  const gridContainer = document.createElement('div');
-  gridContainer.className = 'emoji-picker-grid';
-
-  let currentCategory = 'all';
-  let searchQuery = '';
-
-  function updateGrid() {
-    gridContainer.innerHTML = '';
-
-    let filtered = emoticons;
-    if (currentCategory !== 'all') {
-      filtered = filtered.filter(e => e.category === currentCategory);
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(e => e.name.includes(q) || e.title.toLowerCase().includes(q));
-    }
-
-    if (!filtered.length) {
-      const empty = document.createElement('div');
-      empty.className = 'emoji-picker-empty';
-      empty.textContent = 'No matching emojis found';
-      gridContainer.appendChild(empty);
-      return;
-    }
-
-    filtered.forEach(item => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'emoticon-btn';
-      btn.title = `${item.title} (${item.shortcode})`;
-      btn.setAttribute('aria-label', item.title);
-      btn.innerHTML = `<img src="img/emoticons/${item.file}" alt="${item.name}" loading="lazy" />`;
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        insertEmoji(item.shortcode + ' ');
-      };
-      gridContainer.appendChild(btn);
-    });
-  }
-
-  categories.forEach(cat => {
+  CATEGORIES.forEach(cat => {
     const pill = document.createElement('button');
     pill.type = 'button';
     pill.className = 'emoji-nav-pill' + (cat.id === 'all' ? ' active' : '');
+    pill.dataset.catId = cat.id;
     pill.innerHTML = `<span>${cat.icon}</span> <span>${cat.label}</span>`;
-    pill.onclick = (e) => {
-      e.stopPropagation();
-      topNav.querySelectorAll('.emoji-nav-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      currentCategory = cat.id;
-      updateGrid();
-    };
     topNav.appendChild(pill);
   });
 
-  const searchInput = searchBox.querySelector('input');
-  searchInput?.addEventListener('input', (e) => {
-    searchQuery = e.target.value.trim();
-    updateGrid();
+  // 3. Scrollable Gallery Body with Sections
+  const body = document.createElement('div');
+  body.className = 'emoji-picker-body';
+
+  const sectionMap = {};
+  const allBtns = [];
+
+  // Group items by category order
+  const catOrder = ['faces', 'people', 'nature', 'food', 'activity', 'symbols'];
+  catOrder.forEach(catId => {
+    const items = emoticons.filter(e => e.category === catId);
+    if (!items.length) return;
+
+    const meta = CATEGORY_META[catId] || { title: catId, icon: '✨' };
+    const sec = document.createElement('div');
+    sec.className = 'emoji-category-section';
+    sec.id = 'emoji-sec-' + catId;
+    sec.dataset.catId = catId;
+
+    const secHeader = document.createElement('div');
+    secHeader.className = 'emoji-category-header';
+    secHeader.innerHTML = `<span>${meta.icon} ${meta.title}</span> <span class="emoji-category-count">(${items.length})</span>`;
+    sec.appendChild(secHeader);
+
+    const grid = document.createElement('div');
+    grid.className = 'emoji-category-grid';
+
+    items.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'emoticon-btn';
+      btn.dataset.name = item.name.toLowerCase();
+      btn.dataset.title = item.title.toLowerCase();
+      btn.dataset.shortcode = item.shortcode;
+      btn.dataset.file = item.file;
+      btn.dataset.category = item.category;
+      btn.title = `${item.title} (${item.shortcode})`;
+      btn.setAttribute('aria-label', item.title);
+      btn.innerHTML = `<img src="img/emoticons/${item.file}" alt="${item.name}" />`;
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        insertEmoji(item.shortcode + ' ');
+      });
+
+      btn.addEventListener('mouseenter', () => {
+        updateFooterPreview(item);
+      });
+
+      allBtns.push(btn);
+      grid.appendChild(btn);
+    });
+
+    sec.appendChild(grid);
+    body.appendChild(sec);
+    sectionMap[catId] = sec;
   });
 
-  picker.appendChild(searchBox);
+  // Empty state container
+  const emptyState = document.createElement('div');
+  emptyState.className = 'emoji-picker-empty hidden';
+  emptyState.style.display = 'none';
+  emptyState.innerHTML = '🔍 No matching animated emojis found';
+  body.appendChild(emptyState);
+
+  // 4. Live Preview Footer
+  const footer = document.createElement('div');
+  footer.className = 'emoji-picker-footer';
+  footer.innerHTML = `<span class="emoji-footer-hint">💡 Click any emoticon to insert into message</span>`;
+
+  function updateFooterPreview(item) {
+    if (!item) {
+      footer.innerHTML = `<span class="emoji-footer-hint">💡 Click any emoticon to insert into message</span>`;
+      return;
+    }
+    footer.innerHTML = `
+      <div class="emoji-footer-preview">
+        <img src="img/emoticons/${item.file}" alt="${item.name}" />
+        <span class="emoji-footer-shortcode">${item.shortcode}</span>
+        <span class="emoji-footer-title">${item.title}</span>
+      </div>
+    `;
+  }
+
+  body.addEventListener('mouseleave', () => {
+    updateFooterPreview(null);
+  });
+
+  // Tab navigation click handling
+  topNav.querySelectorAll('.emoji-nav-pill').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      topNav.querySelectorAll('.emoji-nav-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+
+      const catId = pill.dataset.catId;
+      if (catId === 'all') {
+        body.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        const targetSec = sectionMap[catId];
+        if (targetSec) {
+          const topPos = targetSec.offsetTop - body.offsetTop;
+          body.scrollTo({ top: Math.max(0, topPos - 4), behavior: 'smooth' });
+        }
+      }
+    });
+  });
+
+  // Instantaneous Search (0ms filter)
+  const searchInput = header.querySelector('.emoji-picker-search');
+  searchInput?.addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    let totalVisible = 0;
+
+    if (!q) {
+      emptyState.style.display = 'none';
+      allBtns.forEach(b => { b.style.display = ''; });
+      Object.values(sectionMap).forEach(sec => { sec.style.display = ''; });
+      return;
+    }
+
+    Object.entries(sectionMap).forEach(([catId, sec]) => {
+      let secVisible = 0;
+      sec.querySelectorAll('.emoticon-btn').forEach(btn => {
+        const name = btn.dataset.name || '';
+        const title = btn.dataset.title || '';
+        const shortcode = btn.dataset.shortcode || '';
+        const matches = name.includes(q) || title.includes(q) || shortcode.includes(q);
+        btn.style.display = matches ? '' : 'none';
+        if (matches) secVisible++;
+      });
+      sec.style.display = secVisible > 0 ? '' : 'none';
+      totalVisible += secVisible;
+    });
+
+    emptyState.style.display = totalVisible === 0 ? 'block' : 'none';
+  });
+
+  // Assemble into picker
+  picker.appendChild(header);
   picker.appendChild(topNav);
-  picker.appendChild(gridContainer);
-  updateGrid();
+  picker.appendChild(body);
+  picker.appendChild(footer);
 }
 
 function toggleRoomImageUrlInput(event) {

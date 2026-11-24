@@ -688,25 +688,7 @@
   display: block;
 }
 
-/* ── EMOJI PICKER ── */
-.emoji-picker {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0.4rem;
-  z-index: 30;
-  width: min(280px, calc(100vw - 2rem));
-  max-height: 200px;
-  overflow-y: auto;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--accent-rgb),0.25);
-  background: rgba(14,18,31,0.96);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.15rem;
-  padding: 0.4rem;
-}
-.emoji-picker.hidden { display: none; }
+/* ── EMOJI PICKER handled in chat-extras-v3.css ── */
 .emoji-btn {
   border: none;
   background: transparent;

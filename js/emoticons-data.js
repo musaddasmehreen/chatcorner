@@ -2076,11 +2076,35 @@
     return parts.join('');
   }
 
+  // Instant preloader: Pre-cache all 199 animated GIF emoticons into browser memory for 0ms latency
+  function preloadAllEmoticons() {
+    try {
+      const cache = [];
+      for (let i = 0; i < EMOTICONS_LIST.length; i++) {
+        const img = new Image();
+        img.src = 'img/emoticons/' + EMOTICONS_LIST[i].file;
+        cache.push(img);
+      }
+      window._cachedEmoticonImages = cache;
+    } catch (_) {}
+  }
+
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', preloadAllEmoticons);
+    } else if (typeof setTimeout !== 'undefined') {
+      setTimeout(preloadAllEmoticons, 10);
+    } else {
+      preloadAllEmoticons();
+    }
+  }
+
   window.ChatEmoticons = {
     LIST: EMOTICONS_LIST,
     SHORTCODE_TO_FILE,
     EMOJI_TO_FILE,
-    parseEmoticonsHtml
+    parseEmoticonsHtml,
+    preloadAllEmoticons
   };
 
 })(window);
