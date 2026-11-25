@@ -2509,7 +2509,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   if (emojiBtn) emojiBtn.disabled = false;
   updateComposerState();
 
-  const { data: dbMessages } = await sbClient
+  const { data: dbMessages, error: fetchError } = await sbClient
     .from('messages')
     .select('*')
     .eq('room_id', room.id)
@@ -2530,8 +2530,14 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
   // Batch-append for performance (skip persisted system/deletion notices so newcomers don't see them)
   const MSG_CACHE_KEY = getRoomMessageCacheKey(room.id);
 
-  // Feature 3 — Try restoring from localStorage cache first (shows instantly before DB responds)
-  if (!messages?.length) {
+  // If DB query succeeded and DB has 0 messages, the room is genuinely empty/cleared!
+  // Remove any stale cache so deleted messages never resurrect on refresh.
+  if (!fetchError && (!dbMessages || dbMessages.length === 0)) {
+    try {
+      localStorage.removeItem(MSG_CACHE_KEY);
+    } catch (_) {}
+  } else if (fetchError && !messages?.length) {
+    // Only if DB query failed (e.g. offline/network error), try restoring from cache as fallback
     try {
       const cached = JSON.parse(localStorage.getItem(MSG_CACHE_KEY) || 'null');
       if (cached && cached.ts && Date.now() - cached.ts < MESSAGE_CACHE_TTL_MS && cached.msgs?.length) {
@@ -2561,7 +2567,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
     });
     container.appendChild(frag);
 
-    // Feature 3 — Cache last 50 messages to localStorage for persistence across logout/login
+    // Cache last 50 messages to localStorage for fast initial render
     try {
       localStorage.setItem(MSG_CACHE_KEY, JSON.stringify({ ts: Date.now(), msgs: messages.slice(-50) }));
     } catch (_) {}
@@ -2643,6 +2649,21 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         rememberDeletedMessage(id, room.id, payload.deleterName, payload.deleterRoleLevel);
         removeMessageNodeById(id, payload.deleterName, payload.deleterRoleLevel);
       });
+    })
+    .on('broadcast', { event: 'room-messages-cleared' }, ({ payload }) => {
+      if (payload?.roomId !== room.id) return;
+      const cacheKey = getRoomMessageCacheKey(room.id);
+      if (cacheKey) {
+        try { localStorage.removeItem(cacheKey); } catch (_) {}
+      }
+      const tombstoneKey = getDeletedMessageTombstoneKey(room.id);
+      if (tombstoneKey) {
+        try { localStorage.removeItem(tombstoneKey); } catch (_) {}
+      }
+      oldestMessageTimestamp = null;
+      const container = document.getElementById('messages');
+      if (container) container.innerHTML = '';
+      appendSystemMessage(`🧹 All messages in this room were permanently cleared by ${payload.clearedBy || 'Staff'}.`);
     })
     .on('broadcast', { event: 'chat-message' }, async ({ payload }) => {
       if (!payload || payload.room_id !== room.id) return;
@@ -4426,6 +4447,23 @@ async function clearMyMessagesFromScreen() {
         clearBtn.textContent = 'Clear My Messages';
       }
       return;
+    }
+    const deleterName = currentProfile?.username || (currentProfile?.is_owner ? 'Owner' : (currentProfile?.is_admin ? 'Admin' : 'Moderator'));
+    const deleterRoleLevel = getViewerRoleLevel();
+    messageIds.forEach(id => rememberDeletedMessage(id, currentRoom?.id, deleterName, deleterRoleLevel));
+    if (messageChannel && currentRoom?.id) {
+      try {
+        messageChannel.send({
+          type: 'broadcast',
+          event: 'messages-bulk-deleted',
+          payload: {
+            roomId: currentRoom.id,
+            messageIds,
+            deleterName,
+            deleterRoleLevel
+          }
+        });
+      } catch (_) {}
     }
     mine.forEach(node => {
       node.classList.add('is-deleting');
@@ -7247,13 +7285,45 @@ async function clearAllRoomMessages() {
   }
 
   try {
-    const { error } = await sbClient.from('messages').delete().eq('room_id', currentRoom.id);
+    const roomId = currentRoom.id;
+    const { error } = await sbClient.from('messages').delete().eq('room_id', roomId);
     if (error) throw error;
-    showChatToast('All messages cleared successfully.', 'success');
-    
+
     // Clear screen locally
     const container = document.getElementById('messages');
     if (container) container.innerHTML = '';
+    oldestMessageTimestamp = null;
+
+    // Immediately remove localStorage cache so messages never resurrect on refresh
+    const cacheKey = getRoomMessageCacheKey(roomId);
+    if (cacheKey) {
+      try { localStorage.removeItem(cacheKey); } catch (_) {}
+    }
+    const tombstoneKey = getDeletedMessageTombstoneKey(roomId);
+    if (tombstoneKey) {
+      try { localStorage.removeItem(tombstoneKey); } catch (_) {}
+    }
+
+    // Broadcast room clear event to all active users in the room
+    const deleterName = currentProfile?.username || (currentProfile?.is_owner ? 'Owner' : (currentProfile?.is_admin ? 'Admin' : 'Moderator'));
+    if (messageChannel && roomId) {
+      try {
+        await messageChannel.send({
+          type: 'broadcast',
+          event: 'room-messages-cleared',
+          payload: {
+            roomId,
+            clearedBy: deleterName,
+            clearedAt: new Date().toISOString()
+          }
+        });
+      } catch (broadcastErr) {
+        console.warn('Failed to broadcast room clear event:', broadcastErr);
+      }
+    }
+
+    showChatToast('All messages cleared successfully for everyone.', 'success');
+    appendSystemMessage(`🧹 All messages in this room were permanently cleared by ${deleterName}.`);
   } catch (err) {
     console.error('Clear all failed:', err);
     showChatToast('Failed to clear messages: ' + err.message, 'error');
