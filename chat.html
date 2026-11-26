@@ -447,6 +447,7 @@
         <button class="btn-mute hidden" id="btn-mute" onclick="toggleMute()">🔇 Mute</button>
         <button class="btn-toggle-camera hidden" id="btn-toggle-camera" onclick="toggleCamera()">📷 Camera Off</button>
         <button class="btn-leave-voice hidden" id="btn-leave-voice" onclick="leaveVoice()">🔇 Leave</button>
+        <button type="button" class="btn-sound-toggle" id="btn-sound-effects-toggle" onclick="ChatSounds.toggle()" title="Toggle sound effects">🔊 Sounds</button>
         <label id="stealth-mode-label" for="stealth-mode-checkbox" class="hidden" style="align-items:center;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer;margin-left:10px;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
           <input type="checkbox" id="stealth-mode-checkbox" onchange="toggleStealthMode(this.checked)" style="cursor:pointer;" /> 🕵️ Stealth
         </label>
@@ -692,7 +693,7 @@
         <a href="https://github.com/musaddasmehreen/chatcorner/raw/main/chatcorner.apk" class="download-modal-btn" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);" download rel="noopener">GitHub Mirror</a>
       </div>
       <div style="font-family: monospace; font-size: 11px; margin-top: 12px; color: rgba(255,255,255,0.6); word-break: break-all; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2);">
-        SHA-256: <span id="apk-sha256">40a73754c3b7b83bdd2cd50d3553a5a7e829a64f2062c7816661bede32609743</span>
+        SHA-256: <span id="apk-sha256">dd82238f9e3c9750b0a305ec957fe7bb600d0906815610280c7c9365876ab4cf</span>
       </div>
     </div>
   </div>
@@ -705,8 +706,9 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1" crossorigin="anonymous" defer></script>
   <script src="js/emoticons-data.js?v=2.1" defer></script>
   <script src="js/behavioral-status.js?v=1.1" defer></script>
-  <script src="js/chat-v3.js?v=11.2" defer></script>
-  <script src="js/pm.js?v=3.2" defer></script>
+  <script src="js/sound-effects.js?v=1.0" defer></script>
+  <script src="js/chat-v3.js?v=11.3" defer></script>
+  <script src="js/pm.js?v=3.3" defer></script>
   <script src="js/games.js" defer></script>
   <script src="js/audio-v3.js?v=2.0" defer></script>
   <script src="js/free-tier-optimizer.js?v=1.2" defer></script>

@@ -687,6 +687,7 @@ async function sendPrivateText(userId) {
     ? { id: msgId, from: currentUser.id, type: 'image', imageUrl, createdAt }
     : { id: msgId, from: currentUser.id, type: 'text', text: safeText, createdAt };
   appendPmHistoryMessage(userId, message, true);
+  if (window.ChatSounds) window.ChatSounds.play('message-sent');
 
   if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
   pmTextHistory[userId].push(message);
@@ -754,7 +755,11 @@ async function handleIncomingPm(payload) {
     const url = URL.createObjectURL(blob);
     appendPmVoiceMessage(fromUserId, { id: payload.id, from: fromUserId, audioUrl: url }, false);
     trackPmVoiceUrl(fromUserId, url);
-    playPmNotification(fromUserId);
+    if (window.ChatSounds) {
+      window.ChatSounds.play('voice-received');
+    } else {
+      playPmNotification(fromUserId);
+    }
     return;
   }
 
@@ -764,7 +769,11 @@ async function handleIncomingPm(payload) {
     appendPmHistoryMessage(fromUserId, message, false);
     if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
     pmTextHistory[fromUserId].push(message);
-    playPmNotification(fromUserId);
+    if (window.ChatSounds) {
+      window.ChatSounds.play('message-received');
+    } else {
+      playPmNotification(fromUserId);
+    }
     return;
   }
 
@@ -775,7 +784,11 @@ async function handleIncomingPm(payload) {
 
     if (!pmTextHistory[fromUserId]) pmTextHistory[fromUserId] = [];
     pmTextHistory[fromUserId].push(message);
-    playPmNotification(fromUserId);
+    if (window.ChatSounds) {
+      window.ChatSounds.play('message-received');
+    } else {
+      playPmNotification(fromUserId);
+    }
   }
 }
 
@@ -959,6 +972,7 @@ async function sendPmVoiceNoteDirectly(userId, blob) {
     
     const msg = { id: msgId, from: currentUser.id, type: 'voice', audioUrl: localAudioUrl, createdAt };
     appendPmVoiceMessage(userId, msg, true);
+    if (window.ChatSounds) window.ChatSounds.play('voice-sent');
     
     if (!pmTextHistory[userId]) pmTextHistory[userId] = [];
     pmTextHistory[userId].push(msg);
@@ -1180,6 +1194,17 @@ function updatePmCallUi(userId) {
     activeText.textContent = state.state === 'calling' ? '📞 Calling…' : '📞 In call';
   }
   if (callBtn) callBtn.disabled = state.state !== 'idle';
+
+  // Ringtone / call sounds
+  if (window.ChatSounds) {
+    if (state.state === 'incoming') {
+      window.ChatSounds.startRingtone();
+    } else if (state.state === 'calling') {
+      window.ChatSounds.startRingback();
+    } else {
+      window.ChatSounds.stopCallSounds();
+    }
+  }
 }
 
 async function updatePmVoicePresence(userId, stateName) {
@@ -1191,6 +1216,14 @@ async function updatePmVoicePresence(userId, stateName) {
 function cleanupPmVoiceCallState(userId) {
   const state = pmCallState[userId];
   if (!state) return;
+
+  const wasActive = state.state === 'active';
+  if (window.ChatSounds) {
+    window.ChatSounds.stopCallSounds();
+    if (wasActive) {
+      window.ChatSounds.play('call-ended');
+    }
+  }
 
   state.stream?.getTracks().forEach(track => track.stop());
   state.stream = null;
@@ -1337,6 +1370,10 @@ async function acceptPmVoiceCall(userId) {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await updatePmVoicePresence(userId, 'active');
+    if (window.ChatSounds) {
+      window.ChatSounds.stopCallSounds();
+      window.ChatSounds.play('call-connected');
+    }
 
     await pmChannel.send({
       type: 'broadcast',

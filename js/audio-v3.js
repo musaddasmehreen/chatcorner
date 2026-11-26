@@ -173,6 +173,7 @@ async function joinVoice() {
         });
         await broadcastCameraState();
         connectMissingPeers();
+        if (window.ChatSounds) window.ChatSounds.play('call-connected');
       }
     });
 }
@@ -208,6 +209,7 @@ async function handlePeerJoin({ from, username, cameraOn, listenOnly }) {
   if (!inVoice || !audioChannel) return;
 
   addPeerTag(from, username);
+  if (window.ChatSounds) window.ChatSounds.play('enter');
   if (!listenOnly) {
     updatePeerCameraIcon(from, !!cameraOn);
     if (typeof setUserCameraState === 'function') setUserCameraState(from, !!cameraOn);
@@ -446,6 +448,7 @@ function handleCameraState({ from, cameraOn }) {
 
 function handlePeerLeave({ from }) {
   if (!from) return;
+  if (window.ChatSounds) window.ChatSounds.play('exit');
   if (peers[from]) {
     try { peers[from].close(); } catch (_) {}
     delete peers[from];
@@ -461,6 +464,9 @@ function handlePeerLeave({ from }) {
 async function leaveVoice() {
   const previouslyInVoice = inVoice;
   inVoice = false;
+  if (previouslyInVoice && window.ChatSounds) {
+    window.ChatSounds.play('call-ended');
+  }
 
   const myId = getVoiceUserId();
 

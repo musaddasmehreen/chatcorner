@@ -913,6 +913,8 @@ let messageChannel = null;
 let presenceChannel= null;
 let profileChannel = null;
 let presenceBaseData = {};
+let _roomPresenceSoundReady = false;
+let _roomPresenceSoundTimer = null;
 const GUEST_TEXT_RATE_LIMIT_COUNT = 5;
 const GUEST_TEXT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const GUEST_VOICE_MAX_DURATION_MS = 5000;
@@ -2623,6 +2625,13 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       }
       appendMessage(payload.new);
       scrollToBottom();
+      if (payload.new?.user_id !== currentUser?.id && window.ChatSounds) {
+        if (payload.new?.type === 'voice') {
+          window.ChatSounds.play('voice-received');
+        } else {
+          window.ChatSounds.play('message-received');
+        }
+      }
     })
     .on('postgres_changes', {
       event: 'DELETE', schema: 'public', table: 'messages',
@@ -2691,6 +2700,12 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
       }
     });
 
+  _roomPresenceSoundReady = false;
+  clearTimeout(_roomPresenceSoundTimer);
+  _roomPresenceSoundTimer = setTimeout(() => {
+    _roomPresenceSoundReady = true;
+  }, 2200);
+
   const _roomPresenceKey = (currentUser && currentUser.id) || ('guest_' + Math.random().toString(36).slice(2, 7));
   presenceChannel = sbClient.channel('presence:' + room.id, {
     config: { presence: { key: _roomPresenceKey } }
@@ -2734,6 +2749,12 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
           });
         }
       });
+      if (_roomPresenceSoundReady) {
+        const others = (newPresences || []).filter(u => u.userId && u.userId !== currentUser?.id);
+        if (others.length > 0 && window.ChatSounds) {
+          window.ChatSounds.play('enter');
+        }
+      }
       updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
       scheduleRenderUserList();
     })
@@ -2742,6 +2763,12 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         delete onlineUsers[u.userId];
         delete cameraStates[u.userId];
       });
+      if (_roomPresenceSoundReady) {
+        const others = (leftPresences || []).filter(u => u.userId && u.userId !== currentUser?.id);
+        if (others.length > 0 && window.ChatSounds) {
+          window.ChatSounds.play('exit');
+        }
+      }
       updateRoomTabCount(currentRoom.id, Object.keys(onlineUsers).length);
       scheduleRenderUserList();
     })
@@ -2810,6 +2837,7 @@ async function enterRoom(room, force = false, skipModRefresh = false) {
         if (banner) banner.classList.add('hidden');
         window._ccReconnect?.reset();
         await presenceChannel.track(presenceBaseData);
+        if (window.ChatSounds) window.ChatSounds.play('enter');
         // If current user is in Guest room, broadcast notification to other rooms
         if (room && room.name && room.name.toLowerCase() === 'guest') {
           broadcastGuestEntered();
@@ -2964,6 +2992,7 @@ async function sendMessage() {
     optimisticNode.dataset.tempId = tempId;
     document.getElementById('messages').appendChild(optimisticNode);
     scrollToBottom();
+    if (window.ChatSounds) window.ChatSounds.play('message-sent');
     const imgs = optimisticNode.querySelectorAll('img');
     imgs.forEach(img => {
       if (!img.complete) {
@@ -4252,10 +4281,13 @@ async function sendRoomVoiceNote(roomId, dataUrl) {
   });
   if (error) {
     showChatToast('Could not send voice note. Please try again.', 'warning', 3200);
-  } else if (!isRegisteredUser()) {
+  } else {
+    if (window.ChatSounds) window.ChatSounds.play('voice-sent');
+    if (!isRegisteredUser()) {
     const newCount = parseInt(localStorage.getItem('cc-guest-voice-used') || '0', 10) + 1;
     localStorage.setItem('cc-guest-voice-used', String(newCount));
     if (newCount >= GUEST_VOICE_LIMIT) setTimeout(() => showRegisterForVoice(), 800);
+    }
   }
 }
 
